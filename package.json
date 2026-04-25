@@ -1,0 +1,31 @@
+{
+  "name": "eagle-mem",
+  "version": "1.0.0",
+  "description": "Lightweight persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat",
+  "bin": {
+    "eagle-mem": "bin/eagle-mem"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "hooks/",
+    "lib/",
+    "db/",
+    "skills/"
+  ],
+  "keywords": [
+    "claude-code",
+    "memory",
+    "sqlite",
+    "fts5",
+    "hooks",
+    "persistent-memory"
+  ],
+  "author": "eagleisbatman",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eagleisbatman/eagle-mem.git"
+  },
+  "homepage": "https://github.com/eagleisbatman/eagle-mem#readme"
+}

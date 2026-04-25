@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+PACKAGE_DIR="$(cd "$(dirname "$SOURCE")/.." && pwd)"
+SCRIPTS_DIR="$PACKAGE_DIR/scripts"
+
+. "$SCRIPTS_DIR/style.sh"
+
+command="${1:-help}"
+shift 2>/dev/null || true
+
+case "$command" in
+    install)    bash "$SCRIPTS_DIR/install.sh" "$PACKAGE_DIR" "$@" ;;
+    uninstall)  bash "$SCRIPTS_DIR/uninstall.sh" "$@" ;;
+    update)     bash "$SCRIPTS_DIR/update.sh" "$PACKAGE_DIR" "$@" ;;
+    scan)       bash "$SCRIPTS_DIR/scan.sh" "$@" ;;
+    index)      bash "$SCRIPTS_DIR/index.sh" "$@" ;;
+    help|--help|-h)
+                bash "$SCRIPTS_DIR/help.sh" ;;
+    version|--version|-v|-V)
+                version=$(node -e "console.log(require('$PACKAGE_DIR/package.json').version)" 2>/dev/null || echo "unknown")
+                echo -e "  ${BOLD}Eagle Mem${RESET} v${version}"
+                ;;
+    *)
+                eagle_err "Unknown command: $command"
+                echo ""
+                bash "$SCRIPTS_DIR/help.sh"
+                exit 1
+                ;;
+esac
