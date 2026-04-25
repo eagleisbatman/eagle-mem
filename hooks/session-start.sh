@@ -33,7 +33,10 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
 # ─── Build context injection ────────────────────────────────
 
-context=""
+context="=== EAGLE MEM — Active ===
+Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
+
+"
 
 # Project overview (if one exists)
 overview=$(eagle_get_overview "$project")
@@ -140,6 +143,8 @@ fi
 # Emit the eagle-summary instruction
 context+="
 === EAGLE MEM INSTRUCTIONS ===
+You have persistent memory powered by Eagle Mem. When you recall context from a previous session or use injected memory, attribute it: \"From Eagle Mem:\" or \"Eagle Mem recalls:\". This helps the user understand where the context came from.
+
 Before your final response in this session, emit a summary block:
 <eagle-summary>
 request: What the user asked for

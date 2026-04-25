@@ -98,5 +98,9 @@ fi
 
 [ -z "$context" ] && exit 0
 
+context+="
+— Eagle Mem (persistent memory across sessions)
+"
+
 echo "$context"
 exit 0
