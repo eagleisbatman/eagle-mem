@@ -3,124 +3,76 @@ name: eagle-mem-search
 description: >
   Search Eagle Mem's persistent memory database. Use when: 'eagle search', 'search memory',
   'what did I do', 'eagle mem search', 'find in memory', 'past sessions', 'what happened with',
-  'search my history'. Three-layer search: compact index (fast) → timeline (chronological) →
-  full details (complete observations).
+  'search my history'. Uses the eagle-mem CLI — never run raw sqlite3 queries.
 ---
 
 # Eagle Mem — Memory Search
 
-Search the Eagle Mem database for past session summaries, observations, and task history.
+Search the Eagle Mem database for past session summaries, observations, and task history using the `eagle-mem` CLI.
 
-## Three-layer search pattern
+## Search commands
 
-### Layer 1: Compact search (default)
+### Keyword search (default)
 
-Fast keyword search across session summaries. Returns ~50-100 tokens per result.
-
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-SELECT s.id, s.request, s.completed, s.created_at, s.project
-FROM summaries s
-JOIN summaries_fts f ON f.rowid = s.id
-WHERE summaries_fts MATCH '<query>'
-ORDER BY rank
-LIMIT 10;
-"
-```
-
-Use this first. If the user needs more detail, go to Layer 2 or 3.
-
-### Layer 2: Timeline (chronological context)
-
-Show recent sessions for a project in time order. Good for "what have I been working on?"
+Search past sessions by keyword. Returns matching summaries ranked by relevance.
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at
-FROM summaries s
-WHERE s.project = '<project>'
-ORDER BY s.created_at DESC
-LIMIT <N>;
-"
+eagle-mem search "auth middleware"
 ```
 
-### Layer 3: Full details (observations)
+Cross-project search:
+```bash
+eagle-mem search "deploy issue" --all
+```
 
-When the user needs to know exactly what files were touched or what tools were used:
+### Timeline (chronological)
+
+Show recent sessions for the current project in time order.
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-SELECT o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
-FROM observations o
-WHERE o.session_id = '<session_id>'
-ORDER BY o.created_at ASC;
-"
+eagle-mem search --timeline
+eagle-mem search --timeline --limit 20
 ```
 
-## Additional queries
+### Session details
 
-### Cross-project search
+View all tool observations (files read/written, commands run) for a specific session.
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-SELECT s.project, s.request, s.completed, s.created_at
-FROM summaries s
-JOIN summaries_fts f ON f.rowid = s.id
-WHERE summaries_fts MATCH '<query>'
-ORDER BY rank
-LIMIT 10;
-"
+eagle-mem search --session <session_id>
 ```
 
-### Files frequently modified
+### Frequently modified files
+
+Show which files are touched most often in this project.
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-SELECT json_each.value as file, COUNT(*) as times
-FROM observations, json_each(observations.files_modified)
-WHERE observations.project = '<project>'
-GROUP BY json_each.value
-ORDER BY times DESC
-LIMIT 20;
-"
+eagle-mem search --files
 ```
 
-### Task history
+### Project stats
+
+Get counts of sessions, summaries, observations, tasks, and code chunks.
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT id, title, status, completed_at
-FROM tasks
-WHERE project = '<project>'
-ORDER BY ordinal ASC, id ASC;
-"
+eagle-mem search --stats
 ```
 
-### Session count and stats
+## Options
 
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT
-    COUNT(DISTINCT s.id) as sessions,
-    COUNT(DISTINCT su.id) as summaries,
-    COUNT(DISTINCT o.id) as observations,
-    COUNT(DISTINCT t.id) as tasks
-FROM sessions s
-LEFT JOIN summaries su ON su.project = s.project
-LEFT JOIN observations o ON o.session_id = s.id
-LEFT JOIN tasks t ON t.project = s.project
-WHERE s.project = '<project>';
-"
-```
+| Flag | Description |
+|------|-------------|
+| `-p, --project <name>` | Target a specific project (default: current directory) |
+| `-n, --limit <N>` | Max results (default: 10) |
+| `-a, --all` | Search across all projects |
+| `-j, --json` | Output as JSON (for programmatic use) |
+
+## Three-layer pattern
+
+Start with **keyword search** — it's fast and usually sufficient. If the user needs chronological context, use **--timeline**. If they need exact file-level detail, use **--session** with a specific session ID from a previous search result.
 
 ## Usage tips
 
-- Start with Layer 1 (compact search) — it's fast and usually sufficient
-- Use FTS5 query syntax: `word1 AND word2`, `"exact phrase"`, `word1 OR word2`, `word1 NOT word2`
-- The `project` column maps to the directory name (basename of cwd)
-- Cross-project search omits the WHERE project clause
-- Observations are high-volume — query by session_id, not full table scans
+- Keyword search supports FTS5 syntax: `word1 AND word2`, `"exact phrase"`, `word1 OR word2`
+- The `--json` flag is useful when you need to parse results programmatically
+- Project name defaults to the basename of the current working directory

@@ -3,97 +3,77 @@ name: eagle-mem-overview
 description: >
   Generate or update a project overview for Eagle Mem. Use when: 'eagle overview',
   'project overview', 'summarize this project', 'eagle mem overview', 'what is this project',
-  'update overview'. Creates a persistent one-paragraph project summary injected at session start.
+  'update overview'. Uses the eagle-mem CLI — never run raw sqlite3 queries.
 ---
 
 # Eagle Mem — Project Overview
 
-Generate a concise project overview that Eagle Mem injects at the start of every session. This gives fresh context windows an instant understanding of what the project is and what's been happening.
+Generate a concise project overview that Eagle Mem injects at the start of every session. This gives fresh context windows an instant understanding of what the project is.
 
 ## How it works
 
-1. Query recent summaries and observations for the current project
-2. Synthesize them into a concise overview (2-4 sentences)
-3. Save to the `overviews` table — one row per project, updated in place
+1. Gather context about the project (recent sessions, file activity)
+2. Synthesize into a concise overview (2-4 sentences)
+3. Save via the CLI — one overview per project, updated in place
 
 The overview is automatically injected by the SessionStart hook.
 
-## Generating an overview
+## Commands
 
-### Step 1: Gather context
-
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT request, completed, learned, next_steps, created_at
-FROM summaries
-WHERE project = '<project>'
-ORDER BY created_at DESC
-LIMIT 10;
-"
-```
-
-Also check frequently modified files:
+### View current overview
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-SELECT json_each.value as file, COUNT(*) as times
-FROM observations, json_each(observations.files_modified)
-WHERE observations.project = '<project>'
-GROUP BY json_each.value
-ORDER BY times DESC
-LIMIT 10;
-"
+eagle-mem overview
 ```
 
-### Step 2: Write the overview
-
-Synthesize the data into a concise overview covering:
-- **What** the project is (one sentence)
-- **Current state** — what's been worked on recently
-- **Key patterns** — tech stack, architecture decisions, active conventions
-
-Keep it under 500 characters. This gets injected into every session start, so brevity matters.
-
-### Step 3: Save to database
+### Auto-generate from code analysis
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-INSERT INTO overviews (project, content, updated_at)
-VALUES ('<project>', '<overview text>', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-ON CONFLICT(project) DO UPDATE SET
-    content = excluded.content,
-    updated_at = excluded.updated_at;
-"
+eagle-mem scan .
 ```
 
-## Viewing the current overview
+This scans the project structure (files, languages, frameworks, entry points, tests) and saves an overview automatically.
+
+### Set overview manually
+
+When you want to write a custom overview based on session history:
+
+1. First, gather recent context:
+```bash
+eagle-mem search --timeline --limit 10
+eagle-mem search --files
+```
+
+2. Synthesize the data into a concise overview covering:
+   - **What** the project is (one sentence)
+   - **Current state** — what's been worked on recently
+   - **Key patterns** — tech stack, architecture decisions
+
+3. Save it:
+```bash
+eagle-mem overview set "eagle-mem: Node.js CLI tool providing persistent memory for Claude Code via SQLite + FTS5. Currently at v1.0.3 with 5 hooks, 3 skills, and CLI subcommands for search/tasks/overview."
+```
+
+Keep it under 500 characters — this gets injected into every session start.
+
+### List all project overviews
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT project, content, updated_at FROM overviews
-WHERE project = '<project>';
-"
+eagle-mem overview list
 ```
 
-## Listing all project overviews
+### Delete an overview
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT project, substr(content, 1, 80) || '...', updated_at
-FROM overviews
-ORDER BY updated_at DESC;
-"
+eagle-mem overview delete
 ```
 
-## Deleting an overview
+## Options
 
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-DELETE FROM overviews WHERE project = '<project>';
-"
-```
+| Flag | Description |
+|------|-------------|
+| `-p, --project <name>` | Target a specific project (default: current directory) |
+| `-j, --json` | Output as JSON |
 
 ## Guidelines
 

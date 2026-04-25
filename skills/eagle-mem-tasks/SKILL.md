@@ -3,8 +3,7 @@ name: eagle-mem-tasks
 description: >
   TaskAware Compact Loop — break complex work into database-tracked subtasks with compaction
   between each. Use when: 'eagle tasks', 'break this into tasks', 'create task plan',
-  'task loop', 'compact loop', 'eagle mem tasks'. Prevents context bloat and hallucination
-  by executing one task at a time with memory re-injection after each /compact.
+  'task loop', 'compact loop', 'eagle mem tasks'. Uses the eagle-mem CLI — never run raw sqlite3 queries.
 ---
 
 # Eagle Mem — TaskAware Compact Loop
@@ -14,7 +13,7 @@ Break complex work into subtasks stored in Eagle Mem's database. Execute one tas
 ## How it works
 
 1. **Plan**: Break the user's request into ordered subtasks
-2. **Store**: Write each subtask to the Eagle Mem database
+2. **Store**: Add each subtask via the CLI
 3. **Execute**: Work on the current task (marked `[ACTIVE]`)
 4. **Compact**: When done, tell the user to run `/compact`
 5. **Resume**: After compact, SessionStart re-injects memory + loads the next task
@@ -22,78 +21,72 @@ Break complex work into subtasks stored in Eagle Mem's database. Execute one tas
 
 ## Commands
 
-### Creating tasks
+### List tasks
+
+```bash
+eagle-mem tasks
+eagle-mem tasks list
+```
+
+### Add tasks
 
 When the user invokes `/eagle-mem-tasks` or asks to break work into tasks:
 
 1. Analyze the request and break it into 3-8 focused subtasks
-2. Each task should be completable in one context window (~50-100K tokens of work)
-3. Write tasks to the database using this pattern:
+2. Each task should be completable in one context window
+3. Add tasks using the CLI:
 
 ```bash
-~/.eagle-mem/db/task-ops.sh add "<project>" "<title>" "<instructions>" <ordinal>
-```
-
-If `task-ops.sh` doesn't exist yet, write directly:
-
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-INSERT INTO tasks (project, title, instructions, ordinal)
-VALUES ('<project>', '<title>', '<instructions>', <ordinal>);
-"
+eagle-mem tasks add "Set up project structure" "Install deps, create folders, init config"
+eagle-mem tasks add "Implement auth middleware" "JWT validation, role checks, error responses"
+eagle-mem tasks add "Build CRUD endpoints" "Users and posts REST API with validation"
 ```
 
 4. Show the task plan to the user for confirmation
 5. After confirmation, start working on task #1
 
-### Viewing tasks
+### Complete a task
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-SELECT id, title, status, ordinal FROM tasks
-WHERE project = '<project>'
-ORDER BY ordinal ASC, id ASC;
-"
+eagle-mem tasks done <id>
 ```
 
-### Completing a task
+After marking done:
+1. Emit your `<eagle-summary>` block
+2. Tell the user: **"Task #N complete. Run `/compact` to save progress and load the next task."**
 
-When the current task is done:
-
-1. Mark it complete:
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-UPDATE tasks SET status = 'done', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE id = <task_id>;
-"
-```
-
-2. Emit your `<eagle-summary>` block
-3. Tell the user: **"Task #N complete. Run `/compact` to save progress and load the next task."**
-
-### Skipping/blocking a task
+### Block a task
 
 ```bash
-sqlite3 ~/.eagle-mem/memory.db "
-UPDATE tasks SET status = 'blocked'
-WHERE id = <task_id>;
-"
+eagle-mem tasks block <id>
 ```
+
+### Set context snapshot
+
+For tasks that depend on decisions from earlier tasks:
+
+```bash
+eagle-mem tasks context <id> "Using JWT with RS256, sessions stored in Redis"
+```
+
+### Clear completed tasks
+
+```bash
+eagle-mem tasks clear
+```
+
+## Options
+
+| Flag | Description |
+|------|-------------|
+| `-p, --project <name>` | Target a specific project (default: current directory) |
+| `-j, --json` | Output as JSON |
 
 ## Task design guidelines
 
-- Each task should be **self-contained** — completable without needing context from mid-execution of a previous task
-- Include `instructions` with enough detail that a fresh context window can pick it up
-- Include a `context_snapshot` for tasks that depend on decisions from earlier tasks:
-```bash
-sqlite3 ~/.eagle-mem/memory.db "
-PRAGMA trusted_schema=ON;
-UPDATE tasks SET context_snapshot = '<key decisions and state>'
-WHERE id = <task_id>;
-"
-```
+- Each task should be **self-contained** — completable without mid-execution context from a previous task
+- Include instructions with enough detail that a fresh context window can pick it up
+- Use context snapshots for tasks that depend on decisions from earlier tasks
 - Order tasks so that foundational work comes first (schema before API, API before UI)
 
 ## The compact cycle
@@ -105,19 +98,3 @@ User request → Plan tasks → Execute task 1 → /compact
 → ... repeat until all tasks done ...
 → Final summary: "All N tasks complete."
 ```
-
-This prevents context window bloat. Each task gets a fresh window with only relevant memory injected.
-
-## Example
-
-User: "Build a REST API with auth, CRUD endpoints, and tests"
-
-Tasks created:
-1. Set up project structure and dependencies
-2. Implement auth middleware (JWT)
-3. Build CRUD endpoints for users
-4. Build CRUD endpoints for posts
-5. Write integration tests
-6. Add error handling and validation
-
-Each task executes in its own compact cycle with full memory of what came before.

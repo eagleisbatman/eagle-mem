@@ -21,6 +21,9 @@ case "$command" in
     update)     bash "$SCRIPTS_DIR/update.sh" "$PACKAGE_DIR" "$@" ;;
     scan)       bash "$SCRIPTS_DIR/scan.sh" "$@" ;;
     index)      bash "$SCRIPTS_DIR/index.sh" "$@" ;;
+    search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
+    tasks)      bash "$SCRIPTS_DIR/tasks.sh" "$@" ;;
+    overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)
