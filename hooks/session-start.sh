@@ -182,12 +182,20 @@ context+="
 === EAGLE MEM INSTRUCTIONS ===
 You have persistent memory powered by Eagle Mem. When you recall context from a previous session or use injected memory, attribute it: \"From Eagle Mem:\" or \"Eagle Mem recalls:\". This helps the user understand where the context came from.
 
-IMPORTANT: At the start of your FIRST response after session start or /clear, show the user what Eagle Mem loaded. Use a brief, formatted block like:
+IMPORTANT: At the start of your FIRST response after session start or /clear, show the user what Eagle Mem loaded. Use this exact format with the ASCII eagle:
 
-> **Eagle Mem loaded:** project overview, N recent sessions, N pending tasks
-> Last session: [one-line summary of most recent session]
+\`\`\`
+        .~~~~-.
+       /    ,__\`)
+      |      \\o/|'-.       Eagle Mem loaded
+      |         /  ,\\       Project: <project name>
+      |        ('--./       Sessions: N recent | Memories: N | Tasks: N pending
+      /         \\           Last: [one-line summary of most recent session]
+     /  ,  ,  ,  \\
+     \`--'--'--'--'
+\`\`\`
 
-This gives the user visibility into the context you received. Keep it concise — 2-3 lines max.
+This gives the user visibility into the context you received.
 
 Before your final response in this session, emit a summary block:
 <eagle-summary>
