@@ -171,7 +171,7 @@
 
       section.details {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, 1fr);
         gap: 20px;
         padding: 48px 0 0;
       }
@@ -230,7 +230,7 @@
       @media (max-width: 900px) {
         .ascii-banner { font-size: clamp(5px, 2.8vw, 10px); }
         .highlights { grid-template-columns: 1fr 1fr; }
-        section.details { grid-template-columns: 1fr; }
+        section.details { grid-template-columns: 1fr 1fr; }
       }
 
       @media (max-width: 500px) {
@@ -242,6 +242,15 @@
     <main>
       <header class="hero">
 <pre class="ascii-banner" role="img" aria-label="Eagle Mem">
+        .~~~~-.
+       /    ,__`)
+      |      \o/|'-.
+      |         /  ,\
+      |        ('--./
+      /         \
+     /  ,  ,  ,  \
+     `--'--'--'--'
+
 ███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
 ██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
 █████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
@@ -275,8 +284,8 @@
         </div>
         <div class="highlight">
           <h3>Tables</h3>
-          <span class="num">6</span>
-          <p>Sessions, summaries, observations, tasks, overviews, code chunks</p>
+          <span class="num">9</span>
+          <p>Sessions, summaries, observations, tasks, overviews, code chunks + Claude mirrors</p>
         </div>
         <div class="highlight">
           <h3>Overhead</h3>
@@ -294,11 +303,11 @@
             automatically.
           </p>
           <ul>
-            <li><strong>SessionStart</strong> &mdash; injects project overview + recent summaries</li>
+            <li><strong>SessionStart</strong> &mdash; injects overview, summaries, memories, plans, and in-progress tasks</li>
             <li><strong>UserPromptSubmit</strong> &mdash; FTS5 search for relevant past memories</li>
-            <li><strong>PostToolUse</strong> &mdash; records file touches with deduplication</li>
+            <li><strong>PostToolUse</strong> &mdash; records file touches + mirrors Claude&rsquo;s memories, plans, and tasks</li>
             <li><strong>Stop</strong> &mdash; extracts <code>&lt;eagle-summary&gt;</code>, strips <code>&lt;private&gt;</code> tags</li>
-            <li><strong>SessionEnd</strong> &mdash; marks session as completed</li>
+            <li><strong>SessionEnd</strong> &mdash; re-syncs task statuses, marks session completed</li>
           </ul>
         </div>
         <div class="feature">
@@ -328,6 +337,19 @@
           </ul>
         </div>
         <div class="feature">
+          <h3>// claude code mirror</h3>
+          <p>
+            Automatically mirrors Claude Code&rsquo;s built-in memories, plans, and tasks
+            into Eagle Mem&rsquo;s SQLite + FTS5 &mdash; searchable and injected at session start.
+          </p>
+          <ul>
+            <li><strong>Memories</strong> &mdash; intercepts writes to <code>~/.claude/projects/*/memory/</code></li>
+            <li><strong>Plans</strong> &mdash; captures plan files from <code>~/.claude/plans/</code></li>
+            <li><strong>Tasks</strong> &mdash; mirrors TaskCreate/TaskUpdate + re-syncs at session end</li>
+            <li><strong><code>eagle-mem memories sync</code></strong> &mdash; backfill everything in one command</li>
+          </ul>
+        </div>
+        <div class="feature">
           <h3>// privacy &amp; safety</h3>
           <p>
             Everything stays local. One SQLite file, no network calls, no
@@ -338,6 +360,19 @@
             <li><strong>WAL mode</strong> &mdash; concurrent session safety across 4-5 instances</li>
             <li><strong>Secret redaction</strong> &mdash; API keys and tokens scrubbed from observations</li>
             <li><strong>Per-project isolation</strong> &mdash; each project gets its own memory bucket</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// compact-safe reload</h3>
+          <p>
+            When Claude Code compacts your conversation, Eagle Mem detects it and
+            re-injects the full context &mdash; overview, memories, tasks, and the
+            ASCII eagle.
+          </p>
+          <ul>
+            <li><strong>Trigger-aware</strong> &mdash; shows startup vs compact vs clear vs resume</li>
+            <li><strong>Stale filtering</strong> &mdash; skips tasks older than 7 days and noisy auto-captured summaries</li>
+            <li><strong>Smart project ID</strong> &mdash; resolves via git root, handles monorepos correctly</li>
           </ul>
         </div>
       </section>
