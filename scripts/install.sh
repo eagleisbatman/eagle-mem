@@ -7,11 +7,12 @@ set -euo pipefail
 
 PACKAGE_DIR="${1:-.}"
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
+. "$LIB_DIR/common.sh"
 
-EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
-SETTINGS="$HOME/.claude/settings.json"
+SETTINGS="$EAGLE_SETTINGS"
 
 eagle_banner
 eagle_header "Install"
@@ -203,22 +204,12 @@ patch_hook "UserPromptSubmit" "" \
 
 # ─── Install skills ────────────────────────────────────────
 
-SKILLS_DIR="$HOME/.claude/skills"
-if [ -d "$SKILLS_DIR" ] && [ -d "$PACKAGE_DIR/skills" ]; then
+if [ -d "$PACKAGE_DIR/skills" ]; then
+    mkdir -p "$EAGLE_SKILLS_DIR"
     for skill_dir in "$PACKAGE_DIR"/skills/*/; do
         [ ! -d "$skill_dir" ] && continue
         skill_name=$(basename "$skill_dir")
-        dst="$SKILLS_DIR/$skill_name"
-        [ -L "$dst" ] && rm "$dst"
-        ln -sf "$skill_dir" "$dst"
-        eagle_ok "Skill: $skill_name"
-    done
-elif [ -d "$PACKAGE_DIR/skills" ]; then
-    mkdir -p "$SKILLS_DIR"
-    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
-        [ ! -d "$skill_dir" ] && continue
-        skill_name=$(basename "$skill_dir")
-        dst="$SKILLS_DIR/$skill_name"
+        dst="$EAGLE_SKILLS_DIR/$skill_name"
         [ -L "$dst" ] && rm "$dst"
         ln -sf "$skill_dir" "$dst"
         eagle_ok "Skill: $skill_name"

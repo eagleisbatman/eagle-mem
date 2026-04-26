@@ -6,12 +6,12 @@
 set -euo pipefail
 
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
+. "$LIB_DIR/common.sh"
 
-EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
-SETTINGS="$HOME/.claude/settings.json"
-SKILLS_DIR="$HOME/.claude/skills"
+SETTINGS="$EAGLE_SETTINGS"
 
 eagle_header "Uninstall"
 
@@ -35,9 +35,9 @@ fi
 
 # ─── Remove skill symlinks ────────────────────────────────
 
-if [ -d "$SKILLS_DIR" ]; then
+if [ -d "$EAGLE_SKILLS_DIR" ]; then
     for skill in eagle-mem-search eagle-mem-tasks eagle-mem-overview; do
-        target="$SKILLS_DIR/$skill"
+        target="$EAGLE_SKILLS_DIR/$skill"
         if [ -L "$target" ]; then
             rm "$target"
             eagle_ok "Skill removed: $skill"

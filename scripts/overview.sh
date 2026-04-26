@@ -89,7 +89,7 @@ overview_set() {
     eagle_upsert_overview "$project" "$content"
 
     if [ "$json_output" = true ]; then
-        printf '{"project":"%s","updated":true}\n' "$project"
+        jq -nc --arg project "$project" '{project: $project, updated: true}'
         return
     fi
 
@@ -102,7 +102,7 @@ overview_delete() {
     eagle_db "DELETE FROM overviews WHERE project = '$project_sql';"
 
     if [ "$json_output" = true ]; then
-        printf '{"project":"%s","deleted":true}\n' "$project"
+        jq -nc --arg project "$project" '{project: $project, deleted: true}'
         return
     fi
 
@@ -146,7 +146,21 @@ case "$action" in
     delete|rm)   overview_delete ;;
     list|ls)     overview_list ;;
     --help|-h)
-        echo -e "  Run ${CYAN}eagle-mem overview --help${RESET} for usage"
+        echo -e "  ${BOLD}eagle-mem overview${RESET} — Manage project overviews"
+        echo ""
+        echo -e "  ${BOLD}Usage:${RESET}"
+        echo -e "    eagle-mem overview                    ${DIM}# show current overview${RESET}"
+        echo -e "    eagle-mem overview ${CYAN}set${RESET} <text>         ${DIM}# set/update overview${RESET}"
+        echo -e "    eagle-mem overview ${CYAN}delete${RESET}             ${DIM}# delete overview${RESET}"
+        echo -e "    eagle-mem overview ${CYAN}list${RESET}               ${DIM}# list all overviews${RESET}"
+        echo ""
+        echo -e "  ${BOLD}Options:${RESET}"
+        echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
+        echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
+        echo ""
+        echo -e "  ${BOLD}Tip:${RESET} Use ${CYAN}eagle-mem scan${RESET} to auto-generate an overview from code."
+        echo ""
+        exit 0
         ;;
     *)
         eagle_err "Unknown action: $action"

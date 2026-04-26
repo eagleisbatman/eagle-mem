@@ -25,7 +25,6 @@ model=$(echo "$input" | jq -r '.model // empty')
 [ -z "$session_id" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
-project_sql=$(eagle_sql_escape "$project")
 
 eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type"
 
@@ -48,13 +47,7 @@ $overview
 fi
 
 # Recent summaries for this project (last 5 sessions)
-recent=$(eagle_db "
-    SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at
-    FROM summaries s
-    WHERE s.project = '$project_sql'
-    ORDER BY s.created_at DESC
-    LIMIT 5;
-")
+recent=$(eagle_get_recent_summaries "$project" 5)
 
 if [ -n "$recent" ]; then
     context+="=== EAGLE MEM ===
@@ -78,13 +71,7 @@ Next steps: $next_steps"
 fi
 
 # Pending tasks from TaskAware loop
-pending_tasks=$(eagle_db "
-    SELECT id, title, instructions, status
-    FROM tasks
-    WHERE project = '$project_sql' AND status IN ('pending', 'active')
-    ORDER BY ordinal ASC, id ASC
-    LIMIT 10;
-")
+pending_tasks=$(eagle_get_pending_tasks "$project")
 
 if [ -n "$pending_tasks" ]; then
     context+="
@@ -92,7 +79,7 @@ if [ -n "$pending_tasks" ]; then
 Pending tasks for '$project':
 "
     first_pending=""
-    while IFS='|' read -r tid title instructions status; do
+    while IFS='|' read -r tid title instructions status _ordinal; do
         [ -z "$tid" ] && continue
         local_marker=""
         if [ "$status" = "active" ]; then
@@ -108,22 +95,12 @@ Pending tasks for '$project':
     done <<< "$pending_tasks"
 
     # Load context snapshot for the active/next task
-    active_task=$(eagle_db "
-        SELECT id, title, instructions, context_snapshot
-        FROM tasks
-        WHERE project = '$project_sql' AND status = 'active'
-        ORDER BY ordinal ASC, id ASC
-        LIMIT 1;
-    ")
+    active_task=$(eagle_get_active_task "$project")
 
     if [ -z "$active_task" ] && [ -n "$first_pending" ]; then
         # Auto-activate the next pending task
-        eagle_db "UPDATE tasks SET status = 'active', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $first_pending;"
-        active_task=$(eagle_db "
-            SELECT id, title, instructions, context_snapshot
-            FROM tasks
-            WHERE id = $first_pending;
-        ")
+        eagle_activate_task "$first_pending"
+        active_task=$(eagle_get_active_task "$project")
     fi
 
     if [ -n "$active_task" ]; then

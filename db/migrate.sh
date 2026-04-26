@@ -44,4 +44,7 @@ run_migration "002_overviews" "$SCRIPT_DIR/002_overviews.sql"
 # ─── Migration 003: Code chunks ───────────────────────────
 run_migration "003_code_chunks" "$SCRIPT_DIR/003_code_chunks.sql"
 
+# ─── Migration 004: Observation indexes ──────────────────
+run_migration "004_observation_indexes" "$SCRIPT_DIR/004_observation_indexes.sql"
+
 echo "  Eagle Mem database ready: $DB"

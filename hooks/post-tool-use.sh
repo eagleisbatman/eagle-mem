@@ -19,7 +19,7 @@ session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
 
-[ -z "$session_id" ] || [ -z "$tool_name" ] && exit 0
+if [ -z "$session_id" ] || [ -z "$tool_name" ]; then exit 0; fi
 
 # Only track file-related tools
 case "$tool_name" in
@@ -38,17 +38,17 @@ tool_summary=""
 case "$tool_name" in
     Read)
         fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
-        [ -n "$fp" ] && files_read="[\"$fp\"]"
+        [ -n "$fp" ] && files_read=$(printf '%s' "$fp" | jq -Rsc '[.]')
         tool_summary="Read $fp"
         ;;
     Write)
         fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
-        [ -n "$fp" ] && files_modified="[\"$fp\"]"
+        [ -n "$fp" ] && files_modified=$(printf '%s' "$fp" | jq -Rsc '[.]')
         tool_summary="Write $fp"
         ;;
     Edit)
         fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
-        [ -n "$fp" ] && files_modified="[\"$fp\"]"
+        [ -n "$fp" ] && files_modified=$(printf '%s' "$fp" | jq -Rsc '[.]')
         tool_summary="Edit $fp"
         ;;
     Bash)

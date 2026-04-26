@@ -16,7 +16,7 @@ eagle_ensure_db
 
 # ─── Parse arguments ──────────────────────────────────────
 
-action="${1:-list}"
+action="${1:-pending}"
 shift 2>/dev/null || true
 
 project=""
@@ -123,14 +123,14 @@ tasks_add() {
     max_ord=$(eagle_db "SELECT COALESCE(MAX(ordinal), 0) FROM tasks WHERE project = '$project_sql';")
     local next_ord=$((max_ord + 1))
 
-    eagle_db "INSERT INTO tasks (project, title, instructions, ordinal)
-              VALUES ('$project_sql', '$title_sql', '$instr_sql', $next_ord);"
-
     local new_id
-    new_id=$(eagle_db "SELECT last_insert_rowid();")
+    new_id=$(eagle_db "INSERT INTO tasks (project, title, instructions, ordinal)
+              VALUES ('$project_sql', '$title_sql', '$instr_sql', $next_ord);
+              SELECT last_insert_rowid();")
 
     if [ "$json_output" = true ]; then
-        printf '{"id":%s,"title":"%s","ordinal":%s}\n' "$new_id" "$title" "$next_ord"
+        jq -nc --arg id "$new_id" --arg title "$title" --argjson ord "$next_ord" \
+            '{id: ($id | tonumber), title: $title, ordinal: $ord}'
         return
     fi
 
@@ -147,14 +147,26 @@ tasks_done() {
         exit 1
     fi
 
-    eagle_db "UPDATE tasks SET status = 'done', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-              WHERE id = $task_id AND project = '$project_sql';"
+    if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
+        eagle_err "Task ID must be a number, got: $task_id"
+        exit 1
+    fi
+
+    local changed
+    changed=$(eagle_db "UPDATE tasks SET status = 'done', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+              WHERE id = $task_id AND project = '$project_sql';
+              SELECT changes();")
+
+    if [ "${changed:-0}" -eq 0 ]; then
+        eagle_err "Task #$task_id not found in project '$project'"
+        exit 1
+    fi
 
     local title
-    title=$(eagle_db "SELECT title FROM tasks WHERE id = $task_id;")
+    title=$(eagle_db "SELECT title FROM tasks WHERE id = $task_id AND project = '$project_sql';")
 
     if [ "$json_output" = true ]; then
-        printf '{"id":%s,"status":"done"}\n' "$task_id"
+        jq -nc --arg id "$task_id" '{id: ($id | tonumber), status: "done"}'
         return
     fi
 
@@ -171,10 +183,22 @@ tasks_block() {
         exit 1
     fi
 
-    eagle_db "UPDATE tasks SET status = 'blocked' WHERE id = $task_id AND project = '$project_sql';"
+    if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
+        eagle_err "Task ID must be a number, got: $task_id"
+        exit 1
+    fi
+
+    local changed
+    changed=$(eagle_db "UPDATE tasks SET status = 'blocked' WHERE id = $task_id AND project = '$project_sql';
+              SELECT changes();")
+
+    if [ "${changed:-0}" -eq 0 ]; then
+        eagle_err "Task #$task_id not found in project '$project'"
+        exit 1
+    fi
 
     if [ "$json_output" = true ]; then
-        printf '{"id":%s,"status":"blocked"}\n' "$task_id"
+        jq -nc --arg id "$task_id" '{id: ($id | tonumber), status: "blocked"}'
         return
     fi
 
@@ -192,11 +216,23 @@ tasks_context() {
         exit 1
     fi
 
+    if ! [[ "$task_id" =~ ^[0-9]+$ ]]; then
+        eagle_err "Task ID must be a number, got: $task_id"
+        exit 1
+    fi
+
     local snap_sql; snap_sql=$(eagle_sql_escape "$snapshot")
-    eagle_db "UPDATE tasks SET context_snapshot = '$snap_sql' WHERE id = $task_id AND project = '$project_sql';"
+    local changed
+    changed=$(eagle_db "UPDATE tasks SET context_snapshot = '$snap_sql' WHERE id = $task_id AND project = '$project_sql';
+              SELECT changes();")
+
+    if [ "${changed:-0}" -eq 0 ]; then
+        eagle_err "Task #$task_id not found in project '$project'"
+        exit 1
+    fi
 
     if [ "$json_output" = true ]; then
-        printf '{"id":%s,"context_snapshot":true}\n' "$task_id"
+        jq -nc --arg id "$task_id" '{id: ($id | tonumber), context_snapshot: true}'
         return
     fi
 
@@ -212,7 +248,7 @@ tasks_clear() {
     eagle_db "DELETE FROM tasks WHERE project = '$project_sql' AND status = 'done';"
 
     if [ "$json_output" = true ]; then
-        printf '{"cleared":%s}\n' "${count:-0}"
+        jq -nc --argjson cleared "${count:-0}" '{cleared: $cleared}'
         return
     fi
 
@@ -230,7 +266,22 @@ case "$action" in
     context)    tasks_context ;;
     clear)      tasks_clear ;;
     --help|-h)
-        echo -e "  Run ${CYAN}eagle-mem tasks --help${RESET} for usage"
+        echo -e "  ${BOLD}eagle-mem tasks${RESET} — Manage tracked tasks"
+        echo ""
+        echo -e "  ${BOLD}Usage:${RESET}"
+        echo -e "    eagle-mem tasks                           ${DIM}# list pending tasks${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}list${RESET}                      ${DIM}# list all tasks${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}add${RESET} <title> [instructions] ${DIM}# add a task${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}done${RESET} <id>                 ${DIM}# mark task complete${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}block${RESET} <id>                ${DIM}# mark task blocked${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}context${RESET} <id> <snapshot>    ${DIM}# set task context${RESET}"
+        echo -e "    eagle-mem tasks ${CYAN}clear${RESET}                     ${DIM}# remove all done tasks${RESET}"
+        echo ""
+        echo -e "  ${BOLD}Options:${RESET}"
+        echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
+        echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
+        echo ""
+        exit 0
         ;;
     *)
         eagle_err "Unknown action: $action"

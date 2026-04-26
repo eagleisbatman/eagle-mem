@@ -62,11 +62,13 @@ while [ $# -gt 0 ]; do
 done
 
 [ -z "$project" ] && project=$(eagle_project_from_cwd "$(pwd)")
+limit=$(eagle_sql_int "$limit")
+[ "$limit" -eq 0 ] && limit=10
 
 # ─── Keyword search ──────────────────────────────────────
 
 search_keyword() {
-    local q; q=$(eagle_sql_escape "$query")
+    local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
     local p; p=$(eagle_sql_escape "$project")
 
     local where_project=""
@@ -158,10 +160,12 @@ search_timeline() {
 # ─── Session details ──────────────────────────────────────
 
 search_session() {
+    local sid_sql; sid_sql=$(eagle_sql_escape "$session_id")
+
     if [ "$json_output" = true ]; then
         eagle_db_json "SELECT o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
                        FROM observations o
-                       WHERE o.session_id = '$session_id'
+                       WHERE o.session_id = '$sid_sql'
                        ORDER BY o.created_at ASC;"
         return
     fi
@@ -169,7 +173,7 @@ search_session() {
     local results
     results=$(eagle_db "SELECT o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
                         FROM observations o
-                        WHERE o.session_id = '$session_id'
+                        WHERE o.session_id = '$sid_sql'
                         ORDER BY o.created_at ASC;")
 
     if [ -z "$results" ]; then
@@ -250,8 +254,13 @@ search_stats() {
     chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$p';")
 
     if [ "$json_output" = true ]; then
-        printf '{"project":"%s","sessions":%s,"summaries":%s,"observations":%s,"tasks":%s,"code_chunks":%s}\n' \
-            "$project" "${sessions:-0}" "${summaries:-0}" "${observations:-0}" "${tasks:-0}" "${chunks:-0}"
+        jq -nc --arg project "$project" \
+            --argjson sessions "${sessions:-0}" \
+            --argjson summaries "${summaries:-0}" \
+            --argjson observations "${observations:-0}" \
+            --argjson tasks "${tasks:-0}" \
+            --argjson code_chunks "${chunks:-0}" \
+            '{project: $project, sessions: $sessions, summaries: $summaries, observations: $observations, tasks: $tasks, code_chunks: $code_chunks}'
         return
     fi
 

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS _migrations (
 );
 
 -- ─── Sessions ──────────────────────────────────────────────
+-- Sessions are parent rows for summaries, tasks, and observations (FK).
+-- Never delete sessions — prune children instead.
 
 CREATE TABLE IF NOT EXISTS sessions (
     id              TEXT PRIMARY KEY,

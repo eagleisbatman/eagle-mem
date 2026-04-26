@@ -7,6 +7,8 @@
 EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
 EAGLE_MEM_DB="$EAGLE_MEM_DIR/memory.db"
 EAGLE_MEM_LOG="$EAGLE_MEM_DIR/eagle-mem.log"
+EAGLE_SETTINGS="${EAGLE_SETTINGS:-$HOME/.claude/settings.json}"
+EAGLE_SKILLS_DIR="$HOME/.claude/skills"
 
 eagle_log() {
     local level="$1"
@@ -21,6 +23,17 @@ eagle_project_from_cwd() {
 
 eagle_sql_escape() {
     printf '%s' "$1" | sed "s/'/''/g"
+}
+
+eagle_sql_int() {
+    case "$1" in
+        ''|*[!0-9]*) echo "0" ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+eagle_fts_sanitize() {
+    printf '%s' "$1" | sed 's/[*"(){}^~:]/  /g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 eagle_read_stdin() {

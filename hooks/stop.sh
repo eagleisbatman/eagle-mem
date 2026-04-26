@@ -29,7 +29,6 @@ agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 [ -n "$agent_type" ] && [ "$agent_type" != "main" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
-project_sql=$(eagle_sql_escape "$project")
 
 eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path"
 
@@ -137,10 +136,9 @@ fi
 
 # Mark active task as done if eagle-summary mentions completion
 if [ -n "$completed" ]; then
-    active_task_id=$(eagle_db "SELECT id FROM tasks WHERE project = '$project_sql' AND status = 'active' LIMIT 1;")
-    if [ -n "$active_task_id" ]; then
-        eagle_db "UPDATE tasks SET status = 'done', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $active_task_id;"
-        eagle_log "INFO" "Stop: marked task #$active_task_id as done"
+    completed_task_id=$(eagle_complete_active_task "$project")
+    if [ -n "$completed_task_id" ]; then
+        eagle_log "INFO" "Stop: marked task #$completed_task_id as done"
     fi
 fi
 
