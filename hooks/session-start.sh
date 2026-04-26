@@ -163,6 +163,7 @@ fi
 synced_tasks=$(eagle_db "SELECT subject, status FROM claude_tasks
     WHERE project = '$(eagle_sql_escape "$project")'
     AND status IN ('in_progress', 'pending', 'todo', 'open')
+    AND updated_at > datetime('now', '-7 days')
     ORDER BY updated_at DESC LIMIT 5;")
 if [ -n "$synced_tasks" ]; then
     context+="

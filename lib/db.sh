@@ -101,6 +101,7 @@ eagle_get_recent_summaries() {
     eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at
               FROM summaries s
               WHERE s.project = '$project'
+              AND s.request NOT LIKE '%<local-command-caveat>%'
               ORDER BY s.created_at DESC
               LIMIT $limit;"
 }
