@@ -126,25 +126,6 @@ eagle_search_summaries() {
               LIMIT $limit;"
 }
 
-eagle_get_pending_tasks() {
-    local project; project=$(eagle_sql_escape "$1")
-
-    eagle_db "SELECT id, title, instructions, status, ordinal
-              FROM tasks
-              WHERE project = '$project' AND status IN ('pending', 'active')
-              ORDER BY ordinal ASC, id ASC;"
-}
-
-eagle_get_next_task() {
-    local project; project=$(eagle_sql_escape "$1")
-
-    eagle_db "SELECT id, title, instructions, context_snapshot
-              FROM tasks
-              WHERE project = '$project' AND status = 'pending'
-              ORDER BY ordinal ASC, id ASC
-              LIMIT 1;"
-}
-
 eagle_observation_exists() {
     local session_id; session_id=$(eagle_sql_escape "$1")
     local tool_name; tool_name=$(eagle_sql_escape "$2")
@@ -172,31 +153,6 @@ eagle_get_overview() {
     local project; project=$(eagle_sql_escape "$1")
 
     eagle_db "SELECT content FROM overviews WHERE project = '$project';"
-}
-
-eagle_activate_task() {
-    local task_id; task_id=$(eagle_sql_int "$1")
-    eagle_db "UPDATE tasks SET status = 'active', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $task_id;"
-}
-
-eagle_complete_active_task() {
-    local project; project=$(eagle_sql_escape "$1")
-    local active_id
-    active_id=$(eagle_db "SELECT id FROM tasks WHERE project = '$project' AND status = 'active' LIMIT 1;")
-    if [ -n "$active_id" ]; then
-        local safe_id; safe_id=$(eagle_sql_int "$active_id")
-        eagle_db "UPDATE tasks SET status = 'done', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = $safe_id;"
-        echo "$active_id"
-    fi
-}
-
-eagle_get_active_task() {
-    local project; project=$(eagle_sql_escape "$1")
-    eagle_db "SELECT id, title, instructions, context_snapshot
-              FROM tasks
-              WHERE project = '$project' AND status = 'active'
-              ORDER BY ordinal ASC, id ASC
-              LIMIT 1;"
 }
 
 eagle_search_code_chunks() {

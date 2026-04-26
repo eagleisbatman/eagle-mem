@@ -249,7 +249,7 @@ search_stats() {
     sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p';")
     summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p';")
     observations=$(eagle_db "SELECT COUNT(*) FROM observations o JOIN sessions s ON s.id = o.session_id WHERE s.project = '$p';")
-    tasks=$(eagle_db "SELECT COUNT(*) FROM tasks WHERE project = '$p';")
+    tasks=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p';")
     local chunks
     chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$p';")
 

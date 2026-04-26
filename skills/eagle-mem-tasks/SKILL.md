@@ -1,100 +1,92 @@
 ---
 name: eagle-mem-tasks
 description: >
-  TaskAware Compact Loop — break complex work into database-tracked subtasks with compaction
-  between each. Use when: 'eagle tasks', 'break this into tasks', 'create task plan',
-  'task loop', 'compact loop', 'eagle mem tasks'. Uses the eagle-mem CLI — never run raw sqlite3 queries.
+  TaskAware Compact Loop — break complex work into Claude Code tasks with dependencies,
+  compact between each. Use when: 'eagle tasks', 'break this into tasks', 'create task plan',
+  'task loop', 'compact loop', 'eagle mem tasks'. Uses Claude Code's native TaskCreate/TaskUpdate.
 ---
 
 # Eagle Mem — TaskAware Compact Loop
 
-Break complex work into subtasks stored in Eagle Mem's database. Execute one task at a time, compact between each, and let Eagle Mem re-inject context for the next task.
+Break complex work into subtasks using Claude Code's native task system. Execute one task at a time, compact between each, and let Eagle Mem re-inject task state for the next task.
 
 ## How it works
 
 1. **Plan**: Break the user's request into ordered subtasks
-2. **Store**: Add each subtask via the CLI
-3. **Execute**: Work on the current task (marked `[ACTIVE]`)
-4. **Compact**: When done, tell the user to run `/compact`
-5. **Resume**: After compact, SessionStart re-injects memory + loads the next task
-6. **Repeat**: Until all tasks are done
+2. **Create**: Add each subtask via `TaskCreate` with dependencies via `addBlockedBy`
+3. **Execute**: Work on the current task (mark `in_progress` with `TaskUpdate`)
+4. **Complete**: Mark done with `TaskUpdate(completed)`, emit `<eagle-summary>`
+5. **Compact**: Tell the user to run `/compact`
+6. **Resume**: After compact, SessionStart re-injects memory + loads task state from Eagle Mem's mirror
+7. **Repeat**: Until all tasks are done
 
-## Commands
+## Creating tasks
 
-### List tasks
+Use Claude Code's `TaskCreate` tool. Each task gets `pending` status automatically.
 
-```bash
-eagle-mem tasks
-eagle-mem tasks list
+For tasks that depend on earlier work, use `addBlockedBy` in `TaskUpdate`:
+
+```
+TaskCreate({ subject: "Set up project structure", description: "Install deps, create folders, init config" })
+TaskCreate({ subject: "Implement auth middleware", description: "JWT validation, role checks, error responses" })
+TaskCreate({ subject: "Build CRUD endpoints", description: "Users and posts REST API with validation" })
+
+// Then set dependencies:
+TaskUpdate({ taskId: "3", addBlockedBy: ["1", "2"] })
 ```
 
-### Add tasks
+## Working on a task
 
-When the user invokes `/eagle-mem-tasks` or asks to break work into tasks:
+1. Call `TaskUpdate({ taskId: "N", status: "in_progress" })` before starting work
+2. Do the work
+3. Call `TaskUpdate({ taskId: "N", status: "completed" })` when done
+4. Emit your `<eagle-summary>` block
+5. Tell the user: **"Task complete. Run `/compact` to save progress and load the next task."**
 
-1. Analyze the request and break it into 3-8 focused subtasks
-2. Each task should be completable in one context window
-3. Add tasks using the CLI:
+## Viewing tasks
 
-```bash
-eagle-mem tasks add "Set up project structure" "Install deps, create folders, init config"
-eagle-mem tasks add "Implement auth middleware" "JWT validation, role checks, error responses"
-eagle-mem tasks add "Build CRUD endpoints" "Users and posts REST API with validation"
-```
-
-4. Show the task plan to the user for confirmation
-5. After confirmation, start working on task #1
-
-### Complete a task
+Use `TaskList` to see all tasks, or the CLI for cross-session history:
 
 ```bash
-eagle-mem tasks done <id>
+eagle-mem tasks              # pending/in-progress (from mirror)
+eagle-mem tasks list         # all tasks
+eagle-mem tasks search <q>   # FTS5 search across task history
 ```
 
-After marking done:
-1. Emit your `<eagle-summary>` block
-2. Tell the user: **"Task #N complete. Run `/compact` to save progress and load the next task."**
+## Cross-session context
 
-### Block a task
+When a task depends on decisions made in earlier tasks, put that context in the task's `description` field — it persists across compactions via Eagle Mem's mirror.
 
-```bash
-eagle-mem tasks block <id>
+For example, if task 1 decides to use JWT with RS256:
+
 ```
-
-### Set context snapshot
-
-For tasks that depend on decisions from earlier tasks:
-
-```bash
-eagle-mem tasks context <id> "Using JWT with RS256, sessions stored in Redis"
+TaskUpdate({ taskId: "2", description: "Implement auth middleware. Decision from task 1: using JWT with RS256, sessions stored in Redis." })
 ```
-
-### Clear completed tasks
-
-```bash
-eagle-mem tasks clear
-```
-
-## Options
-
-| Flag | Description |
-|------|-------------|
-| `-p, --project <name>` | Target a specific project (default: current directory) |
-| `-j, --json` | Output as JSON |
 
 ## Task design guidelines
 
-- Each task should be **self-contained** — completable without mid-execution context from a previous task
-- Include instructions with enough detail that a fresh context window can pick it up
-- Use context snapshots for tasks that depend on decisions from earlier tasks
-- Order tasks so that foundational work comes first (schema before API, API before UI)
+- Each task should be **self-contained** — completable in one context window
+- Include enough detail in `description` that a fresh context window can pick it up
+- Use `addBlockedBy` for tasks that depend on earlier tasks
+- Order tasks so foundational work comes first (schema before API, API before UI)
+- Keep tasks focused: 3-8 tasks per plan
 
 ## The compact cycle
 
 ```
-User request → Plan tasks → Execute task 1 → /compact
-→ Eagle Mem saves summary → Context cleared → Memory re-injected
-→ Task 2 loaded as [ACTIVE] → Execute task 2 → /compact
-→ ... repeat until all tasks done ...
-→ Final summary: "All N tasks complete."
+User request -> Plan tasks (TaskCreate) -> Execute task 1 (TaskUpdate: in_progress)
+-> Complete task 1 (TaskUpdate: completed) -> /compact
+-> Eagle Mem saves summary -> Context cleared -> Task state re-injected
+-> Execute task 2 -> /compact
+-> ... repeat until all tasks done ...
+-> Final summary: "All N tasks complete."
 ```
+
+## Status reference
+
+| Status | Meaning |
+|---|---|
+| `pending` | Not started yet |
+| `in_progress` | Currently being worked on |
+| `completed` | Done |
+| `deleted` | Removed |

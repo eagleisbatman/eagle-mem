@@ -80,57 +80,6 @@ Next steps: $next_steps"
 "
 fi
 
-# Pending tasks from TaskAware loop
-pending_tasks=$(eagle_get_pending_tasks "$project")
-
-if [ -n "$pending_tasks" ]; then
-    context+="
-=== EAGLE MEM — Tasks ===
-Pending tasks for '$project':
-"
-    first_pending=""
-    while IFS='|' read -r tid title instructions status _ordinal; do
-        [ -z "$tid" ] && continue
-        local_marker=""
-        if [ "$status" = "active" ]; then
-            local_marker=" [ACTIVE]"
-        elif [ -z "$first_pending" ]; then
-            local_marker=" [NEXT]"
-            first_pending="$tid"
-        fi
-        context+="  $tid. $title$local_marker"
-        [ -n "$instructions" ] && context+=" — $instructions"
-        context+="
-"
-    done <<< "$pending_tasks"
-
-    # Load context snapshot for the active/next task
-    active_task=$(eagle_get_active_task "$project")
-
-    if [ -z "$active_task" ] && [ -n "$first_pending" ]; then
-        # Auto-activate the next pending task (atomic to prevent races
-        # when multiple sessions start simultaneously)
-        eagle_db "UPDATE tasks SET status = 'active', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                  WHERE id = $first_pending
-                  AND status = 'pending'
-                  AND NOT EXISTS (SELECT 1 FROM tasks WHERE project = '$(eagle_sql_escape "$project")' AND status = 'active');"
-        active_task=$(eagle_get_active_task "$project")
-    fi
-
-    if [ -n "$active_task" ]; then
-        IFS='|' read -r atid atitle ainstructions asnapshot <<< "$active_task"
-        context+="
-Current task (#$atid): $atitle
-"
-        [ -n "$ainstructions" ] && context+="Instructions: $ainstructions
-"
-        [ -n "$asnapshot" ] && context+="Context: $asnapshot
-"
-        context+="When done, tell the user to run /compact so Eagle Mem can save progress and load the next task.
-"
-    fi
-fi
-
 # ─── Mirrored Claude memories ──────────────────────────────
 
 memories=$(eagle_list_claude_memories "$project" 5)
@@ -161,21 +110,28 @@ Recent plans for '$project':
     done <<< "$plans"
 fi
 
-# ─── Mirrored Claude tasks (synced) ──────────────────────
+# ─── Claude Code tasks ───────────────────────────────────
 
-synced_tasks=$(eagle_db "SELECT subject, status FROM claude_tasks
+synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
     WHERE project = '$(eagle_sql_escape "$project")'
     AND status IN ('in_progress', 'pending')
     AND updated_at > datetime('now', '-7 days')
-    ORDER BY updated_at DESC LIMIT 5;")
+    ORDER BY
+        CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
+        updated_at DESC
+    LIMIT 10;")
 if [ -n "$synced_tasks" ]; then
     context+="
-=== EAGLE MEM — Synced Tasks ===
-In-progress/pending tasks for '$project':
+=== EAGLE MEM — Tasks ===
+Tasks for '$project':
 "
-    while IFS='|' read -r tsubject tstatus; do
+    while IFS='|' read -r tsubject tstatus tblocked; do
         [ -z "$tsubject" ] && continue
-        context+="  - [$tstatus] $tsubject
+        local_marker=""
+        if [ "$tblocked" != "[]" ] && [ -n "$tblocked" ]; then
+            local_marker=" (blocked)"
+        fi
+        context+="  - [$tstatus] $tsubject$local_marker
 "
     done <<< "$synced_tasks"
 fi

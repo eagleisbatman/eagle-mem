@@ -141,12 +141,4 @@ if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
     eagle_log "INFO" "Stop: summary saved for session=$session_id"
 fi
 
-# Mark active task as done only when Claude explicitly provided a summary
-if [ -n "$summary_block" ] && [ -n "$completed" ]; then
-    completed_task_id=$(eagle_complete_active_task "$project")
-    if [ -n "$completed_task_id" ]; then
-        eagle_log "INFO" "Stop: marked task #$completed_task_id as done"
-    fi
-fi
-
 exit 0
