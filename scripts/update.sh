@@ -79,7 +79,12 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
 
     patch_hook "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
     patch_hook "Stop" "" "$EAGLE_MEM_DIR/hooks/stop.sh"
-    patch_hook "PostToolUse" "Read|Write|Edit|Bash" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    # Update PostToolUse matcher if it has the old value (pre-v1.3.0)
+    if jq -e '.hooks.PostToolUse[]? | select(.matcher == "Read|Write|Edit|Bash")' "$SETTINGS" &>/dev/null; then
+        _tmp=$(mktemp)
+        jq '(.hooks.PostToolUse[] | select(.matcher == "Read|Write|Edit|Bash")).matcher = "Read|Write|Edit|Bash|TaskCreate|TaskUpdate"' "$SETTINGS" > "$_tmp" && mv "$_tmp" "$SETTINGS"
+    fi
+    patch_hook "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     patch_hook "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh"
     patch_hook "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
 

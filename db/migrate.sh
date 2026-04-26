@@ -47,4 +47,13 @@ run_migration "003_code_chunks" "$SCRIPT_DIR/003_code_chunks.sql"
 # ─── Migration 004: Observation indexes ──────────────────
 run_migration "004_observation_indexes" "$SCRIPT_DIR/004_observation_indexes.sql"
 
+# ─── Migration 005: Claude Code memory mirror ────────────
+run_migration "005_claude_memories" "$SCRIPT_DIR/005_claude_memories.sql"
+
+# ─── Migration 006: Claude Code plan mirror ──────────────
+run_migration "006_claude_plans" "$SCRIPT_DIR/006_claude_plans.sql"
+
+# ─── Migration 007: Claude Code task mirror ──────────────
+run_migration "007_claude_tasks" "$SCRIPT_DIR/007_claude_tasks.sql"
+
 echo "  Eagle Mem database ready: $DB"

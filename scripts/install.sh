@@ -190,7 +190,7 @@ patch_hook "Stop" "" \
     "$EAGLE_MEM_DIR/hooks/stop.sh" \
     "Stop hook"
 
-patch_hook "PostToolUse" "Read|Write|Edit|Bash" \
+patch_hook "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
     "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
     "PostToolUse hook"
 
