@@ -553,6 +553,8 @@ SELECT changes();")
         [ "${changed:-0}" -gt 0 ] && updated=$((updated + changed))
         eagle_db "UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
         eagle_db "UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
+        eagle_db "UPDATE summaries SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
+        eagle_db "UPDATE observations SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
     done <<< "$map"
 
     echo "$updated"
