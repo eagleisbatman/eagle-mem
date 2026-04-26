@@ -12,6 +12,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
+. "$LIB_DIR/hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -57,37 +58,17 @@ fi
 # ─── Re-register hooks (idempotent) ───────────────────────
 
 if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
-    patch_hook() {
-        local event="$1"
-        local matcher="$2"
-        local command="$3"
-
-        if jq -e ".hooks.${event}[]? | select(.hooks[]?.command == \"$command\")" "$SETTINGS" &>/dev/null; then
-            return
-        fi
-
-        local entry
-        if [ -n "$matcher" ]; then
-            entry="{\"matcher\": \"$matcher\", \"hooks\": [{\"type\": \"command\", \"command\": \"$command\"}]}"
-        else
-            entry="{\"hooks\": [{\"type\": \"command\", \"command\": \"$command\"}]}"
-        fi
-
-        local tmp
-        tmp=$(mktemp)
-        jq --argjson entry "$entry" ".hooks.${event} = ((.hooks.${event} // []) + [\$entry])" "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-    }
-
-    patch_hook "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
-    patch_hook "Stop" "" "$EAGLE_MEM_DIR/hooks/stop.sh"
     # Update PostToolUse matcher if it has the old value (pre-v1.3.0)
     if jq -e '.hooks.PostToolUse[]? | select(.matcher == "Read|Write|Edit|Bash")' "$SETTINGS" &>/dev/null; then
         _tmp=$(mktemp)
         jq '(.hooks.PostToolUse[] | select(.matcher == "Read|Write|Edit|Bash")).matcher = "Read|Write|Edit|Bash|TaskCreate|TaskUpdate"' "$SETTINGS" > "$_tmp" && mv "$_tmp" "$SETTINGS"
     fi
-    patch_hook "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    patch_hook "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh"
-    patch_hook "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
+
+    eagle_patch_hook "$SETTINGS" "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
+    eagle_patch_hook "$SETTINGS" "Stop" "" "$EAGLE_MEM_DIR/hooks/stop.sh"
+    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    eagle_patch_hook "$SETTINGS" "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh"
+    eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
 
     eagle_ok "Hooks registered"
 fi

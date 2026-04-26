@@ -41,31 +41,14 @@ sqlite3 "$DB" "CREATE TABLE IF NOT EXISTS _migrations (
 # Set PRAGMAs (these must be set on every connection)
 sqlite3 "$DB" "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;"
 
-# ─── Migration 001: Initial schema ─────────────────────────
+# ─── Migration 001: Initial schema (special name) ──────────
 run_migration "001_initial_schema" "$SCRIPT_DIR/schema.sql"
 
-# ─── Migration 002: Project overviews ──────────────────────
-run_migration "002_overviews" "$SCRIPT_DIR/002_overviews.sql"
-
-# ─── Migration 003: Code chunks ───────────────────────────
-run_migration "003_code_chunks" "$SCRIPT_DIR/003_code_chunks.sql"
-
-# ─── Migration 004: Observation indexes ──────────────────
-run_migration "004_observation_indexes" "$SCRIPT_DIR/004_observation_indexes.sql"
-
-# ─── Migration 005: Claude Code memory mirror ────────────
-run_migration "005_claude_memories" "$SCRIPT_DIR/005_claude_memories.sql"
-
-# ─── Migration 006: Claude Code plan mirror ──────────────
-run_migration "006_claude_plans" "$SCRIPT_DIR/006_claude_plans.sql"
-
-# ─── Migration 007: Claude Code task mirror ──────────────
-run_migration "007_claude_tasks" "$SCRIPT_DIR/007_claude_tasks.sql"
-
-# ─── Migration 008: Summary UPSERT (unique session_id) ───
-run_migration "008_summary_upsert" "$SCRIPT_DIR/008_summary_upsert.sql"
-
-# ─── Migration 009: Drop dead tasks table ────────────────
-run_migration "009_drop_dead_tasks" "$SCRIPT_DIR/009_drop_dead_tasks.sql"
+# ─── Run numbered migrations (002+) via sorted glob ───────
+for migration_file in "$SCRIPT_DIR"/[0-9][0-9][0-9]_*.sql; do
+    [ ! -f "$migration_file" ] && continue
+    migration_name=$(basename "$migration_file" .sql)
+    run_migration "$migration_name" "$migration_file"
+done
 
 echo "  Eagle Mem database ready: $DB"

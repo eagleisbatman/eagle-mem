@@ -11,6 +11,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
+. "$LIB_DIR/hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -160,47 +161,23 @@ if [ ! -f "$SETTINGS" ]; then
     echo '{}' > "$SETTINGS"
 fi
 
-patch_hook() {
-    local event="$1"
-    local matcher="$2"
-    local command="$3"
-    local description="$4"
-
-    if jq -e ".hooks.${event}[]? | select(.hooks[]?.command == \"$command\")" "$SETTINGS" &>/dev/null; then
-        eagle_ok "$description ${DIM}(already registered)${RESET}"
-        return
-    fi
-
-    local entry
-    if [ -n "$matcher" ]; then
-        entry="{\"matcher\": \"$matcher\", \"hooks\": [{\"type\": \"command\", \"command\": \"$command\"}]}"
-    else
-        entry="{\"hooks\": [{\"type\": \"command\", \"command\": \"$command\"}]}"
-    fi
-
-    local tmp
-    tmp=$(mktemp)
-    jq --argjson entry "$entry" ".hooks.${event} = ((.hooks.${event} // []) + [\$entry])" "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-    eagle_ok "$description"
-}
-
-patch_hook "SessionStart" "" \
+eagle_patch_hook "$SETTINGS" "SessionStart" "" \
     "$EAGLE_MEM_DIR/hooks/session-start.sh" \
     "SessionStart hook"
 
-patch_hook "Stop" "" \
+eagle_patch_hook "$SETTINGS" "Stop" "" \
     "$EAGLE_MEM_DIR/hooks/stop.sh" \
     "Stop hook"
 
-patch_hook "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
+eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
     "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
     "PostToolUse hook"
 
-patch_hook "SessionEnd" "" \
+eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
     "$EAGLE_MEM_DIR/hooks/session-end.sh" \
     "SessionEnd hook"
 
-patch_hook "UserPromptSubmit" "" \
+eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
     "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
     "UserPromptSubmit hook"
 
