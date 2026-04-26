@@ -32,7 +32,18 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
 # ─── Build context injection ────────────────────────────────
 
-context="=== EAGLE MEM — Active ===
+eagle_ascii="        .~~~~-.
+       /    ,__\`)
+      |      \\o/|'-.
+      |         /  ,\\
+      |        ('--./
+      /         \\
+     /  ,  ,  ,  \\
+     \`--'--'--'--'"
+
+context="$eagle_ascii
+
+=== EAGLE MEM — Active ===
 Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
 
 "
@@ -115,6 +126,54 @@ Current task (#$atid): $atitle
         context+="When done, tell the user to run /compact so Eagle Mem can save progress and load the next task.
 "
     fi
+fi
+
+# ─── Mirrored Claude memories ──────────────────────────────
+
+memories=$(eagle_list_claude_memories "$project" 5)
+if [ -n "$memories" ]; then
+    context+="
+=== EAGLE MEM — Memories ===
+Recent memories for '$project':
+"
+    while IFS='|' read -r mname mtype mdesc _fpath _updated; do
+        [ -z "$mname" ] && continue
+        context+="  - [$mtype] $mname: $mdesc
+"
+    done <<< "$memories"
+fi
+
+# ─── Mirrored Claude plans ────────────────────────────────
+
+plans=$(eagle_list_claude_plans "$project" 3)
+if [ -n "$plans" ]; then
+    context+="
+=== EAGLE MEM — Plans ===
+Recent plans for '$project':
+"
+    while IFS='|' read -r ptitle _pproj _fpath _updated; do
+        [ -z "$ptitle" ] && continue
+        context+="  - $ptitle
+"
+    done <<< "$plans"
+fi
+
+# ─── Mirrored Claude tasks (synced) ──────────────────────
+
+synced_tasks=$(eagle_db "SELECT subject, status FROM claude_tasks
+    WHERE project = '$(eagle_sql_escape "$project")'
+    AND status IN ('in_progress', 'pending', 'todo', 'open')
+    ORDER BY updated_at DESC LIMIT 5;")
+if [ -n "$synced_tasks" ]; then
+    context+="
+=== EAGLE MEM — Synced Tasks ===
+In-progress/pending tasks for '$project':
+"
+    while IFS='|' read -r tsubject tstatus; do
+        [ -z "$tsubject" ] && continue
+        context+="  - [$tstatus] $tsubject
+"
+    done <<< "$synced_tasks"
 fi
 
 # Emit the eagle-summary instruction
