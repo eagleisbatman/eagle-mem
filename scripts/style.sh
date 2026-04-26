@@ -20,6 +20,9 @@ DOT="${DIM}·${RESET}"
 
 eagle_header() {
     echo ""
+    echo -e "${CYAN}"
+    eagle_art
+    echo -e "${RESET}"
     echo -e "  ${BOLD}Eagle Mem${RESET}  ${DIM}$1${RESET}"
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""

@@ -83,9 +83,19 @@ fi
 
 [ -z "$context" ] && exit 0
 
+eagle_ascii="        .~~~~-.
+       /    ,__\`)
+      |      \\o/|'-.
+      |         /  ,\\
+      |        ('--./
+      /         \\
+     /  ,  ,  ,  \\
+     \`--'--'--'--'"
+
 context+="
 IMPORTANT: When Eagle Mem finds relevant memories or code for the user's prompt, briefly mention it at the start of your response: \"Eagle Mem recalled N relevant sessions\" or \"Eagle Mem found related code in [files]\". One line max — then proceed with the answer.
 
+$eagle_ascii
 — Eagle Mem (persistent memory across sessions)
 "
 
