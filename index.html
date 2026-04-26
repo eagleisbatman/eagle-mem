@@ -270,13 +270,13 @@
         </div>
         <div class="highlight">
           <h3>Skills</h3>
-          <span class="num">3</span>
-          <p>Search, tasks, and project overviews</p>
+          <span class="num">7</span>
+          <p>Search, tasks, overview, index, scan, memories, prune</p>
         </div>
         <div class="highlight">
           <h3>Tables</h3>
-          <span class="num">9</span>
-          <p>Sessions, summaries, observations, tasks, overviews, code chunks + Claude mirrors</p>
+          <span class="num">8</span>
+          <p>Sessions, summaries, observations, overviews, code chunks + Claude mirrors</p>
         </div>
         <div class="highlight">
           <h3>Overhead</h3>
@@ -317,14 +317,14 @@
         <div class="feature">
           <h3>// taskaware compact loop</h3>
           <p>
-            Break complex multi-step work into subtasks that survive
-            <code>/compact</code>. No more context loss on long tasks.
+            Break complex multi-step work into tasks using Claude Code&rsquo;s native
+            <code>TaskCreate</code>/<code>TaskUpdate</code> with dependency support.
           </p>
           <ul>
-            <li><strong>Plan</strong> &mdash; break work into subtasks stored in the DB</li>
-            <li><strong>Execute</strong> &mdash; work on one task at a time</li>
+            <li><strong>Plan</strong> &mdash; create tasks with <code>TaskCreate</code> + <code>addBlockedBy</code> for dependencies</li>
+            <li><strong>Execute</strong> &mdash; work on one task at a time (<code>TaskUpdate</code> to <code>in_progress</code>)</li>
             <li><strong>Compact</strong> &mdash; run <code>/compact</code> when context fills up</li>
-            <li><strong>Resume</strong> &mdash; SessionStart re-injects memory + next pending task</li>
+            <li><strong>Resume</strong> &mdash; Eagle Mem re-injects mirrored task state + memory</li>
           </ul>
         </div>
         <div class="feature">
