@@ -62,7 +62,7 @@ Last: Added auth middleware with JWT validation
 | `eagle-mem scan .` | Analyze a project and generate an overview (auto-injected at session start) |
 | `eagle-mem index .` | Index source files into FTS5-searchable chunks (incremental via mtime) |
 | `eagle-mem search <query>` | Full-text search across summaries, observations, and code chunks |
-| `eagle-mem tasks` | List, filter, and manage tasks from the TaskAware Compact Loop |
+| `eagle-mem tasks` | View mirrored Claude Code tasks (read-only — Claude Code manages task state) |
 | `eagle-mem overview` | View or regenerate project overviews |
 | `eagle-mem memories` | List, search, and sync Claude Code auto-memories, plans, and tasks |
 | `eagle-mem memories sync` | Backfill all Claude Code memories, plans, and tasks into Eagle Mem |
@@ -79,7 +79,7 @@ Claude Code sessions lose context on `/compact` and between sessions. Eagle Mem 
 - **Claude Code memory mirror** — mirrors Claude's auto-memories, plans, and tasks into Eagle Mem's SQLite + FTS5
 - **Session-start injection** — project overview, recent summaries, memories, plans, and in-progress tasks surfaced automatically
 - **Compact-safe reload** — full context re-injects after compaction with trigger awareness
-- **TaskAware Compact Loop** for breaking complex work into subtasks that survive compaction
+- **TaskAware Compact Loop** using Claude Code's native `TaskCreate`/`TaskUpdate` with dependency support
 - **FTS5 full-text search** across all sessions and projects
 - **Contextual memory injection** — relevant past sessions surfaced when you ask related questions
 - **Privacy controls** — `<private>` tags strip sensitive content before storage
@@ -155,14 +155,15 @@ The Stop hook removes `<private>` blocks at the edge — before any data reaches
 
 ### TaskAware Compact Loop
 
-For complex multi-step work:
+For complex multi-step work, using Claude Code's native task system:
 
-1. **Plan** — Break the work into subtasks stored in the DB
-2. **Execute** — Work on one task at a time
-3. **Compact** — Run `/compact` when context fills up
-4. **Resume** — SessionStart re-injects memory + the next pending task
+1. **Plan** — Break the work into tasks via `TaskCreate` with `addBlockedBy` for dependencies
+2. **Execute** — Work on one task at a time (`TaskUpdate` to `in_progress`)
+3. **Complete** — Mark done via `TaskUpdate` to `completed`
+4. **Compact** — Run `/compact` when context fills up
+5. **Resume** — SessionStart re-injects memory + mirrored task state from Eagle Mem
 
-This prevents context bloat and hallucination on long tasks.
+Claude Code drives all task state. Eagle Mem mirrors it for cross-session recall.
 
 ## Database
 
@@ -172,13 +173,12 @@ Single shared SQLite database at `~/.eagle-mem/memory.db` with a `project` colum
 
 - **sessions** — Track active/completed sessions per project
 - **observations** — Per-tool-use records with deduplication (files read/modified)
-- **summaries** — Per-session summaries with FTS5 search
-- **tasks** — Subtasks for the TaskAware Compact Loop with FTS5 search
+- **summaries** — Per-session summaries with FTS5 search (UNIQUE on session_id, merge UPSERT)
 - **overviews** — One rolling overview per project (injected at session start)
 - **code_chunks** — FTS5-indexed source file chunks for code-level search
 - **claude_memories** — Mirror of Claude Code auto-memories with FTS5 search
 - **claude_plans** — Mirror of Claude Code plan files with FTS5 search
-- **claude_tasks** — Mirror of Claude Code task JSON files with FTS5 search
+- **claude_tasks** — Mirror of Claude Code tasks with FTS5 search (statuses: pending/in_progress/completed/deleted)
 
 ### Key Design Choices
 
@@ -195,7 +195,7 @@ Single shared SQLite database at `~/.eagle-mem/memory.db` with a `project` colum
 Eagle Mem ships with seven skills for use inside Claude Code sessions:
 
 - **eagle-mem-search** — 3-layer search: compact FTS5 search, timeline view, full observations
-- **eagle-mem-tasks** — TaskAware Compact Loop: create, view, complete, and manage subtasks
+- **eagle-mem-tasks** — TaskAware Compact Loop using Claude Code's native TaskCreate/TaskUpdate with dependencies
 - **eagle-mem-overview** — Generate and update a persistent project overview
 - **eagle-mem-index** — Index source files for FTS5 code-level search
 - **eagle-mem-scan** — Scan and analyze a project to generate an overview
@@ -216,19 +216,21 @@ Package (npm)                   Runtime (~/.eagle-mem/)
 │   ├── index.sh                │   └── session-end.sh
 │   ├── search.sh               ├── lib/
 │   ├── tasks.sh                │   ├── common.sh
-│   ├── overview.sh             │   └── db.sh
-│   ├── memories.sh             └── db/
+│   ├── overview.sh             │   ├── db.sh
+│   ├── memories.sh             │   └── hooks.sh
+│   │                           └── db/
 │   ├── prune.sh                    ├── migrate.sh
 │   ├── statusline-em.sh            ├── schema.sql
 │   └── help.sh                    ├── 002_overviews.sql
 ├── hooks/          Source          ├── 003_code_chunks.sql
 ├── lib/            Source          ├── 004_observation_indexes.sql
 │   ├── common.sh                  ├── 005_claude_memories.sql
-│   └── db.sh                      ├── 006_claude_plans.sql
-├── db/             Source          └── 007_claude_tasks.sql
-│   ├── migrate.sh
+│   ├── db.sh                      ├── 006_claude_plans.sql
+│   └── hooks.sh                   ├── 007_claude_tasks.sql
+├── db/             Source          ├── 008_summary_upsert.sql
+│   ├── migrate.sh                 └── 009_drop_dead_tasks.sql
 │   ├── schema.sql
-│   └── migrations
+│   └── [0-9]*.sql  Migrations
 └── skills/         Symlinked → ~/.claude/skills/
     ├── eagle-mem-search/
     ├── eagle-mem-tasks/
