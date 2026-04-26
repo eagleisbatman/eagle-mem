@@ -46,6 +46,8 @@ eagle_fts_sanitize() {
 # Claude Code session IDs are UUIDs or hex strings — reject anything else.
 eagle_validate_session_id() {
     local sid="$1"
+    # Length cap: Claude Code IDs are UUIDs/hex (36-64 chars). Reject oversized input.
+    [ ${#sid} -gt 128 ] && return 1
     [[ "$sid" =~ ^[A-Za-z0-9_-]+$ ]]
 }
 

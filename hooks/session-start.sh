@@ -31,8 +31,10 @@ eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$sou
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
 # ─── Sweep stuck sessions (older than 4 hours) ─────────────
+# Exclude the current session — it may be a resumed session older than 4h
 eagle_db "UPDATE sessions SET status = 'abandoned'
     WHERE status = 'active'
+    AND id != '$(eagle_sql_escape "$session_id")'
     AND started_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours');"
 
 # ─── Build context injection ────────────────────────────────
@@ -115,7 +117,7 @@ fi
 synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
     WHERE project = '$(eagle_sql_escape "$project")'
     AND status IN ('in_progress', 'pending')
-    AND updated_at > datetime('now', '-7 days')
+    AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
     ORDER BY
         CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
         updated_at DESC
@@ -144,8 +146,7 @@ You have persistent memory powered by Eagle Mem. When you recall context from a 
 IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded using this exact format:
 
 \`\`\`
-█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
-██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
+$eagle_logo
 
 Project: <project name>
 Sessions: N recent | Memories: N | Tasks: N pending

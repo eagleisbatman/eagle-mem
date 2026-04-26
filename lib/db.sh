@@ -18,7 +18,7 @@ eagle_db() {
 }
 
 eagle_db_pipe() {
-    { echo "$EAGLE_DB_SETUP"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
+    { echo "$EAGLE_DB_SETUP"; echo ".bail on"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
 }
 
 eagle_db_json() {
@@ -45,7 +45,8 @@ eagle_upsert_session() {
               ON CONFLICT(id) DO UPDATE SET
                   cwd = COALESCE(excluded.cwd, sessions.cwd),
                   model = COALESCE(excluded.model, sessions.model),
-                  source = COALESCE(excluded.source, sessions.source);"
+                  source = COALESCE(excluded.source, sessions.source),
+                  status = 'active';"
 }
 
 eagle_end_session() {
@@ -78,7 +79,7 @@ eagle_insert_summary() {
     local notes; notes=$(eagle_sql_escape "${10:-}")
 
     eagle_db_pipe <<SQL
-INSERT OR REPLACE INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes)
+INSERT INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes)
 VALUES (
     '$session_id',
     '$project',
@@ -90,7 +91,17 @@ VALUES (
     '$files_read',
     '$files_modified',
     '$notes'
-);
+)
+ON CONFLICT(session_id) DO UPDATE SET
+    project        = excluded.project,
+    request        = COALESCE(NULLIF(excluded.request, ''), summaries.request),
+    investigated   = COALESCE(NULLIF(excluded.investigated, ''), summaries.investigated),
+    learned        = COALESCE(NULLIF(excluded.learned, ''), summaries.learned),
+    completed      = COALESCE(NULLIF(excluded.completed, ''), summaries.completed),
+    next_steps     = COALESCE(NULLIF(excluded.next_steps, ''), summaries.next_steps),
+    files_read     = COALESCE(NULLIF(excluded.files_read, '[]'), summaries.files_read),
+    files_modified = COALESCE(NULLIF(excluded.files_modified, '[]'), summaries.files_modified),
+    notes          = COALESCE(NULLIF(excluded.notes, ''), summaries.notes);
 SQL
 }
 
@@ -107,7 +118,8 @@ eagle_get_recent_summaries() {
 }
 
 eagle_search_summaries() {
-    local query; query=$(eagle_sql_escape "$1")
+    local query; query=$(eagle_fts_sanitize "$1")
+    query=$(eagle_sql_escape "$query")
     local project="${2:-}"
     local limit; limit=$(eagle_sql_int "${3:-10}")
 
@@ -156,7 +168,8 @@ eagle_get_overview() {
 }
 
 eagle_search_code_chunks() {
-    local query; query=$(eagle_sql_escape "$1")
+    local query; query=$(eagle_fts_sanitize "$1")
+    query=$(eagle_sql_escape "$query")
     local project; project=$(eagle_sql_escape "$2")
     local limit; limit=$(eagle_sql_int "${3:-5}")
 

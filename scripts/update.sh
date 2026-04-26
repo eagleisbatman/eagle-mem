@@ -117,5 +117,5 @@ fi
 
 # ─── Summary ───────────────────────────────────────────────
 
-version=$(node -e "console.log(require('$PACKAGE_DIR/package.json').version)" 2>/dev/null || echo "unknown")
+version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
 eagle_footer "Eagle Mem updated to v${version}."

@@ -25,7 +25,8 @@ run_migration() {
         body=$(grep -v -E '^[[:space:]]*PRAGMA ' "$file")
 
         # Set connection PRAGMAs, then run migration body + tracking insert atomically
-        { echo "PRAGMA trusted_schema=ON;"; echo "PRAGMA foreign_keys=ON;"; echo "PRAGMA busy_timeout=5000;"; echo "BEGIN;"; echo "$body"; echo "INSERT INTO _migrations (name) VALUES ('$name');"; echo "COMMIT;"; } | sqlite3 "$DB"
+        # .bail on ensures sqlite3 stops on the first error instead of continuing
+        { echo ".bail on"; echo "PRAGMA trusted_schema=ON;"; echo "PRAGMA foreign_keys=ON;"; echo "PRAGMA busy_timeout=5000;"; echo "BEGIN;"; echo "$body"; echo "INSERT INTO _migrations (name) VALUES ('$name');"; echo "COMMIT;"; } | sqlite3 "$DB"
         echo "  applied: $name"
     fi
 }
@@ -63,5 +64,8 @@ run_migration "007_claude_tasks" "$SCRIPT_DIR/007_claude_tasks.sql"
 
 # ─── Migration 008: Summary UPSERT (unique session_id) ───
 run_migration "008_summary_upsert" "$SCRIPT_DIR/008_summary_upsert.sql"
+
+# ─── Migration 009: Drop dead tasks table ────────────────
+run_migration "009_drop_dead_tasks" "$SCRIPT_DIR/009_drop_dead_tasks.sql"
 
 echo "  Eagle Mem database ready: $DB"

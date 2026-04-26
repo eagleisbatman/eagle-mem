@@ -83,7 +83,11 @@ esac
 case "$tool_name" in
     Write|Edit)
         if [ -n "$fp" ]; then
+            # Reject path traversal: bash case `*` matches `/`, so
+            # patterns like projects/*/memory/*.md would match paths
+            # containing /../ segments. Block any path with `..` first.
             case "$fp" in
+                *..*) ;; # path traversal — skip
                 "$HOME/.claude/projects"/*/memory/*.md)
                     mem_base=$(basename "$fp")
                     if [ "$mem_base" != "MEMORY.md" ] && [ -f "$fp" ]; then

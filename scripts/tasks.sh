@@ -29,6 +29,7 @@ show_help() {
     echo -e "  ${BOLD}Usage:${RESET}"
     echo -e "    eagle-mem tasks                  ${DIM}# list pending/in-progress tasks${RESET}"
     echo -e "    eagle-mem tasks ${CYAN}list${RESET}             ${DIM}# list all tasks${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}completed${RESET}        ${DIM}# list completed tasks${RESET}"
     echo -e "    eagle-mem tasks ${CYAN}search${RESET} <query>   ${DIM}# search tasks by keyword${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"

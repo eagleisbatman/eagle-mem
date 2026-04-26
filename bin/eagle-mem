@@ -29,7 +29,7 @@ case "$command" in
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)
-                version=$(node -e "console.log(require('$PACKAGE_DIR/package.json').version)" 2>/dev/null || echo "unknown")
+                version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
                 echo -e "  ${BOLD}Eagle Mem${RESET} v${version}"
                 ;;
     *)

@@ -104,7 +104,6 @@ fi
 project_sql=$(eagle_sql_escape "$PROJECT")
 NEEDS_INDEX="$TMPDIR_IDX/needs_index"
 
-indexed_count=0
 skipped_count=0
 
 while IFS= read -r file; do

@@ -14,6 +14,27 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 eagle_ensure_db
 
+# ─── Help ────────────────────────────────────────────────
+
+show_help() {
+    echo -e "  ${BOLD}eagle-mem search${RESET} — Search persistent memory"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem search ${CYAN}<query>${RESET}                   ${DIM}# keyword search${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--timeline${RESET}               ${DIM}# recent sessions${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--session <id>${RESET}            ${DIM}# session details${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--files${RESET}                  ${DIM}# frequently modified files${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--stats${RESET}                  ${DIM}# project statistics${RESET}"
+    echo ""
+    echo -e "  ${BOLD}Options:${RESET}"
+    echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
+    echo -e "    ${CYAN}-n, --limit${RESET} <N>         Max results (default: 10)"
+    echo -e "    ${CYAN}-a, --all${RESET}               Search across all projects"
+    echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
+    echo ""
+    exit 0
+}
+
 # ─── Parse arguments ──────────────────────────────────────
 
 mode="keyword"
@@ -34,24 +55,7 @@ while [ $# -gt 0 ]; do
         --limit|-n)          limit="$2"; shift 2 ;;
         --all|-a)            cross_project=true; shift ;;
         --json|-j)           json_output=true; shift ;;
-        --help|-h)
-            echo -e "  ${BOLD}eagle-mem search${RESET} — Search persistent memory"
-            echo ""
-            echo -e "  ${BOLD}Usage:${RESET}"
-            echo -e "    eagle-mem search ${CYAN}<query>${RESET}                   ${DIM}# keyword search${RESET}"
-            echo -e "    eagle-mem search ${CYAN}--timeline${RESET}               ${DIM}# recent sessions${RESET}"
-            echo -e "    eagle-mem search ${CYAN}--session <id>${RESET}            ${DIM}# session details${RESET}"
-            echo -e "    eagle-mem search ${CYAN}--files${RESET}                  ${DIM}# frequently modified files${RESET}"
-            echo -e "    eagle-mem search ${CYAN}--stats${RESET}                  ${DIM}# project statistics${RESET}"
-            echo ""
-            echo -e "  ${BOLD}Options:${RESET}"
-            echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
-            echo -e "    ${CYAN}-n, --limit${RESET} <N>         Max results (default: 10)"
-            echo -e "    ${CYAN}-a, --all${RESET}               Search across all projects"
-            echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
-            echo ""
-            exit 0
-            ;;
+        --help|-h)  show_help ;;
         -*)
             eagle_err "Unknown option: $1"
             exit 1

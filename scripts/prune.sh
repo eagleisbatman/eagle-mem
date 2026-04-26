@@ -15,6 +15,33 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 eagle_ensure_db
 
+# ─── Help ────────────────────────────────────────────────
+
+show_help() {
+    echo -e "  ${BOLD}eagle-mem prune${RESET} — Clean up old data"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem prune                     ${DIM}# prune observations > 90 days${RESET}"
+    echo -e "    eagle-mem prune ${CYAN}--days 30${RESET}           ${DIM}# prune observations > 30 days${RESET}"
+    echo -e "    eagle-mem prune ${CYAN}--dry-run${RESET}           ${DIM}# show what would be pruned${RESET}"
+    echo ""
+    echo -e "  ${BOLD}What gets pruned:${RESET}"
+    echo -e "    ${DOT} Observations older than --days (default: 90)"
+    echo -e "    ${DOT} Code chunks for files that no longer exist"
+    echo ""
+    echo -e "  ${BOLD}What is preserved:${RESET}"
+    echo -e "    ${DOT} All sessions and summaries (your session history)"
+    echo -e "    ${DOT} All tasks"
+    echo -e "    ${DOT} Project overviews"
+    echo ""
+    echo -e "  ${BOLD}Options:${RESET}"
+    echo -e "    ${CYAN}-d, --days${RESET} <N>        Age threshold (default: 90)"
+    echo -e "    ${CYAN}-p, --project${RESET} <name>  Only prune for this project"
+    echo -e "    ${CYAN}-n, --dry-run${RESET}         Show counts without deleting"
+    echo ""
+    exit 0
+}
+
 # ─── Parse arguments ──────────────────────────────────────
 
 days=90
@@ -26,30 +53,7 @@ while [ $# -gt 0 ]; do
         --days|-d)      days="$2"; shift 2 ;;
         --project|-p)   project="$2"; shift 2 ;;
         --dry-run|-n)   dry_run=true; shift ;;
-        --help|-h)
-            echo -e "  ${BOLD}eagle-mem prune${RESET} — Clean up old data"
-            echo ""
-            echo -e "  ${BOLD}Usage:${RESET}"
-            echo -e "    eagle-mem prune                     ${DIM}# prune observations > 90 days${RESET}"
-            echo -e "    eagle-mem prune ${CYAN}--days 30${RESET}           ${DIM}# prune observations > 30 days${RESET}"
-            echo -e "    eagle-mem prune ${CYAN}--dry-run${RESET}           ${DIM}# show what would be pruned${RESET}"
-            echo ""
-            echo -e "  ${BOLD}What gets pruned:${RESET}"
-            echo -e "    ${DOT} Observations older than --days (default: 90)"
-            echo -e "    ${DOT} Code chunks for files that no longer exist"
-            echo ""
-            echo -e "  ${BOLD}What is preserved:${RESET}"
-            echo -e "    ${DOT} All sessions and summaries (your session history)"
-            echo -e "    ${DOT} All tasks"
-            echo -e "    ${DOT} Project overviews"
-            echo ""
-            echo -e "  ${BOLD}Options:${RESET}"
-            echo -e "    ${CYAN}-d, --days${RESET} <N>        Age threshold (default: 90)"
-            echo -e "    ${CYAN}-p, --project${RESET} <name>  Only prune for this project"
-            echo -e "    ${CYAN}-n, --dry-run${RESET}         Show counts without deleting"
-            echo ""
-            exit 0
-            ;;
+        --help|-h)  show_help ;;
         *)
             eagle_err "Unknown option: $1"
             exit 1
@@ -109,7 +113,6 @@ if [ -n "$projects" ]; then
 
         if [ -n "$proj_cwd" ] && [ -d "$proj_cwd" ]; then
             if [ "$dry_run" = true ]; then
-                orphan_count=$(eagle_db "SELECT COUNT(DISTINCT file_path) FROM code_chunks WHERE project = '$(eagle_sql_escape "$proj")';")
                 # Count files that no longer exist
                 orphans=0
                 paths=$(eagle_db "SELECT DISTINCT file_path FROM code_chunks WHERE project = '$(eagle_sql_escape "$proj")';")

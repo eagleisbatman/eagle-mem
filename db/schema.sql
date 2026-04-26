@@ -75,28 +75,6 @@ CREATE TABLE IF NOT EXISTS summaries (
 CREATE INDEX IF NOT EXISTS idx_summaries_session ON summaries(session_id);
 CREATE INDEX IF NOT EXISTS idx_summaries_project ON summaries(project);
 
--- ─── Tasks (TaskAware Compact Loop) ───────────────────────
--- Subtasks for multi-step work with compaction between each
-
-CREATE TABLE IF NOT EXISTS tasks (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    project         TEXT NOT NULL,
-    session_id      TEXT REFERENCES sessions(id),
-    parent_id       INTEGER REFERENCES tasks(id),
-    title           TEXT NOT NULL,
-    instructions    TEXT,
-    context_snapshot TEXT,
-    status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'done', 'blocked', 'cancelled')),
-    ordinal         INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    started_at      TEXT,
-    completed_at    TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
-
 -- ─── FTS5: Full-text search on summaries ───────────────────
 
 CREATE VIRTUAL TABLE IF NOT EXISTS summaries_fts USING fts5(
@@ -126,31 +104,4 @@ CREATE TRIGGER IF NOT EXISTS summaries_au AFTER UPDATE ON summaries BEGIN
     VALUES ('delete', old.id, old.request, old.investigated, old.learned, old.completed, old.next_steps, old.notes);
     INSERT INTO summaries_fts(rowid, request, investigated, learned, completed, next_steps, notes)
     VALUES (new.id, new.request, new.investigated, new.learned, new.completed, new.next_steps, new.notes);
-END;
-
--- ─── FTS5: Full-text search on tasks ──────────────────────
-
-CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
-    title,
-    instructions,
-    context_snapshot,
-    content='tasks',
-    content_rowid='id'
-);
-
-CREATE TRIGGER IF NOT EXISTS tasks_ai AFTER INSERT ON tasks BEGIN
-    INSERT INTO tasks_fts(rowid, title, instructions, context_snapshot)
-    VALUES (new.id, new.title, new.instructions, new.context_snapshot);
-END;
-
-CREATE TRIGGER IF NOT EXISTS tasks_ad AFTER DELETE ON tasks BEGIN
-    INSERT INTO tasks_fts(tasks_fts, rowid, title, instructions, context_snapshot)
-    VALUES ('delete', old.id, old.title, old.instructions, old.context_snapshot);
-END;
-
-CREATE TRIGGER IF NOT EXISTS tasks_au AFTER UPDATE ON tasks BEGIN
-    INSERT INTO tasks_fts(tasks_fts, rowid, title, instructions, context_snapshot)
-    VALUES ('delete', old.id, old.title, old.instructions, old.context_snapshot);
-    INSERT INTO tasks_fts(rowid, title, instructions, context_snapshot)
-    VALUES (new.id, new.title, new.instructions, new.context_snapshot);
 END;
