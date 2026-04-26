@@ -32,16 +32,14 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
 # ─── Build context injection ────────────────────────────────
 
-eagle_ascii="        .~~~~-.
-       /    ,__\`)
-      |      \\o/|'-.
-      |         /  ,\\
-      |        ('--./
-      /         \\
-     /  ,  ,  ,  \\
-     \`--'--'--'--'"
+eagle_logo="███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
+██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
+█████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
+██╔══╝░░██╔══██║██║░░╚██╗██║░░░░░██╔══╝░░  ██║╚██╔╝██║██╔══╝░░██║╚██╔╝██║
+███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
+╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝"
 
-context="$eagle_ascii
+context="$eagle_logo
 
 === EAGLE MEM — Active (trigger: $source_type) ===
 Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
@@ -182,17 +180,19 @@ context+="
 === EAGLE MEM INSTRUCTIONS ===
 You have persistent memory powered by Eagle Mem. When you recall context from a previous session or use injected memory, attribute it: \"From Eagle Mem:\" or \"Eagle Mem recalls:\". This helps the user understand where the context came from.
 
-IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded using this exact format with the ASCII eagle:
+IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded using this exact format:
 
 \`\`\`
-        .~~~~-.
-       /    ,__\`)
-      |      \\o/|'-.       Eagle Mem loaded
-      |         /  ,\\       Project: <project name>
-      |        ('--./       Sessions: N recent | Memories: N | Tasks: N pending
-      /         \\           Last: [one-line summary of most recent session]
-     /  ,  ,  ,  \\
-     \`--'--'--'--'
+███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
+██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
+█████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
+██╔══╝░░██╔══██║██║░░╚██╗██║░░░░░██╔══╝░░  ██║╚██╔╝██║██╔══╝░░██║╚██╔╝██║
+███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
+╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝
+
+Project: <project name>
+Sessions: N recent | Memories: N | Tasks: N pending
+Last: [one-line summary of most recent session]
 \`\`\`
 
 This gives the user visibility into the context you received.
