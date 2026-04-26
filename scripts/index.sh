@@ -151,10 +151,12 @@ while IFS= read -r file; do
     file_sql=$(eagle_sql_escape "$file")
     lang_sql=$(eagle_sql_escape "$lang")
 
-    eagle_db "DELETE FROM code_chunks WHERE project = '$project_sql' AND file_path = '$file_sql';"
-
     total_lines=$(wc -l < "$full_path" 2>/dev/null | tr -d ' ')
     [ "$total_lines" -eq 0 ] && continue
+
+    # Build all INSERTs for this file, then run as a single atomic transaction
+    txn_sql="BEGIN;
+DELETE FROM code_chunks WHERE project = '$project_sql' AND file_path = '$file_sql';"
 
     start=1
     while [ "$start" -le "$total_lines" ]; do
@@ -164,12 +166,18 @@ while IFS= read -r file; do
         content=$(sed -n "${start},${end}p" "$full_path")
         content_sql=$(eagle_sql_escape "$content")
 
-        eagle_db "INSERT INTO code_chunks (project, file_path, language, start_line, end_line, content, mtime)
-                  VALUES ('$project_sql', '$file_sql', '$lang_sql', $start, $end, '$content_sql', $current_mtime);"
+        txn_sql+="
+INSERT INTO code_chunks (project, file_path, language, start_line, end_line, content, mtime)
+VALUES ('$project_sql', '$file_sql', '$lang_sql', $start, $end, '$content_sql', $current_mtime);"
 
         chunk_count=$((chunk_count + 1))
         start=$((end + 1))
     done
+
+    txn_sql+="
+COMMIT;"
+
+    eagle_db_pipe <<< "$txn_sql"
 
     file_count=$((file_count + 1))
 

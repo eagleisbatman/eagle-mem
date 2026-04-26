@@ -48,8 +48,8 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
         else "" end
     ' "$transcript_path" 2>/dev/null)
 
-    # Strip <private>...</private> blocks before processing
-    text_content=$(echo "$text_content" | sed '/<private>/,/<\/private>/d')
+    # Strip <private>...</private> blocks before processing (case-insensitive, tolerates attributes/whitespace)
+    text_content=$(echo "$text_content" | sed -E '/<[Pp][Rr][Ii][Vv][Aa][Tt][Ee][^>]*>/,/<\/[Pp][Rr][Ii][Vv][Aa][Tt][Ee][[:space:]]*>/d')
 
     # Parse <eagle-summary> block
     if [ -n "$text_content" ] && echo "$text_content" | grep -q '<eagle-summary>' 2>/dev/null; then
@@ -108,23 +108,30 @@ fi
 # ─── Heuristic fallback: extract from tool calls ───────────
 
 if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-    eagle_log "INFO" "Stop: no eagle-summary found, using heuristic fallback"
+    # Skip heuristic if we already have a summary for this session.
+    # Stop fires every turn -- without this guard, each turn creates a duplicate row.
+    existing_count=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE session_id = '$(eagle_sql_escape "$session_id")';")
+    if [ "${existing_count:-0}" -gt 0 ]; then
+        eagle_log "INFO" "Stop: skipping heuristic — summary already exists for session=$session_id (count=$existing_count)"
+    else
+        eagle_log "INFO" "Stop: no eagle-summary found, using heuristic fallback"
 
-    # Extract first user prompt as "request"
-    request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
+        # Extract first user prompt as "request"
+        request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
 
-    # Extract files from Read/Write/Edit tool calls
-    heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
-    heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+        # Extract files from Read/Write/Edit tool calls
+        heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+        heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
 
-    if [ -n "$heuristic_reads" ]; then
-        files_read=$(echo "$heuristic_reads" | jq -Rsc 'split("\n") | map(select(. != ""))')
+        if [ -n "$heuristic_reads" ]; then
+            files_read=$(echo "$heuristic_reads" | jq -Rsc 'split("\n") | map(select(. != ""))')
+        fi
+        if [ -n "$heuristic_writes" ]; then
+            files_modified=$(echo "$heuristic_writes" | jq -Rsc 'split("\n") | map(select(. != ""))')
+        fi
+
+        completed="(auto-captured from tool usage)"
     fi
-    if [ -n "$heuristic_writes" ]; then
-        files_modified=$(echo "$heuristic_writes" | jq -Rsc 'split("\n") | map(select(. != ""))')
-    fi
-
-    completed="(auto-captured from tool usage)"
 fi
 
 # ─── Write to database ─────────────────────────────────────
@@ -134,8 +141,8 @@ if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
     eagle_log "INFO" "Stop: summary saved for session=$session_id"
 fi
 
-# Mark active task as done if eagle-summary mentions completion
-if [ -n "$completed" ]; then
+# Mark active task as done only when Claude explicitly provided a summary
+if [ -n "$summary_block" ] && [ -n "$completed" ]; then
     completed_task_id=$(eagle_complete_active_task "$project")
     if [ -n "$completed_task_id" ]; then
         eagle_log "INFO" "Stop: marked task #$completed_task_id as done"

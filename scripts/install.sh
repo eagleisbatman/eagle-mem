@@ -135,15 +135,17 @@ echo ""
 echo -e "  ${BOLD}Installing Eagle Mem...${RESET}"
 echo ""
 
-mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db}
+mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts}
 
 cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
 cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
 cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
+cp "$PACKAGE_DIR"/scripts/statusline-em.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
 
 chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
 chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh
+chmod +x "$EAGLE_MEM_DIR"/scripts/*.sh 2>/dev/null
 
 eagle_ok "Files copied to $EAGLE_MEM_DIR"
 
@@ -214,6 +216,53 @@ if [ -d "$PACKAGE_DIR/skills" ]; then
         ln -sf "$skill_dir" "$dst"
         eagle_ok "Skill: $skill_name"
     done
+fi
+
+# ─── Statusline integration ───────────────────────────────
+
+EM_STATUSLINE="$EAGLE_MEM_DIR/scripts/statusline-em.sh"
+existing_sl=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+
+if [ -z "$existing_sl" ]; then
+    # No statusline configured — set up a minimal one that shows Eagle Mem
+    wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
+    cat > "$wrapper" << 'WRAPPER'
+#!/usr/bin/env bash
+input=$(cat)
+project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
+source "$HOME/.eagle-mem/scripts/statusline-em.sh"
+eagle_mem_statusline "$project_dir"
+WRAPPER
+    chmod +x "$wrapper"
+    tmp=$(mktemp)
+    jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
+elif echo "$existing_sl" | grep -q "eagle-mem"; then
+    eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+else
+    # Existing statusline — check if it's a .sh file we can patch
+    sl_file=$(echo "$existing_sl" | sed 's/^sh //')
+    if [ -f "$sl_file" ] && ! grep -q "eagle-mem" "$sl_file"; then
+        eagle_dim "  Statusline detected: $sl_file"
+        eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
+        echo ""
+        eagle_dim "    # ── EAGLE MEM ──"
+        eagle_dim "    em_section=\"\""
+        eagle_dim "    em_db=\"\$HOME/.eagle-mem/memory.db\""
+        eagle_dim "    if [ -f \"\$em_db\" ]; then"
+        eagle_dim "      em_proj=\$(basename \"\$project_dir\" | sed \"s/'/''/g\")"
+        eagle_dim "      em_cnt=\$(echo \".headers off"
+        eagle_dim "    SELECT COUNT(*) FROM sessions WHERE project = '\${em_proj}';\" | sqlite3 \"\$em_db\" 2>/dev/null | tr -d '[:space:]')"
+        eagle_dim "      em_mem=\$(echo \".headers off"
+        eagle_dim "    SELECT COUNT(*) FROM claude_memories WHERE project = '\${em_proj}';\" | sqlite3 \"\$em_db\" 2>/dev/null | tr -d '[:space:]')"
+        eagle_dim "      em_cnt=\${em_cnt:-0}; em_mem=\${em_mem:-0}"
+        eagle_dim "      em_section=\$(printf \"%bEagle Mem%b %b%s%b ses %b%s%b mem\" \"\$CYAN\" \"\$R\" \"\$WHT\" \"\$em_cnt\" \"\$DIM\" \"\$WHT\" \"\$em_mem\" \"\$R\")"
+        eagle_dim "    fi"
+        echo ""
+        eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+    else
+        eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+    fi
 fi
 
 # ─── Summary ───────────────────────────────────────────────

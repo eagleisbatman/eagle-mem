@@ -19,8 +19,13 @@ run_migration() {
     already_applied=$(sqlite3 "$DB" "SELECT COUNT(*) FROM _migrations WHERE name = '$name';" 2>/dev/null || echo "0")
 
     if [ "$already_applied" = "0" ]; then
-        sqlite3 "$DB" < "$file"
-        sqlite3 "$DB" "INSERT INTO _migrations (name) VALUES ('$name');"
+        # Strip PRAGMAs from migration body (they can't run inside transactions
+        # and are already set on every connection via lib/db.sh EAGLE_DB_SETUP)
+        local body
+        body=$(grep -v -E '^[[:space:]]*PRAGMA ' "$file")
+
+        # Set connection PRAGMAs, then run migration body + tracking insert atomically
+        { echo "PRAGMA trusted_schema=ON;"; echo "PRAGMA foreign_keys=ON;"; echo "PRAGMA busy_timeout=5000;"; echo "BEGIN;"; echo "$body"; echo "INSERT INTO _migrations (name) VALUES ('$name');"; echo "COMMIT;"; } | sqlite3 "$DB"
         echo "  applied: $name"
     fi
 }
@@ -55,5 +60,8 @@ run_migration "006_claude_plans" "$SCRIPT_DIR/006_claude_plans.sql"
 
 # ─── Migration 007: Claude Code task mirror ──────────────
 run_migration "007_claude_tasks" "$SCRIPT_DIR/007_claude_tasks.sql"
+
+# ─── Migration 008: Summary UPSERT (unique session_id) ───
+run_migration "008_summary_upsert" "$SCRIPT_DIR/008_summary_upsert.sql"
 
 echo "  Eagle Mem database ready: $DB"

@@ -42,6 +42,13 @@ eagle_fts_sanitize() {
     printf '%s' "$1" | sed 's/[*"(){}^~:]/  /g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
+# Validate a session ID is safe for use in file paths (no traversal).
+# Claude Code session IDs are UUIDs or hex strings — reject anything else.
+eagle_validate_session_id() {
+    local sid="$1"
+    [[ "$sid" =~ ^[A-Za-z0-9_-]+$ ]]
+}
+
 eagle_read_stdin() {
     local input=""
     if [ ! -t 0 ]; then

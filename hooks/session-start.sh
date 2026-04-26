@@ -30,14 +30,15 @@ eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$sou
 
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
+# ─── Sweep stuck sessions (older than 4 hours) ─────────────
+eagle_db "UPDATE sessions SET status = 'abandoned'
+    WHERE status = 'active'
+    AND started_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours');"
+
 # ─── Build context injection ────────────────────────────────
 
-eagle_logo="███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
-██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
-█████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
-██╔══╝░░██╔══██║██║░░╚██╗██║░░░░░██╔══╝░░  ██║╚██╔╝██║██╔══╝░░██║╚██╔╝██║
-███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
-╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝"
+eagle_logo="█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
+██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █"
 
 context="$eagle_logo
 
@@ -107,8 +108,12 @@ Pending tasks for '$project':
     active_task=$(eagle_get_active_task "$project")
 
     if [ -z "$active_task" ] && [ -n "$first_pending" ]; then
-        # Auto-activate the next pending task
-        eagle_activate_task "$first_pending"
+        # Auto-activate the next pending task (atomic to prevent races
+        # when multiple sessions start simultaneously)
+        eagle_db "UPDATE tasks SET status = 'active', started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                  WHERE id = $first_pending
+                  AND status = 'pending'
+                  AND NOT EXISTS (SELECT 1 FROM tasks WHERE project = '$(eagle_sql_escape "$project")' AND status = 'active');"
         active_task=$(eagle_get_active_task "$project")
     fi
 
@@ -183,12 +188,8 @@ You have persistent memory powered by Eagle Mem. When you recall context from a 
 IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded using this exact format:
 
 \`\`\`
-███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
-██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
-█████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
-██╔══╝░░██╔══██║██║░░╚██╗██║░░░░░██╔══╝░░  ██║╚██╔╝██║██╔══╝░░██║╚██╔╝██║
-███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
-╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝
+█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
+██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
 
 Project: <project name>
 Sessions: N recent | Memories: N | Tasks: N pending

@@ -24,28 +24,31 @@ json_output=false
 
 # Extract global options from remaining args
 args=()
+
+show_help() {
+    echo -e "  ${BOLD}eagle-mem tasks${RESET} — Manage tracked tasks"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem tasks                           ${DIM}# list pending tasks${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}list${RESET}                      ${DIM}# list all tasks${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}add${RESET} <title> [instructions] ${DIM}# add a task${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}done${RESET} <id>                 ${DIM}# mark task complete${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}block${RESET} <id>                ${DIM}# mark task blocked${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}context${RESET} <id> <snapshot>    ${DIM}# set task context${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}clear${RESET}                     ${DIM}# remove all done tasks${RESET}"
+    echo ""
+    echo -e "  ${BOLD}Options:${RESET}"
+    echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
+    echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
+    echo ""
+    exit 0
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --project|-p)   project="$2"; shift 2 ;;
         --json|-j)      json_output=true; shift ;;
-        --help|-h)
-            echo -e "  ${BOLD}eagle-mem tasks${RESET} — Manage tracked tasks"
-            echo ""
-            echo -e "  ${BOLD}Usage:${RESET}"
-            echo -e "    eagle-mem tasks                           ${DIM}# list pending tasks${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}list${RESET}                      ${DIM}# list all tasks${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}add${RESET} <title> [instructions] ${DIM}# add a task${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}done${RESET} <id>                 ${DIM}# mark task complete${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}block${RESET} <id>                ${DIM}# mark task blocked${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}context${RESET} <id> <snapshot>    ${DIM}# set task context${RESET}"
-            echo -e "    eagle-mem tasks ${CYAN}clear${RESET}                     ${DIM}# remove all done tasks${RESET}"
-            echo ""
-            echo -e "  ${BOLD}Options:${RESET}"
-            echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
-            echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
-            echo ""
-            exit 0
-            ;;
+        --help|-h)      show_help ;;
         *)  args+=("$1"); shift ;;
     esac
 done
@@ -265,24 +268,7 @@ case "$action" in
     block)      tasks_block ;;
     context)    tasks_context ;;
     clear)      tasks_clear ;;
-    --help|-h)
-        echo -e "  ${BOLD}eagle-mem tasks${RESET} — Manage tracked tasks"
-        echo ""
-        echo -e "  ${BOLD}Usage:${RESET}"
-        echo -e "    eagle-mem tasks                           ${DIM}# list pending tasks${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}list${RESET}                      ${DIM}# list all tasks${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}add${RESET} <title> [instructions] ${DIM}# add a task${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}done${RESET} <id>                 ${DIM}# mark task complete${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}block${RESET} <id>                ${DIM}# mark task blocked${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}context${RESET} <id> <snapshot>    ${DIM}# set task context${RESET}"
-        echo -e "    eagle-mem tasks ${CYAN}clear${RESET}                     ${DIM}# remove all done tasks${RESET}"
-        echo ""
-        echo -e "  ${BOLD}Options:${RESET}"
-        echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
-        echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
-        echo ""
-        exit 0
-        ;;
+    --help|-h) show_help ;;
     *)
         eagle_err "Unknown action: $action"
         eagle_dim "  Run 'eagle-mem tasks --help' for options"

@@ -23,27 +23,29 @@ project=""
 json_output=false
 args=()
 
+show_help() {
+    echo -e "  ${BOLD}eagle-mem overview${RESET} — Manage project overviews"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem overview                    ${DIM}# show current overview${RESET}"
+    echo -e "    eagle-mem overview ${CYAN}set${RESET} <text>         ${DIM}# set/update overview${RESET}"
+    echo -e "    eagle-mem overview ${CYAN}delete${RESET}             ${DIM}# delete overview${RESET}"
+    echo -e "    eagle-mem overview ${CYAN}list${RESET}               ${DIM}# list all overviews${RESET}"
+    echo ""
+    echo -e "  ${BOLD}Options:${RESET}"
+    echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
+    echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
+    echo ""
+    echo -e "  ${BOLD}Tip:${RESET} Use ${CYAN}eagle-mem scan${RESET} to auto-generate an overview from code."
+    echo ""
+    exit 0
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --project|-p)   project="$2"; shift 2 ;;
         --json|-j)      json_output=true; shift ;;
-        --help|-h)
-            echo -e "  ${BOLD}eagle-mem overview${RESET} — Manage project overviews"
-            echo ""
-            echo -e "  ${BOLD}Usage:${RESET}"
-            echo -e "    eagle-mem overview                    ${DIM}# show current overview${RESET}"
-            echo -e "    eagle-mem overview ${CYAN}set${RESET} <text>         ${DIM}# set/update overview${RESET}"
-            echo -e "    eagle-mem overview ${CYAN}delete${RESET}             ${DIM}# delete overview${RESET}"
-            echo -e "    eagle-mem overview ${CYAN}list${RESET}               ${DIM}# list all overviews${RESET}"
-            echo ""
-            echo -e "  ${BOLD}Options:${RESET}"
-            echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
-            echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
-            echo ""
-            echo -e "  ${BOLD}Tip:${RESET} Use ${CYAN}eagle-mem scan${RESET} to auto-generate an overview from code."
-            echo ""
-            exit 0
-            ;;
+        --help|-h)      show_help ;;
         *)  args+=("$1"); shift ;;
     esac
 done
@@ -145,23 +147,7 @@ case "$action" in
     set|update)  overview_set ;;
     delete|rm)   overview_delete ;;
     list|ls)     overview_list ;;
-    --help|-h)
-        echo -e "  ${BOLD}eagle-mem overview${RESET} — Manage project overviews"
-        echo ""
-        echo -e "  ${BOLD}Usage:${RESET}"
-        echo -e "    eagle-mem overview                    ${DIM}# show current overview${RESET}"
-        echo -e "    eagle-mem overview ${CYAN}set${RESET} <text>         ${DIM}# set/update overview${RESET}"
-        echo -e "    eagle-mem overview ${CYAN}delete${RESET}             ${DIM}# delete overview${RESET}"
-        echo -e "    eagle-mem overview ${CYAN}list${RESET}               ${DIM}# list all overviews${RESET}"
-        echo ""
-        echo -e "  ${BOLD}Options:${RESET}"
-        echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
-        echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
-        echo ""
-        echo -e "  ${BOLD}Tip:${RESET} Use ${CYAN}eagle-mem scan${RESET} to auto-generate an overview from code."
-        echo ""
-        exit 0
-        ;;
+    --help|-h) show_help ;;
     *)
         eagle_err "Unknown action: $action"
         eagle_dim "  Run 'eagle-mem overview --help' for options"

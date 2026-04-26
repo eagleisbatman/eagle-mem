@@ -1,19 +1,6 @@
 ```
-        .~~~~-.
-       /    ,__`)
-      |      \o/|'-.
-      |         /  ,\
-      |        ('--./
-      /         \
-     /  ,  ,  ,  \
-     `--'--'--'--'
-
-███████╗░█████╗░░██████╗░██╗░░░░░███████╗  ███╗░░░███╗███████╗███╗░░░███╗
-██╔════╝██╔══██╗██╔════╝░██║░░░░░██╔════╝  ████╗░████║██╔════╝████╗░████║
-█████╗░░███████║██║░░██╗░██║░░░░░█████╗░░  ██╔████╔██║█████╗░░██╔████╔██║
-██╔══╝░░██╔══██║██║░░╚██╗██║░░░░░██╔══╝░░  ██║╚██╔╝██║██╔══╝░░██║╚██╔╝██║
-███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
-╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝
+█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
+██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
 ```
 
 # Eagle Mem
@@ -32,14 +19,8 @@ eagle-mem install
 The installer checks prerequisites and offers to install missing ones:
 
 ```
-        .~~~~-.
-       /    ,__`)
-      |      \o/|'-.
-      |         /  ,\
-      |        ('--./
-      /         \
-     /  ,  ,  ,  \
-     `--'--'--'--'
+  █▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
+  ██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
 
   Eagle Mem  Install
   ─────────────────────────────────────
@@ -64,14 +45,12 @@ The installer checks prerequisites and offers to install missing ones:
 Start a new Claude Code session — Eagle Mem activates automatically and shows:
 
 ```
-        .~~~~-.
-       /    ,__`)
-      |      \o/|'-.       Eagle Mem loaded
-      |         /  ,\       Project: my-app
-      |        ('--./       Sessions: 5 recent | Memories: 3 | Tasks: 2 pending
-      /         \           Last: Added auth middleware with JWT validation
-     /  ,  ,  ,  \
-     `--'--'--'--'
+█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
+██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
+
+Project: my-app
+Sessions: 5 recent | Memories: 3 | Tasks: 2 pending
+Last: Added auth middleware with JWT validation
 ```
 
 ## Commands
@@ -213,11 +192,15 @@ Single shared SQLite database at `~/.eagle-mem/memory.db` with a `project` colum
 
 ## Skills
 
-Eagle Mem ships with three skills for use inside Claude Code sessions:
+Eagle Mem ships with seven skills for use inside Claude Code sessions:
 
 - **eagle-mem-search** — 3-layer search: compact FTS5 search, timeline view, full observations
 - **eagle-mem-tasks** — TaskAware Compact Loop: create, view, complete, and manage subtasks
 - **eagle-mem-overview** — Generate and update a persistent project overview
+- **eagle-mem-index** — Index source files for FTS5 code-level search
+- **eagle-mem-scan** — Scan and analyze a project to generate an overview
+- **eagle-mem-memories** — Browse and search Claude Code memories, plans, and tasks
+- **eagle-mem-prune** — Clean up old observations and orphaned chunks
 
 ## Architecture
 
@@ -236,19 +219,24 @@ Package (npm)                   Runtime (~/.eagle-mem/)
 │   ├── overview.sh             │   └── db.sh
 │   ├── memories.sh             └── db/
 │   ├── prune.sh                    ├── migrate.sh
-│   └── help.sh                    ├── schema.sql
-├── hooks/          Source          ├── 002_overviews.sql
-├── lib/            Source          ├── 003_code_chunks.sql
-│   ├── common.sh                  ├── 004_observation_indexes.sql
-│   └── db.sh                      ├── 005_claude_memories.sql
-├── db/             Source          ├── 006_claude_plans.sql
-│   ├── migrate.sh                 └── 007_claude_tasks.sql
+│   ├── statusline-em.sh            ├── schema.sql
+│   └── help.sh                    ├── 002_overviews.sql
+├── hooks/          Source          ├── 003_code_chunks.sql
+├── lib/            Source          ├── 004_observation_indexes.sql
+│   ├── common.sh                  ├── 005_claude_memories.sql
+│   └── db.sh                      ├── 006_claude_plans.sql
+├── db/             Source          └── 007_claude_tasks.sql
+│   ├── migrate.sh
 │   ├── schema.sql
 │   └── migrations
 └── skills/         Symlinked → ~/.claude/skills/
     ├── eagle-mem-search/
     ├── eagle-mem-tasks/
-    └── eagle-mem-overview/
+    ├── eagle-mem-overview/
+    ├── eagle-mem-index/
+    ├── eagle-mem-scan/
+    ├── eagle-mem-memories/
+    └── eagle-mem-prune/
 ```
 
 ## Uninstall

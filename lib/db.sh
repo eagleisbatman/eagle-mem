@@ -14,15 +14,15 @@ PRAGMA trusted_schema=ON;
 .output stdout"
 
 eagle_db() {
-    { echo "$EAGLE_DB_SETUP"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>/dev/null
+    { echo "$EAGLE_DB_SETUP"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
 }
 
 eagle_db_pipe() {
-    { echo "$EAGLE_DB_SETUP"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>/dev/null
+    { echo "$EAGLE_DB_SETUP"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
 }
 
 eagle_db_json() {
-    { echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>/dev/null
+    { echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
 }
 
 eagle_ensure_db() {
@@ -78,7 +78,7 @@ eagle_insert_summary() {
     local notes; notes=$(eagle_sql_escape "${10:-}")
 
     eagle_db_pipe <<SQL
-INSERT INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes)
+INSERT OR REPLACE INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes)
 VALUES (
     '$session_id',
     '$project',
@@ -143,19 +143,6 @@ eagle_get_next_task() {
               WHERE project = '$project' AND status = 'pending'
               ORDER BY ordinal ASC, id ASC
               LIMIT 1;"
-}
-
-eagle_get_active_files() {
-    local project; project=$(eagle_sql_escape "$1")
-    local limit; limit=$(eagle_sql_int "${2:-20}")
-
-    eagle_db "SELECT json_each.value
-              FROM observations, json_each(observations.files_modified)
-              WHERE observations.project = '$project'
-              AND observations.created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days')
-              GROUP BY json_each.value
-              ORDER BY MAX(observations.created_at) DESC
-              LIMIT $limit;"
 }
 
 eagle_observation_exists() {
@@ -327,13 +314,6 @@ eagle_list_claude_memories() {
               $where_clause
               ORDER BY updated_at DESC
               LIMIT $limit;"
-}
-
-eagle_get_claude_memory() {
-    local file_path; file_path=$(eagle_sql_escape "$1")
-    eagle_db "SELECT memory_name, memory_type, description, content, file_path, updated_at, origin_session_id
-              FROM claude_memories
-              WHERE file_path = '$file_path';"
 }
 
 eagle_capture_claude_plan() {
@@ -546,16 +526,25 @@ eagle_backfill_projects() {
         sid_sql=$(eagle_sql_escape "$sid")
         proj_sql=$(eagle_sql_escape "$project")
 
-        local changed
-        changed=$(eagle_db "UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+        local ch
+        ch=$(eagle_db "UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
 SELECT changes();")
-        changed=$(eagle_db "UPDATE claude_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        ch=$(eagle_db "UPDATE claude_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
 SELECT changes();")
-        [ "${changed:-0}" -gt 0 ] && updated=$((updated + changed))
-        eagle_db "UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
-        eagle_db "UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
-        eagle_db "UPDATE summaries SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
-        eagle_db "UPDATE observations SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        ch=$(eagle_db "UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        ch=$(eagle_db "UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        ch=$(eagle_db "UPDATE summaries SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        ch=$(eagle_db "UPDATE observations SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
     done <<< "$map"
 
     echo "$updated"

@@ -36,15 +36,10 @@ fi
 # ─── Remove skill symlinks ────────────────────────────────
 
 if [ -d "$EAGLE_SKILLS_DIR" ]; then
-    for skill in eagle-mem-search eagle-mem-tasks eagle-mem-overview; do
-        target="$EAGLE_SKILLS_DIR/$skill"
-        if [ -L "$target" ]; then
-            rm "$target"
-            eagle_ok "Skill removed: $skill"
-        elif [ -d "$target" ]; then
-            rm -rf "$target"
-            eagle_ok "Skill removed: $skill"
-        fi
+    for target in "$EAGLE_SKILLS_DIR"/eagle-mem-*; do
+        [ -L "$target" ] || [ -d "$target" ] || continue
+        rm -rf "$target"
+        eagle_ok "Skill removed: $(basename "$target")"
     done
 fi
 

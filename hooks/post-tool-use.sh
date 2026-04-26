@@ -60,7 +60,16 @@ case "$tool_name" in
             -e 's/(password[= :])[^ ]*/\1[REDACTED]/gi' \
             -e 's/(secret[= :])[^ ]*/\1[REDACTED]/gi' \
             -e 's/(token[= :])[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(Authorization: )[^ ]*/\1[REDACTED]/gi')
+            -e 's/(Authorization: )[^ ]*/\1[REDACTED]/gi' \
+            -e 's/sk_live_[A-Za-z0-9]+/[REDACTED]/g' \
+            -e 's/sk_test_[A-Za-z0-9]+/[REDACTED]/g' \
+            -e 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' \
+            -e 's/ghp_[A-Za-z0-9]{36}/[REDACTED]/g' \
+            -e 's/gho_[A-Za-z0-9]{36}/[REDACTED]/g' \
+            -e 's/sk-ant-[A-Za-z0-9_-]+/[REDACTED]/g' \
+            -e 's/sk-[A-Za-z0-9]{20,}/[REDACTED]/g' \
+            -e 's/(ANTHROPIC_API_KEY[= :])[^ ]*/\1[REDACTED]/g' \
+            -e 's/(OPENAI_API_KEY[= :])[^ ]*/\1[REDACTED]/g')
         tool_summary="Bash: $cmd"
         ;;
     TaskCreate|TaskUpdate)
@@ -95,15 +104,17 @@ esac
 # Intercept TaskCreate/TaskUpdate and capture the resulting JSON files
 case "$tool_name" in
     TaskCreate|TaskUpdate)
-        task_dir="$HOME/.claude/tasks/$session_id"
-        if [ -d "$task_dir" ]; then
-            task_id=$(echo "$input" | jq -r '.tool_input.id // empty')
-            if [ -z "$task_id" ]; then
-                newest=$(ls -t "$task_dir"/*.json 2>/dev/null | head -1)
-                [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_claude_task "$newest" "$session_id" "$project"
-            else
-                task_json="$task_dir/$task_id.json"
-                [ -f "$task_json" ] && eagle_capture_claude_task "$task_json" "$session_id" "$project"
+        if eagle_validate_session_id "$session_id"; then
+            task_dir="$HOME/.claude/tasks/$session_id"
+            if [ -d "$task_dir" ]; then
+                task_id=$(echo "$input" | jq -r '.tool_input.id // empty')
+                if [ -z "$task_id" ]; then
+                    newest=$(ls -t "$task_dir"/*.json 2>/dev/null | head -1)
+                    [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_claude_task "$newest" "$session_id" "$project"
+                elif eagle_validate_session_id "$task_id"; then
+                    task_json="$task_dir/$task_id.json"
+                    [ -f "$task_json" ] && eagle_capture_claude_task "$task_json" "$session_id" "$project"
+                fi
             fi
         fi
         ;;
