@@ -18,7 +18,13 @@ eagle_log() {
 
 eagle_project_from_cwd() {
     local cwd="${1:-$(pwd)}"
-    basename "$cwd"
+    local git_root
+    git_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$git_root" ]; then
+        basename "$git_root"
+    else
+        basename "$cwd"
+    fi
 }
 
 eagle_sql_escape() {

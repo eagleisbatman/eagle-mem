@@ -448,10 +448,6 @@ memories_sync() {
             base=$(basename "$memfile")
             [ "$base" = "MEMORY.md" ] && continue
 
-            local proj_slug proj_name
-            proj_slug=$(echo "$memfile" | sed "s|$claude_mem_root/||" | cut -d'/' -f1)
-            proj_name=$(echo "$proj_slug" | rev | cut -d'-' -f1 | rev)
-
             local existing_hash
             existing_hash=$(eagle_db "SELECT content_hash FROM claude_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
             local new_hash
@@ -462,9 +458,9 @@ memories_sync() {
                 continue
             fi
 
-            eagle_capture_claude_memory "$memfile" "" "$proj_name"
+            eagle_capture_claude_memory "$memfile" "" ""
             mem_synced=$((mem_synced + 1))
-            eagle_ok "Memory: $base → $proj_name"
+            eagle_ok "Memory: $base"
         done < <(find "$claude_mem_root" -path "*/memory/*.md" -print0 2>/dev/null)
     fi
 
@@ -541,6 +537,19 @@ memories_sync() {
     fi
 
     eagle_kv "Tasks:" "$task_synced synced, $task_skipped unchanged"
+    echo ""
+
+    # ─── Backfill project names ──────────────────────────
+    eagle_info "Resolving project names from Claude Code transcripts..."
+
+    local backfilled
+    backfilled=$(eagle_backfill_projects)
+    if [ "${backfilled:-0}" -gt 0 ]; then
+        eagle_ok "$backfilled rows updated with correct project names"
+    else
+        eagle_ok "All project names up to date"
+    fi
+
     eagle_footer "Sync complete."
 }
 

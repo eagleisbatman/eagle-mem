@@ -505,6 +505,59 @@ eagle_search_claude_tasks() {
               LIMIT $limit;"
 }
 
+eagle_build_session_project_map() {
+    local claude_projects_dir="$HOME/.claude/projects"
+    [ ! -d "$claude_projects_dir" ] && return 0
+
+    for proj_dir in "$claude_projects_dir"/*/; do
+        [ ! -d "$proj_dir" ] && continue
+
+        local project=""
+        local sample_jsonl
+        sample_jsonl=$(ls "$proj_dir"*.jsonl 2>/dev/null | head -1)
+        if [ -n "$sample_jsonl" ] && [ -f "$sample_jsonl" ]; then
+            local cwd
+            cwd=$(head -10 "$sample_jsonl" | jq -r 'select(.cwd != null) | .cwd' 2>/dev/null | head -1)
+            if [ -n "$cwd" ]; then
+                project=$(eagle_project_from_cwd "$cwd")
+            fi
+        fi
+        [ -z "$project" ] && continue
+
+        for jsonl in "$proj_dir"*.jsonl; do
+            [ ! -f "$jsonl" ] && continue
+            local sid
+            sid=$(basename "$jsonl" .jsonl)
+            echo "$sid|$project"
+        done
+    done
+}
+
+eagle_backfill_projects() {
+    local updated=0
+    local map
+    map=$(eagle_build_session_project_map)
+    [ -z "$map" ] && echo "0" && return 0
+
+    while IFS='|' read -r sid project; do
+        [ -z "$sid" ] || [ -z "$project" ] && continue
+        local sid_sql proj_sql
+        sid_sql=$(eagle_sql_escape "$sid")
+        proj_sql=$(eagle_sql_escape "$project")
+
+        local changed
+        changed=$(eagle_db "UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        changed=$(eagle_db "UPDATE claude_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT changes();")
+        [ "${changed:-0}" -gt 0 ] && updated=$((updated + changed))
+        eagle_db "UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
+        eagle_db "UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');"
+    done <<< "$map"
+
+    echo "$updated"
+}
+
 eagle_prune_orphan_chunks() {
     local project; project=$(eagle_sql_escape "$1")
     local target_dir="$2"

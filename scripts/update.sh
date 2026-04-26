@@ -11,6 +11,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
+. "$LIB_DIR/db.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -103,6 +104,15 @@ if [ -d "$PACKAGE_DIR/skills" ]; then
         ln -sf "$skill_dir" "$dst"
     done
     eagle_ok "Skills updated"
+fi
+
+# ─── Backfill project names ───────────────────────────────
+
+backfilled=$(eagle_backfill_projects 2>/dev/null)
+if [ "${backfilled:-0}" -gt 0 ]; then
+    eagle_ok "Project names: $backfilled rows corrected"
+else
+    eagle_ok "Project names up to date"
 fi
 
 # ─── Summary ───────────────────────────────────────────────
