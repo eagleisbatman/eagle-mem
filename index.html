@@ -6,7 +6,7 @@
     <title>Eagle Mem</title>
     <meta
       name="description"
-      content="Lightweight persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat."
+      content="Persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat."
     />
     <style>
       :root {
@@ -249,7 +249,7 @@
 ███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
 ╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝</pre>
         <p class="tagline">
-          Lightweight persistent memory for
+          Persistent memory for
           <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>.
           SQLite + FTS5. No daemon, no vector DB, no bloat.
         </p>
@@ -270,8 +270,8 @@
         </div>
         <div class="highlight">
           <h3>Skills</h3>
-          <span class="num">7</span>
-          <p>Search, tasks, overview, index, scan, memories, prune</p>
+          <span class="num">4</span>
+          <p>Search, overview, tasks, prune</p>
         </div>
         <div class="highlight">
           <h3>Tables</h3>
@@ -302,16 +302,16 @@
           </ul>
         </div>
         <div class="feature">
-          <h3>// codebase awareness</h3>
+          <h3>// project overview</h3>
           <p>
-            Two commands give Eagle Mem instant knowledge of your project &mdash;
-            no manual descriptions needed.
+            Model-driven overviews &mdash; Claude reads your README, entry points, and
+            recent git history to understand what the project <em>does</em>, not just its file counts.
           </p>
           <ul>
-            <li><strong><code>eagle-mem scan</code></strong> &mdash; detects languages, frameworks, structure, entry points, dependencies</li>
-            <li><strong><code>eagle-mem index</code></strong> &mdash; chunks source files into FTS5-searchable blocks</li>
-            <li><strong>Incremental</strong> &mdash; re-indexes only files that changed (mtime-based)</li>
-            <li><strong>Auto-injected</strong> &mdash; scan results surface at every session start</li>
+            <li><strong>Auto-trigger</strong> &mdash; if no overview exists, SessionStart prompts Claude to build one</li>
+            <li><strong>Synthesized</strong> &mdash; purpose, current state, and key tech in 2-3 sentences</li>
+            <li><strong>Injected</strong> &mdash; overview surfaces at every session start</li>
+            <li><strong>Fallback</strong> &mdash; structural scan for empty repos with no README</li>
           </ul>
         </div>
         <div class="feature">
