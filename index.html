@@ -341,30 +341,29 @@
 
       <!-- ─── Getting Started ────────────────────── -->
 
-      <div class="getting-started">
+      <div class="getting-started" style="grid-template-columns: 1fr;">
         <div class="path">
-          <h2>New project</h2>
-          <p class="subtitle">Starting fresh with Claude Code</p>
+          <h2>Getting started</h2>
+          <p class="subtitle">Three steps. Works for any project, new or existing.</p>
           <ol>
-            <li>Install Eagle Mem (once, globally)</li>
-            <li>Open Claude Code in your project</li>
-            <li>Eagle Mem activates automatically</li>
-            <li>On your first message, Claude builds a project overview</li>
+            <li>
+              <strong>Install</strong> (once &mdash; this is the only setup step)<br>
+              <code>npm install -g eagle-mem && eagle-mem install</code>
+            </li>
+            <li>
+              <strong>Open Claude Code</strong> in any project directory<br>
+              Eagle Mem activates automatically. On your first message, Claude builds a project overview.
+            </li>
+            <li>
+              <strong>That&rsquo;s it.</strong> Everything else is automatic.<br>
+              Summaries are captured, memories are mirrored, context survives <code>/compact</code>.
+            </li>
           </ol>
           <div class="note">
-            From here, everything is automatic. Summaries are captured, memories are mirrored, context is re-injected after every <code>/compact</code>. You don&rsquo;t run anything.
-          </div>
-        </div>
-        <div class="path">
-          <h2>Existing project</h2>
-          <p class="subtitle">Already been using Claude Code on this project</p>
-          <ol>
-            <li>Install Eagle Mem (once, globally)</li>
-            <li>Run <code>eagle-mem refresh .</code> to backfill</li>
-            <li>Open Claude Code &mdash; full history is injected</li>
-          </ol>
-          <div class="note">
-            <code>refresh</code> scans your codebase structure, indexes source files for code search, and imports all existing Claude Code memories, plans, and tasks into Eagle Mem&rsquo;s database.
+            <strong>Have existing Claude Code history?</strong> Run
+            <code>eagle-mem refresh</code> inside your project directory to
+            backfill &mdash; it scans your codebase, indexes source files, and
+            imports all existing memories, plans, and tasks.
           </div>
         </div>
       </div>
