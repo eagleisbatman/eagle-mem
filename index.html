@@ -20,6 +20,7 @@
         --accent-dim: rgba(255, 255, 255, 0.06);
         --line: rgba(255, 255, 255, 0.1);
         --mono: "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       @media (prefers-color-scheme: light) {
@@ -74,7 +75,7 @@
         margin: 0 auto;
         max-width: 600px;
         color: var(--muted);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--sans);
         font-size: clamp(17px, 1.9vw, 21px);
         line-height: 1.6;
       }
@@ -128,6 +129,67 @@
         border-color: transparent;
       }
 
+      /* ─── Getting started ────────────────────── */
+
+      .getting-started {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        padding: 48px 0 0;
+      }
+
+      .path {
+        padding: 32px 28px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .path h2 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        color: var(--accent);
+      }
+
+      .path .subtitle {
+        margin: 0 0 20px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 14px;
+      }
+
+      .path ol {
+        margin: 0;
+        padding: 0 0 0 20px;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .path ol code {
+        font-family: var(--mono);
+        font-size: 13px;
+        padding: 1px 5px;
+        background: var(--accent-dim);
+        border-radius: 3px;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      .path .note {
+        margin: 16px 0 0;
+        padding: 12px 16px;
+        background: var(--accent-dim);
+        border-radius: 6px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* ─── Highlights ─────────────────────────── */
+
       .highlights {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -164,10 +226,12 @@
       .highlight p {
         margin: 0;
         color: var(--muted);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--sans);
         font-size: 14px;
         line-height: 1.5;
       }
+
+      /* ─── Feature cards ──────────────────────── */
 
       section.details {
         display: grid;
@@ -192,7 +256,7 @@
       .feature p {
         margin: 0;
         color: var(--muted);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--sans);
         font-size: 15px;
         line-height: 1.55;
       }
@@ -201,7 +265,7 @@
         margin: 10px 0 0;
         padding: 0 0 0 18px;
         color: var(--muted);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: var(--sans);
         font-size: 14px;
         line-height: 1.65;
       }
@@ -214,6 +278,18 @@
         border-radius: 3px;
         color: var(--ink);
         border: 1px solid var(--line);
+      }
+
+      /* ─── Section titles ─────────────────────── */
+
+      .section-title {
+        margin: 56px 0 0;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 2px;
       }
 
       footer {
@@ -231,6 +307,7 @@
         .ascii-banner { font-size: clamp(5px, 2.8vw, 10px); }
         .highlights { grid-template-columns: 1fr 1fr; }
         section.details { grid-template-columns: 1fr 1fr; }
+        .getting-started { grid-template-columns: 1fr; }
       }
 
       @media (max-width: 500px) {
@@ -254,13 +331,45 @@
           SQLite + FTS5. No daemon, no vector DB, no bloat.
         </p>
         <div class="install-block">
-          <span class="prefix">$ </span>npm install -g eagle-mem
+          <span class="prefix">$ </span>npm install -g eagle-mem && eagle-mem install
         </div>
         <div class="actions">
           <a class="button primary" href="https://github.com/eagleisbatman/eagle-mem">GitHub</a>
           <a class="button" href="https://www.npmjs.com/package/eagle-mem">npm</a>
         </div>
       </header>
+
+      <!-- ─── Getting Started ────────────────────── -->
+
+      <div class="getting-started">
+        <div class="path">
+          <h2>New project</h2>
+          <p class="subtitle">Starting fresh with Claude Code</p>
+          <ol>
+            <li>Install Eagle Mem (once, globally)</li>
+            <li>Open Claude Code in your project</li>
+            <li>Eagle Mem activates automatically</li>
+            <li>On your first message, Claude builds a project overview</li>
+          </ol>
+          <div class="note">
+            From here, everything is automatic. Summaries are captured, memories are mirrored, context is re-injected after every <code>/compact</code>. You don&rsquo;t run anything.
+          </div>
+        </div>
+        <div class="path">
+          <h2>Existing project</h2>
+          <p class="subtitle">Already been using Claude Code on this project</p>
+          <ol>
+            <li>Install Eagle Mem (once, globally)</li>
+            <li>Run <code>eagle-mem refresh .</code> to backfill</li>
+            <li>Open Claude Code &mdash; full history is injected</li>
+          </ol>
+          <div class="note">
+            <code>refresh</code> scans your codebase structure, indexes source files for code search, and imports all existing Claude Code memories, plans, and tasks into Eagle Mem&rsquo;s database.
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Numbers ────────────────────────────── -->
 
       <div class="highlights">
         <div class="highlight">
@@ -284,6 +393,39 @@
           <p>No daemon, no background process, no memory cost</p>
         </div>
       </div>
+
+      <!-- ─── Day to day ─────────────────────────── -->
+
+      <p class="section-title">Day-to-day usage</p>
+
+      <section class="details" style="grid-template-columns: 1fr 1fr;">
+        <div class="feature">
+          <h3>// what&rsquo;s automatic</h3>
+          <p>These happen without you doing anything:</p>
+          <ul>
+            <li><strong>Session start</strong> &mdash; overview + summaries + memories + tasks injected</li>
+            <li><strong>Each prompt</strong> &mdash; FTS5 searches past sessions for relevant context</li>
+            <li><strong>Each tool use</strong> &mdash; file touches recorded, Claude memories/plans/tasks mirrored</li>
+            <li><strong>Turn end</strong> &mdash; session summary captured, <code>&lt;private&gt;</code> tags stripped</li>
+            <li><strong>After <code>/compact</code></strong> &mdash; full context re-injected seamlessly</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// when you need to act</h3>
+          <p>Occasional manual commands:</p>
+          <ul>
+            <li><strong><code>eagle-mem refresh .</code></strong> &mdash; full re-sync after major changes</li>
+            <li><strong><code>eagle-mem search "query"</code></strong> &mdash; search past sessions and code</li>
+            <li><strong><code>eagle-mem overview set "..."</code></strong> &mdash; write a custom project overview</li>
+            <li><strong><code>eagle-mem prune</code></strong> &mdash; clean up old data</li>
+            <li><strong><code>npm update -g eagle-mem && eagle-mem update</code></strong> &mdash; upgrade to latest</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ─── How it works ───────────────────────── -->
+
+      <p class="section-title">How it works</p>
 
       <section class="details">
         <div class="feature">
@@ -311,7 +453,7 @@
             <li><strong>Auto-trigger</strong> &mdash; if no overview exists, SessionStart prompts Claude to build one</li>
             <li><strong>Synthesized</strong> &mdash; purpose, current state, and key tech in 2-3 sentences</li>
             <li><strong>Injected</strong> &mdash; overview surfaces at every session start</li>
-            <li><strong>Fallback</strong> &mdash; structural scan for empty repos with no README</li>
+            <li><strong>Scan fallback</strong> &mdash; structural scan for repos with no README</li>
           </ul>
         </div>
         <div class="feature">
@@ -321,8 +463,8 @@
             <code>TaskCreate</code>/<code>TaskUpdate</code> with dependency support.
           </p>
           <ul>
-            <li><strong>Plan</strong> &mdash; create tasks with <code>TaskCreate</code> + <code>addBlockedBy</code> for dependencies</li>
-            <li><strong>Execute</strong> &mdash; work on one task at a time (<code>TaskUpdate</code> to <code>in_progress</code>)</li>
+            <li><strong>Plan</strong> &mdash; create tasks with <code>TaskCreate</code> + <code>addBlockedBy</code></li>
+            <li><strong>Execute</strong> &mdash; work on one task at a time</li>
             <li><strong>Compact</strong> &mdash; run <code>/compact</code> when context fills up</li>
             <li><strong>Resume</strong> &mdash; Eagle Mem re-injects mirrored task state + memory</li>
           </ul>
@@ -368,36 +510,8 @@
         </div>
       </section>
 
-      <section class="details" style="grid-template-columns: 1fr 1fr;">
-        <div class="feature">
-          <h3>// v2.0.0 &mdash; skill playbooks</h3>
-          <p>
-            All 7 skills rewritten as deep operational playbooks. They teach Claude
-            <em>how to reason</em> about the task, not which CLI commands to type.
-          </p>
-          <ul>
-            <li><strong>Decision trees</strong> &mdash; each skill walks through what to check, when to act, and what to skip</li>
-            <li><strong>80-150 lines each</strong> &mdash; deep enough to handle edge cases without losing focus</li>
-            <li><strong><code>eagle-mem refresh</code></strong> &mdash; new unified command: scan + index + memory sync in one step</li>
-          </ul>
-        </div>
-        <div class="feature">
-          <h3>// v2.0.0 &mdash; spectral fixes</h3>
-          <p>
-            Four fixes from a 4-agent Spectral review (security, architecture,
-            code quality, data integrity).
-          </p>
-          <ul>
-            <li><strong>Session liveness</strong> &mdash; <code>last_activity_at</code> column + trigger, 7-day sweep for long-lived sessions</li>
-            <li><strong>Overview source tracking</strong> &mdash; <code>scan</code> vs <code>manual</code> column replaces fragile length heuristic</li>
-            <li><strong>Atomic dedup</strong> &mdash; observation insert uses <code>INSERT...WHERE NOT EXISTS</code> (no TOCTOU gap)</li>
-            <li><strong>Refresh diagnostics</strong> &mdash; full output on failure instead of truncated tail</li>
-          </ul>
-        </div>
-      </section>
-
       <footer>
-        v2.0.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
+        v2.0.2 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
       </footer>
     </main>
   </body>
