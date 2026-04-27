@@ -13,7 +13,7 @@ eagle_patch_hook() {
 
     if jq -e ".hooks.${event}[]? | select(.hooks[]?.command == \"$command\")" "$settings" &>/dev/null; then
         [ -n "$description" ] && eagle_ok "$description ${DIM}(already registered)${RESET}"
-        return
+        return 0
     fi
 
     local entry
