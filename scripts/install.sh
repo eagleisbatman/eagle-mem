@@ -242,6 +242,11 @@ else
     fi
 fi
 
+# ─── Save installed version ───────────────────────────────
+
+version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
+echo "$version" > "$EAGLE_MEM_DIR/.version"
+
 # ─── Summary ───────────────────────────────────────────────
 
 eagle_footer "Eagle Mem installed successfully."

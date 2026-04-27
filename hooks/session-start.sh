@@ -38,6 +38,34 @@ eagle_db "UPDATE sessions SET status = 'abandoned'
     AND id != '$(eagle_sql_escape "$session_id")'
     AND COALESCE(last_activity_at, started_at) < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days');"
 
+# ─── Version check (non-blocking) ────────────────────────────
+
+update_notice=""
+version_file="$EAGLE_MEM_DIR/.version"
+latest_file="$EAGLE_MEM_DIR/.latest-version"
+
+if [ -f "$version_file" ] && [ -s "$version_file" ]; then
+    installed_version=$(tr -d '[:space:]' < "$version_file")
+
+    if [ -f "$latest_file" ] && [ -s "$latest_file" ]; then
+        latest_version=$(tr -d '[:space:]' < "$latest_file")
+        newest=$(printf '%s\n' "$installed_version" "$latest_version" | sort -V | tail -1)
+        if [ "$newest" != "$installed_version" ]; then
+            update_notice="Update available: v${installed_version} → v${latest_version} — run: npm update -g eagle-mem && eagle-mem update"
+        fi
+    fi
+
+    if [ ! -f "$latest_file" ] || [ -n "$(find "$latest_file" -mtime +0 2>/dev/null)" ]; then
+        (tmp_latest=$(mktemp)
+         npm view eagle-mem version 2>/dev/null | tr -d '[:space:]' > "$tmp_latest"
+         if [ -s "$tmp_latest" ]; then
+             mv "$tmp_latest" "$latest_file"
+         else
+             rm -f "$tmp_latest"
+         fi) &
+    fi
+fi
+
 # ─── Build context injection ────────────────────────────────
 
 eagle_logo="█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
@@ -49,6 +77,12 @@ context="$eagle_logo
 Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
 
 "
+
+if [ -n "$update_notice" ]; then
+    context+="=== EAGLE MEM — $update_notice ===
+
+"
+fi
 
 # Project overview
 overview=$(eagle_get_overview "$project")
