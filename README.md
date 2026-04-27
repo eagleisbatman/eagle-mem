@@ -51,7 +51,7 @@ Eagle Mem hooks into Claude Code's lifecycle to solve the context loss problem:
 
 | Command | What it does |
 |---------|-------------|
-| `eagle-mem refresh` | Full project sync: overview + scan + index + memories + tasks |
+| `eagle-mem refresh` | Full project sync: scan + index + memories sync in one command |
 | `eagle-mem search <query>` | FTS5 search across summaries, memories, and code chunks |
 | `eagle-mem search --timeline` | Recent sessions in chronological order |
 | `eagle-mem overview` | View or set the project overview |
@@ -108,10 +108,11 @@ Package (npm)                   Runtime (~/.eagle-mem/)
 │   ├── prune.sh                ├── lib/
 │   ├── scan.sh                 │   ├── common.sh
 │   ├── index.sh                │   ├── db.sh
-│   ├── refresh.sh              │   └── hooks.sh
-│   └── help.sh                 └── db/
-├── hooks/          Source          ├── schema.sql
-├── lib/            Source          └── [0-9]*.sql  Migrations
+│   ├── memories.sh             │   └── hooks.sh
+│   ├── refresh.sh              └── db/
+│   └── help.sh                     ├── schema.sql
+├── hooks/          Source          └── [0-9]*.sql  Migrations
+├── lib/            Source
 ├── db/             Source
 └── skills/         → ~/.claude/skills/
     ├── eagle-mem-search/
