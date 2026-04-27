@@ -18,7 +18,7 @@ npm install -g eagle-mem
 eagle-mem install
 ```
 
-**2. Open Claude Code** in any project directory. Eagle Mem activates automatically:
+**2. Open Claude Code** in any project directory. Eagle Mem activates and shows what it loaded:
 
 ```
 █▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
@@ -29,34 +29,116 @@ Sessions: 5 recent | Memories: 3 | Tasks: 2 pending
 Last: Added auth middleware with JWT validation
 ```
 
-**3. That's it.** Everything else is automatic:
-- Session summaries captured on every Claude turn
-- Claude's memories, plans, and tasks mirrored into Eagle Mem
-- Full context re-injected after every `/compact`, `/clear`, or new session
-- Past sessions searched on every prompt via FTS5
+From here, everything is automatic. You don't run any commands — Eagle Mem captures session summaries, mirrors Claude's memories and tasks, and re-injects context after every `/compact` or new session.
 
-> **Have existing Claude Code history?** Run `eagle-mem refresh` inside your project directory to backfill — it scans your codebase, indexes source files, and imports all existing memories, plans, and tasks.
+**3. Already have Claude Code history on a project?** Run this inside the project directory:
 
-## Day-to-day usage
+```bash
+cd ~/projects/my-app
+eagle-mem refresh
+```
 
-Most of the time you don't run anything manually. The hooks handle everything. But when you need to:
+This backfills everything into Eagle Mem:
 
-| When | What to do |
-|------|-----------|
-| Search past sessions | `eagle-mem search "auth middleware"` |
-| See recent timeline | `eagle-mem search --timeline` |
-| View project overview | `eagle-mem overview` |
-| Set a custom overview | `eagle-mem overview set "..."` |
-| Full re-sync after major changes | `eagle-mem refresh .` |
-| Clean up old data | `eagle-mem prune` |
+```
+Eagle Mem  Refresh
+─────────────────────────────────────
 
-Inside Claude Code, you also have skills (slash commands):
+Step 1/4: Scanning codebase structure...
+  ✓  120 files found
+  ✓  Languages: TypeScript (15k lines), CSS (2k lines)
+  ✓  Frameworks: Next.js, React, Tailwind, Prisma
+  ✓  Scan complete
 
-| Skill | When to use it |
-|-------|---------------|
-| `/eagle-mem-search` | Find something from a past session |
-| `/eagle-mem-overview` | Build a rich project briefing from code + README + git |
-| `/eagle-mem-tasks` | Break complex work into tasks that survive `/compact` |
+Step 2/4: Indexing source files...
+  ✓  Index complete
+
+Step 3/4: Syncing Claude Code memories, plans, and tasks...
+  ✓  Memory sync complete
+
+Step 4/4: Verifying...
+  Sessions:    12
+  Code chunks: 340
+  Memories:    8
+  Tasks:       15
+```
+
+Now open Claude Code in that project — it sees your full history from the start.
+
+## Commands
+
+Eagle Mem gives you terminal commands for when you need to look something up or manage your data outside of Claude Code.
+
+### Search past sessions
+
+```bash
+eagle-mem search "auth middleware"
+```
+
+Searches across session summaries, Claude memories, and indexed code using FTS5. Use this when you know you worked on something last week but can't remember the details.
+
+```bash
+eagle-mem search --timeline
+```
+
+Shows your most recent sessions in chronological order — useful for catching up after a break.
+
+### View or set your project overview
+
+```bash
+eagle-mem overview
+```
+
+Shows the overview that gets injected into every Claude Code session. This is what Claude reads first to understand your project.
+
+```bash
+eagle-mem overview set "My app is a Next.js dashboard for monitoring API health..."
+```
+
+Set a custom overview. You can also let Claude write one for you by running `/eagle-mem-overview` inside a Claude Code session — it reads your README, entry points, and git history to synthesize one.
+
+### Sync everything
+
+```bash
+eagle-mem refresh
+```
+
+Run this inside a project directory after major changes (new packages, restructured directories, pulling a large branch). It re-scans the codebase, re-indexes source files, and syncs any new Claude Code memories and tasks.
+
+### Other commands
+
+| Command | When to use it |
+|---------|---------------|
+| `eagle-mem scan` | Re-analyze codebase structure (languages, frameworks, entry points) |
+| `eagle-mem index` | Re-index source files for code search |
+| `eagle-mem memories` | View or sync mirrored Claude Code memories and plans |
+| `eagle-mem tasks` | View mirrored Claude Code tasks |
+| `eagle-mem prune` | Clean up old observations and orphaned code chunks |
+
+## Skills (inside Claude Code)
+
+Inside a Claude Code session, you have slash commands that let Claude do the work for you:
+
+### `/eagle-mem-search`
+
+Search past sessions from within Claude Code. Claude interprets results and connects them to your current work — better than raw terminal search when you need context, not just a match.
+
+### `/eagle-mem-overview`
+
+Build a rich project briefing. Claude reads your README, entry points, recent git history, and current codebase to write a 2-3 paragraph overview that captures what the project *does*, not just its file counts. This overview is injected at every session start.
+
+### `/eagle-mem-tasks`
+
+Break complex work into tasks that survive `/compact`. Uses Claude Code's native `TaskCreate`/`TaskUpdate` with dependency support. When context fills up and you compact, Eagle Mem re-injects the task state so Claude picks up where it left off.
+
+### Other skills
+
+| Skill | What it does |
+|-------|-------------|
+| `/eagle-mem-scan` | Analyze codebase structure — languages, frameworks, entry points |
+| `/eagle-mem-index` | Index source files for FTS5 code search |
+| `/eagle-mem-memories` | View, search, and sync Claude Code's mirrored memories and plans |
+| `/eagle-mem-prune` | Database hygiene — graduated cleanup of stale data |
 
 ## Updating
 
@@ -91,36 +173,6 @@ Data lives in a single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FT
 | claude_memories | Mirror of Claude Code auto-memories |
 | claude_plans | Mirror of Claude Code plans |
 | claude_tasks | Mirror of Claude Code tasks |
-
-## All commands
-
-| Command | What it does |
-|---------|-------------|
-| `eagle-mem install` | First-time setup: hooks, database, skills |
-| `eagle-mem update` | Re-deploy hooks and run pending migrations |
-| `eagle-mem uninstall` | Remove hooks and optionally delete data |
-| `eagle-mem refresh` | Full sync: scan + index + memories in one command |
-| `eagle-mem search <query>` | FTS5 search across summaries, memories, and code |
-| `eagle-mem overview` | View or set the project overview |
-| `eagle-mem scan` | Analyze codebase structure |
-| `eagle-mem index` | Index source files for code search |
-| `eagle-mem memories` | View/sync mirrored Claude Code memories and plans |
-| `eagle-mem tasks` | View mirrored Claude Code tasks |
-| `eagle-mem prune` | Remove old observations and orphaned chunks |
-
-## All skills
-
-Seven skills available inside Claude Code sessions:
-
-| Skill | What it does |
-|-------|-------------|
-| `/eagle-mem-search` | Progressive memory recall — search, expand, drill into sessions |
-| `/eagle-mem-overview` | Build a structured project briefing from code, README, and git history |
-| `/eagle-mem-scan` | Analyze codebase structure — languages, frameworks, entry points |
-| `/eagle-mem-index` | Index source files for FTS5 code search across sessions |
-| `/eagle-mem-memories` | View, search, and sync Claude Code's mirrored memories and plans |
-| `/eagle-mem-tasks` | TaskAware Compact Loop — break work into tasks that survive compaction |
-| `/eagle-mem-prune` | Database hygiene — graduated cleanup of stale data |
 
 ## Uninstall
 
