@@ -1,92 +1,139 @@
 ---
 name: eagle-mem-tasks
 description: >
-  TaskAware Compact Loop — break complex work into Claude Code tasks with dependencies,
-  compact between each. Use when: 'eagle tasks', 'break this into tasks', 'create task plan',
-  'task loop', 'compact loop', 'eagle mem tasks'. Uses Claude Code's native TaskCreate/TaskUpdate.
+  TaskAware Compact Loop — break complex work into tasks that survive context
+  compaction. Use when: 'break this into tasks', 'create task plan', 'task loop',
+  'compact loop', work is too large for one context window, multi-step implementation.
 ---
 
 # Eagle Mem — TaskAware Compact Loop
 
-Break complex work into subtasks using Claude Code's native task system. Execute one task at a time, compact between each, and let Eagle Mem re-inject task state for the next task.
+## Purpose
 
-## How it works
+**For the user:** Multi-step work doesn't get lost when Claude Code compacts. A 6-task implementation plan survives intact across compactions — no re-explaining what was decided, no drift from the original direction.
 
-1. **Plan**: Break the user's request into ordered subtasks
-2. **Create**: Add each subtask via `TaskCreate` with dependencies via `addBlockedBy`
-3. **Execute**: Work on the current task (mark `in_progress` with `TaskUpdate`)
-4. **Complete**: Mark done with `TaskUpdate(completed)`, emit `<eagle-summary>`
-5. **Compact**: Tell the user to run `/compact`
-6. **Resume**: After compact, SessionStart re-injects memory + loads task state from Eagle Mem's mirror
-7. **Repeat**: Until all tasks are done
+**For you (Claude Code):** Each task description is a message to a future context window with ZERO memory of what happened before. After compaction, SessionStart re-injects pending/in-progress tasks from Eagle Mem's `claude_tasks` table. That re-injected text is all the next context window gets. If the description says "implement auth middleware," the next window has nothing to work with. If it says "implement auth middleware — JWT with RS256, sessions in Redis, errors use RFC 7807 format (decided in task 1)," the next window can execute immediately.
 
-## Creating tasks
+## Judgment
 
-Use Claude Code's `TaskCreate` tool. Each task gets `pending` status automatically.
+**Use the task loop when:**
+- Work requires 4+ distinct steps
+- You'll likely need to `/compact` mid-way
+- The user says "break this into tasks" or "create a plan"
+- Different steps touch different parts of the codebase (schema, API, UI)
 
-For tasks that depend on earlier work, use `addBlockedBy` in `TaskUpdate`:
+**Don't use when:**
+- The work fits in one context window — just do it directly
+- It's a single-file fix or a quick question
+- The user is exploring, not building (use search/overview instead)
+
+## Steps
+
+### 1. Plan — decompose into 3-8 tasks
+
+Break the request into tasks that are each completable in one context window. Think about what a fresh context window needs to execute each task independently.
+
+**Sizing rules:**
+- If a task would touch more than ~10 files or require reading large code to understand, split it
+- If a task is "change one line," merge it into an adjacent task
+- Each task should produce a testable or verifiable result
+
+**Ordering:** Foundational work first — schema before API, API before UI, config before features.
+
+### 2. Create — write self-contained descriptions
+
+Use `TaskCreate` for each task. The description is the most important field — it must carry forward every decision from the planning conversation.
+
+**Context transfer pattern:** For each task, ask: "If I read only this description with zero prior context, can I execute it?" If not, add what's missing.
 
 ```
-TaskCreate({ subject: "Set up project structure", description: "Install deps, create folders, init config" })
-TaskCreate({ subject: "Implement auth middleware", description: "JWT validation, role checks, error responses" })
-TaskCreate({ subject: "Build CRUD endpoints", description: "Users and posts REST API with validation" })
-
-// Then set dependencies:
-TaskUpdate({ taskId: "3", addBlockedBy: ["1", "2"] })
+TaskCreate:
+  subject: "Add JWT auth middleware"
+  description: "Add Express middleware that validates JWT tokens on protected
+    routes. Decisions: RS256 algorithm, public key from env JWT_PUBLIC_KEY,
+    sessions stored in Redis (connection config already in lib/redis.ts from
+    task 1). Error responses use RFC 7807 format. Protect all /api/* routes
+    except /api/auth/login and /api/health."
 ```
 
-## Working on a task
+**Dependencies:** Use `addBlockedBy` when a task genuinely can't start without another's output. Don't over-chain — most tasks in a plan can run in declared order without formal blocking.
 
-1. Call `TaskUpdate({ taskId: "N", status: "in_progress" })` before starting work
-2. Do the work
-3. Call `TaskUpdate({ taskId: "N", status: "completed" })` when done
-4. Emit your `<eagle-summary>` block
-5. Tell the user: **"Task complete. Run `/compact` to save progress and load the next task."**
+### 3. Execute — one task at a time
 
-## Viewing tasks
+`TaskUpdate(in_progress)` on the current task. Do the work. Stay focused on that task — don't drift into adjacent tasks.
 
-Use `TaskList` to see all tasks, or the CLI for cross-session history:
+### 4. Complete — record what happened
+
+`TaskUpdate(completed)`. Emit `<eagle-summary>` so Eagle Mem captures what was accomplished.
+
+If the task produced decisions that downstream tasks need, update those task descriptions now:
+```
+TaskUpdate:
+  taskId: "3"
+  description: "...original description... Note from task 2: the user table
+    uses UUID primary keys, not auto-increment. Auth tokens table FKs to
+    users.id (UUID)."
+```
+
+### 5. Compact — hand off to the next context window
+
+Tell the user: "Task complete. Run `/compact` to free context for the next task."
+
+### 6. Resume — pick up where you left off
+
+After compaction, SessionStart re-injects all pending/in-progress tasks. Pick the next unblocked task and continue.
+
+## Handling scope changes and failures
+
+**User changes direction mid-plan:** Update the remaining task descriptions to reflect the new direction. Delete tasks that no longer apply. Don't start over unless the change invalidates everything.
+
+**A task fails or produces unexpected results:** Update the task description with what was learned and what went wrong. Don't just retry blindly — the description should carry the failure context so the next attempt (or the next context window) doesn't repeat the same mistake.
+
+```
+TaskUpdate:
+  taskId: "4"
+  description: "...original description... FAILED ATTEMPT: Prisma migrate
+    errored because the users table already has a conflicting unique
+    constraint on email. Need to drop the old constraint first. See
+    migration 003_auth.sql for the current state."
+```
+
+**Partial completion:** If a task is half-done when you need to compact, update the description with exactly what's done and what remains. Mark it as still `in_progress`, not completed.
+
+## The compact cycle — how task state survives
+
+1. You call `TaskCreate`/`TaskUpdate` (Claude Code's native task tools)
+2. Claude Code writes task JSON to `~/.claude/tasks/$session_id/*.json`
+3. Eagle Mem's PostToolUse hook fires, mirrors the task into the `claude_tasks` FTS5 table
+4. SessionEnd hook does a final sweep to catch any status changes missed by hooks
+5. On compaction (or new session), SessionStart queries `claude_tasks` for pending/in-progress tasks from the last 7 days and injects them into context
+
+The task descriptions you write ARE the context that survives. Everything else — your reasoning, the conversation, the files you read — gets compacted away.
+
+## What makes a good task plan
+
+**Good:**
+> Task 1: "Set up database schema for auth. Create users table (id UUID PK, email unique, password_hash, created_at) and sessions table (id UUID PK, user_id FK, token, expires_at). Use Prisma migration. Add seed script for test user."
+>
+> Task 2: "Implement login endpoint POST /api/auth/login. Accepts {email, password}, returns {token, expires_at}. Hash comparison with bcrypt (already in deps). Session created in DB. Error: 401 with RFC 7807 body. Schema from task 1: users.email is unique, sessions.token is the JWT."
+
+**Bad:**
+> Task 1: "Set up the database"
+> Task 2: "Add authentication"
+
+The bad version forces the next context window to re-discover every decision. The good version carries decisions forward — the next window can start coding immediately.
+
+## Reference
 
 ```bash
-eagle-mem tasks              # pending/in-progress (from mirror)
-eagle-mem tasks list         # all tasks
-eagle-mem tasks search <q>   # FTS5 search across task history
+# Viewing tasks (read-only — Eagle Mem mirrors, doesn't manage)
+eagle-mem tasks                # pending/in-progress for current project
+eagle-mem tasks list           # all tasks (including completed)
+eagle-mem tasks completed      # completed tasks only
+eagle-mem tasks search <q>     # FTS5 search across task history
+eagle-mem tasks --json         # JSON output for scripting
+
+# Claude Code task tools (these are what you actually use)
+TaskCreate                     # create a new task
+TaskUpdate                     # update status, description, dependencies
 ```
-
-## Cross-session context
-
-When a task depends on decisions made in earlier tasks, put that context in the task's `description` field — it persists across compactions via Eagle Mem's mirror.
-
-For example, if task 1 decides to use JWT with RS256:
-
-```
-TaskUpdate({ taskId: "2", description: "Implement auth middleware. Decision from task 1: using JWT with RS256, sessions stored in Redis." })
-```
-
-## Task design guidelines
-
-- Each task should be **self-contained** — completable in one context window
-- Include enough detail in `description` that a fresh context window can pick it up
-- Use `addBlockedBy` for tasks that depend on earlier tasks
-- Order tasks so foundational work comes first (schema before API, API before UI)
-- Keep tasks focused: 3-8 tasks per plan
-
-## The compact cycle
-
-```
-User request -> Plan tasks (TaskCreate) -> Execute task 1 (TaskUpdate: in_progress)
--> Complete task 1 (TaskUpdate: completed) -> /compact
--> Eagle Mem saves summary -> Context cleared -> Task state re-injected
--> Execute task 2 -> /compact
--> ... repeat until all tasks done ...
--> Final summary: "All N tasks complete."
-```
-
-## Status reference
-
-| Status | Meaning |
-|---|---|
-| `pending` | Not started yet |
-| `in_progress` | Currently being worked on |
-| `completed` | Done |
-| `deleted` | Removed |

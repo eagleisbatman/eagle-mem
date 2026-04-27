@@ -40,13 +40,14 @@ eagle_upsert_session() {
     local model; model=$(eagle_sql_escape "${4:-}")
     local source; source=$(eagle_sql_escape "${5:-}")
 
-    eagle_db "INSERT INTO sessions (id, project, cwd, model, source)
-              VALUES ('$session_id', '$project', '$cwd', '$model', '$source')
+    eagle_db "INSERT INTO sessions (id, project, cwd, model, source, last_activity_at)
+              VALUES ('$session_id', '$project', '$cwd', '$model', '$source', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
               ON CONFLICT(id) DO UPDATE SET
                   cwd = COALESCE(excluded.cwd, sessions.cwd),
                   model = COALESCE(excluded.model, sessions.model),
                   source = COALESCE(excluded.source, sessions.source),
-                  status = 'active';"
+                  status = 'active',
+                  last_activity_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
 }
 
 eagle_end_session() {
@@ -63,7 +64,14 @@ eagle_insert_observation() {
     local files_modified; files_modified=$(eagle_sql_escape "$6")
 
     eagle_db "INSERT INTO observations (session_id, project, tool_name, tool_input_summary, files_read, files_modified)
-              VALUES ('$session_id', '$project', '$tool_name', '$tool_input_summary', '$files_read', '$files_modified');"
+              SELECT '$session_id', '$project', '$tool_name', '$tool_input_summary', '$files_read', '$files_modified'
+              WHERE NOT EXISTS (
+                  SELECT 1 FROM observations
+                  WHERE session_id = '$session_id'
+                  AND tool_name = '$tool_name'
+                  AND tool_input_summary = '$tool_input_summary'
+                  AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 seconds')
+              );"
 }
 
 eagle_insert_summary() {
@@ -138,27 +146,29 @@ eagle_search_summaries() {
               LIMIT $limit;"
 }
 
-eagle_observation_exists() {
-    local session_id; session_id=$(eagle_sql_escape "$1")
-    local tool_name; tool_name=$(eagle_sql_escape "$2")
-    local tool_summary; tool_summary=$(eagle_sql_escape "$3")
-
-    eagle_db "SELECT COUNT(*) FROM observations
-              WHERE session_id = '$session_id'
-              AND tool_name = '$tool_name'
-              AND tool_input_summary = '$tool_summary'
-              AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 seconds');"
-}
-
 eagle_upsert_overview() {
     local project; project=$(eagle_sql_escape "$1")
-    local content; content=$(eagle_sql_escape "$2")
+    local raw_content="$2"
+    local ov_source; ov_source=$(eagle_sql_escape "${3:-manual}")
 
-    eagle_db "INSERT INTO overviews (project, content, updated_at)
-              VALUES ('$project', '$content', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    if [ ${#raw_content} -gt 16384 ]; then
+        raw_content="${raw_content:0:16384}"
+        eagle_log "WARN" "Overview for '$1' truncated to 16 KB (was ${#2} bytes)"
+    fi
+
+    local content; content=$(eagle_sql_escape "$raw_content")
+
+    eagle_db "INSERT INTO overviews (project, content, source, updated_at)
+              VALUES ('$project', '$content', '$ov_source', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
               ON CONFLICT(project) DO UPDATE SET
                   content = excluded.content,
+                  source = excluded.source,
                   updated_at = excluded.updated_at;"
+}
+
+eagle_get_overview_source() {
+    local project; project=$(eagle_sql_escape "$1")
+    eagle_db "SELECT source FROM overviews WHERE project = '$project';"
 }
 
 eagle_get_overview() {
@@ -495,24 +505,24 @@ eagle_backfill_projects() {
         sid_sql=$(eagle_sql_escape "$sid")
         proj_sql=$(eagle_sql_escape "$project")
 
+        # All six tables updated atomically per session to prevent
+        # partial backfill if the process is interrupted.
+        # Note: total_changes() includes FTS trigger changes, so the
+        # reported count may be higher than actual rows updated.
+        # This is cosmetic — the count is only used for status messages.
         local ch
-        ch=$(eagle_db "UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-        ch=$(eagle_db "UPDATE claude_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-        ch=$(eagle_db "UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-        ch=$(eagle_db "UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-        ch=$(eagle_db "UPDATE summaries SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-        ch=$(eagle_db "UPDATE observations SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
-SELECT changes();")
+        ch=$(eagle_db_pipe <<SQL
+BEGIN;
+UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+UPDATE claude_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+UPDATE claude_memories SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+UPDATE claude_plans SET project = '$proj_sql' WHERE origin_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+UPDATE summaries SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+UPDATE observations SET project = '$proj_sql' WHERE session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
+SELECT total_changes();
+COMMIT;
+SQL
+)
         [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
     done <<< "$map"
 
@@ -528,13 +538,21 @@ eagle_prune_orphan_chunks() {
     paths=$(eagle_db "SELECT DISTINCT file_path FROM code_chunks WHERE project = '$project';")
 
     local removed=0
+    local txn_sql="BEGIN;"
     while IFS= read -r fpath; do
         [ -z "$fpath" ] && continue
         if [ ! -f "$target_dir/$fpath" ]; then
             local fpath_sql; fpath_sql=$(eagle_sql_escape "$fpath")
-            eagle_db "DELETE FROM code_chunks WHERE project = '$project' AND file_path = '$fpath_sql';"
+            txn_sql+="
+DELETE FROM code_chunks WHERE project = '$project' AND file_path = '$fpath_sql';"
             removed=$((removed + 1))
         fi
     done <<< "$paths"
+    txn_sql+="
+COMMIT;"
+
+    if [ "$removed" -gt 0 ]; then
+        eagle_db_pipe <<< "$txn_sql"
+    fi
     echo "$removed"
 }

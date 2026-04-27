@@ -88,7 +88,7 @@ overview_set() {
         exit 1
     fi
 
-    eagle_upsert_overview "$project" "$content"
+    eagle_upsert_overview "$project" "$content" "manual"
 
     if [ "$json_output" = true ]; then
         jq -nc --arg project "$project" '{project: $project, updated: true}'

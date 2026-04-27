@@ -77,6 +77,16 @@ fi
 
 if [ -d "$PACKAGE_DIR/skills" ]; then
     mkdir -p "$EAGLE_SKILLS_DIR"
+    # Remove stale symlinks for deleted skills
+    for existing in "$EAGLE_SKILLS_DIR"/eagle-mem-*/; do
+        local_path="${existing%/}"
+        [ ! -L "$local_path" ] && continue
+        skill_name=$(basename "$local_path")
+        if [ ! -d "$PACKAGE_DIR/skills/$skill_name" ]; then
+            rm "$local_path"
+            eagle_ok "Removed stale skill: $skill_name"
+        fi
+    done
     for skill_dir in "$PACKAGE_DIR"/skills/*/; do
         [ ! -d "$skill_dir" ] && continue
         skill_name=$(basename "$skill_dir")

@@ -30,12 +30,13 @@ eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$sou
 
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 
-# ─── Sweep stuck sessions (older than 4 hours) ─────────────
-# Exclude the current session — it may be a resumed session older than 4h
+# ─── Sweep stuck sessions (no activity for 7 days) ─────────
+# Uses last_activity_at (updated by trigger on every observation insert)
+# so long-lived sessions with regular compactions aren't falsely abandoned
 eagle_db "UPDATE sessions SET status = 'abandoned'
     WHERE status = 'active'
     AND id != '$(eagle_sql_escape "$session_id")'
-    AND started_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 hours');"
+    AND COALESCE(last_activity_at, started_at) < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days');"
 
 # ─── Build context injection ────────────────────────────────
 
@@ -49,11 +50,16 @@ Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent m
 
 "
 
-# Project overview (if one exists)
+# Project overview
 overview=$(eagle_get_overview "$project")
 if [ -n "$overview" ]; then
     context+="=== EAGLE MEM — Project Overview ===
 $overview
+
+"
+else
+    context+="=== EAGLE MEM — Action Required ===
+No overview exists for '$project'. On the user's first prompt, run /eagle-mem-overview to build a structured project briefing. The skill has full instructions for what to read and how to write a rich overview.
 
 "
 fi
@@ -129,11 +135,11 @@ Tasks for '$project':
 "
     while IFS='|' read -r tsubject tstatus tblocked; do
         [ -z "$tsubject" ] && continue
-        local_marker=""
+        block_marker=""
         if [ "$tblocked" != "[]" ] && [ -n "$tblocked" ]; then
-            local_marker=" (blocked)"
+            block_marker=" (blocked)"
         fi
-        context+="  - [$tstatus] $tsubject$local_marker
+        context+="  - [$tstatus] $tsubject$block_marker
 "
     done <<< "$synced_tasks"
 fi

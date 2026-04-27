@@ -124,12 +124,6 @@ case "$tool_name" in
         ;;
 esac
 
-# Deduplicate: skip if exact same observation within last 5 seconds
-dup_count=$(eagle_observation_exists "$session_id" "$tool_name" "$tool_summary")
-if [ "$dup_count" != "0" ]; then
-    exit 0
-fi
-
 eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified"
 
 exit 0

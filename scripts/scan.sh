@@ -15,13 +15,34 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 eagle_ensure_db
 
-TARGET_DIR="${1:-.}"
+# ─── Parse arguments ─────────────────────────────────────
+force=false
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f) force=true ;;
+        *) args+=("$arg") ;;
+    esac
+done
+
+TARGET_DIR="${args[0]:-.}"
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 PROJECT=$(eagle_project_from_cwd "$TARGET_DIR")
 
 eagle_header "Scan"
 eagle_info "Scanning ${BOLD}$PROJECT${RESET} at $TARGET_DIR"
 echo ""
+
+# ─── Guard: skip if manual overview exists ───────────────
+# Scan produces a structural one-liner. If a manual (rich) overview
+# exists, skip unless --force is passed.
+existing_source=$(eagle_get_overview_source "$PROJECT")
+
+if [ "$force" = false ] && [ "$existing_source" = "manual" ]; then
+    eagle_ok "Manual overview exists — skipping scan"
+    eagle_dim "Run 'eagle-mem scan --force' to overwrite"
+    exit 0
+fi
 
 # ─── Collect files ─────────────────────────────────────────
 
@@ -344,7 +365,7 @@ if [ -n "$configs" ]; then
 fi
 
 # Store in database
-eagle_upsert_overview "$PROJECT" "$overview"
+eagle_upsert_overview "$PROJECT" "$overview" "scan"
 
 eagle_ok "Overview saved for project '$PROJECT'"
 echo ""

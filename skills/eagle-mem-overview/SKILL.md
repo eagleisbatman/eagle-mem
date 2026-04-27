@@ -1,83 +1,97 @@
 ---
 name: eagle-mem-overview
 description: >
-  Generate or update a project overview for Eagle Mem. Use when: 'eagle overview',
-  'project overview', 'summarize this project', 'eagle mem overview', 'what is this project',
-  'update overview'. Uses the eagle-mem CLI — never run raw sqlite3 queries.
+  Build or update a structured project overview for Eagle Mem. Use when: 'eagle overview',
+  'project overview', 'summarize this project', 'what is this project', 'update overview',
+  or when SessionStart says no overview exists. Produces a multi-paragraph briefing.
 ---
 
 # Eagle Mem — Project Overview
 
-Generate a concise project overview that Eagle Mem injects at the start of every session. This gives fresh context windows an instant understanding of what the project is.
+## Purpose
 
-## How it works
+**For the user:** Every new Claude Code session starts cold. The overview eliminates the "explain what this project is" tax — Claude already knows what it's working on, how the project is structured, and what's been happening.
 
-1. Gather context about the project (recent sessions, file activity)
-2. Synthesize into a concise overview (2-4 sentences)
-3. Save via the CLI — one overview per project, updated in place
+**For you (Claude Code):** The overview is your orientation document. It's injected at SessionStart before the user says anything. A good overview lets you give informed answers from message one. A shallow one ("42 files, Node.js") gives you nothing — you'll spend the first 3 exchanges just figuring out what the project does.
 
-The overview is automatically injected by the SessionStart hook.
+## Judgment
 
-## Commands
+**Build an overview when:**
+- SessionStart says "No overview exists" — build on the user's first prompt
+- The current overview reads like scan metadata (file counts, directory listings) — upgrade it
+- The user asks: "update overview", "summarize this project", "what is this project"
+- The project has changed significantly since the last overview (new major feature, architecture shift)
 
-### View current overview
+**Don't rebuild when:**
+- The overview is already rich and current — just use it
+- The user needs help with a specific task — do the task first, update overview after if needed
 
+## Steps
+
+### 1. Read the project (skip files that don't exist)
+
+**Identity:** README.md, package.json / go.mod / pyproject.toml / Cargo.toml
+**Architecture:** Main entry point (bin/*, src/index.*, main.*, app.*), key config (tsconfig.json, Dockerfile, etc.)
+**Activity:** `git log --oneline -20` for recent direction
+**Structure:** `ls` the top-level directories to understand the layout
+
+Read these files yourself — don't run `eagle-mem scan`. Scan produces structural metadata (file counts, language breakdown). You need to understand intent, not count files.
+
+### 2. Synthesize a structured briefing
+
+Write 4-6 paragraphs covering these layers:
+
+**What and why** — What does this project do? Who is it for? What problem does it solve? Lead with the purpose, not the tech stack.
+
+**How it's built** — Architecture, key abstractions, data flow. What are the main modules/packages and how do they connect? What tech choices matter (framework, database, deployment target)?
+
+**Where to start** — Entry points, key files a new contributor would need to read first. The files that, if you understand them, you understand the project.
+
+**Current state** — What version is it at? What's the recent direction from git log? Is it actively developed, stable, or in a transition? What was the most recent significant change?
+
+### 3. Save and verify
+
+```bash
+eagle-mem overview set "<your structured overview>"
+```
+
+Then verify it actually saved:
 ```bash
 eagle-mem overview
 ```
 
-### Auto-generate from code analysis
+If the output is empty or doesn't match what you wrote, the save failed. Retry once. If it fails again, tell the user.
 
+### 4. Fallback for empty repos
+
+If no readable source files exist (fresh repo, no README), run a structural scan as a starting point:
 ```bash
 eagle-mem scan .
 ```
+Then tell the user: "I've generated a structural overview from scan. Once you add a README or source code, re-run `/eagle-mem-overview` for a richer briefing."
 
-This scans the project structure (files, languages, frameworks, entry points, tests) and saves an overview automatically.
+## What makes a good overview
 
-### Set overview manually
+A good overview lets a fresh Claude Code context window give useful answers without reading any files first.
 
-When you want to write a custom overview based on session history:
+**Good:**
+> eagle-mem is a persistent memory system for Claude Code that solves the context-loss problem across sessions. It hooks into Claude Code's lifecycle (SessionStart, Stop, PostToolUse, SessionEnd, UserPromptSubmit) to automatically capture session summaries, observations, and code context into a single SQLite database with FTS5 full-text search.
+>
+> The architecture is pure bash scripts and sqlite3 — no daemon, no vector DB, no MCP server. Hooks in hooks/ fire during Claude Code events and call into lib/ (common.sh, db.sh) for database operations. The db/ directory holds the schema and numbered migration files. CLI commands in scripts/ expose search, overview management, code indexing, and database maintenance.
+>
+> Key entry point is bin/eagle-mem, which dispatches to scripts/. Skills in skills/ are symlinked into ~/.claude/skills/ and teach Claude Code how to use each capability. The database lives at ~/.eagle-mem/memory.db.
+>
+> Currently at v2.0.0. Recent work focused on memory mirroring (Claude Code's auto-memories, plans, and tasks into FTS5), task-aware compact loops, and skill quality improvements.
 
-1. First, gather recent context:
-```bash
-eagle-mem search --timeline --limit 10
-eagle-mem search --files
-```
+**Bad:**
+> eagle-mem: Node.js project (42 files, ~5k lines). Structure: bin/ (1), db/ (10), hooks/ (5), lib/ (3), scripts/ (13), skills/ (7). Entry: bin/eagle-mem. No tests detected.
 
-2. Synthesize the data into a concise overview covering:
-   - **What** the project is (one sentence)
-   - **Current state** — what's been worked on recently
-   - **Key patterns** — tech stack, architecture decisions
-
-3. Save it:
-```bash
-eagle-mem overview set "eagle-mem: Node.js CLI tool providing persistent memory for Claude Code via SQLite + FTS5. Currently at v1.0.3 with 5 hooks, 3 skills, and CLI subcommands for search/tasks/overview."
-```
-
-Keep it under 500 characters — this gets injected into every session start.
-
-### List all project overviews
+## Reference
 
 ```bash
-eagle-mem overview list
+eagle-mem overview              # view current overview
+eagle-mem overview set "..."    # save new overview
+eagle-mem overview list         # all projects with overviews
+eagle-mem overview delete       # remove current project's overview
+eagle-mem scan .                # structural scan (fallback only)
 ```
-
-### Delete an overview
-
-```bash
-eagle-mem overview delete
-```
-
-## Options
-
-| Flag | Description |
-|------|-------------|
-| `-p, --project <name>` | Target a specific project (default: current directory) |
-| `-j, --json` | Output as JSON |
-
-## Guidelines
-
-- Update the overview when the project direction changes significantly
-- Keep it factual — what IS, not what SHOULD BE
-- Don't include task lists or TODOs — those belong in the tasks table
-- The overview supplements (doesn't replace) recent session summaries

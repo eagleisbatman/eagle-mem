@@ -24,6 +24,7 @@ case "$command" in
     search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
     tasks)      bash "$SCRIPTS_DIR/tasks.sh" "$@" ;;
     overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
+    refresh)    bash "$SCRIPTS_DIR/refresh.sh" "$@" ;;
     prune)      bash "$SCRIPTS_DIR/prune.sh" "$@" ;;
     memories)   bash "$SCRIPTS_DIR/memories.sh" "$@" ;;
     help|--help|-h)
