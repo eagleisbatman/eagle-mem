@@ -9,49 +9,33 @@ Persistent memory for [Claude Code](https://docs.anthropic.com/en/docs/claude-co
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash scripts, sqlite3, and jq.
 
-## Install
+## Getting started
+
+**1. Install** (once — this is the only setup step):
 
 ```bash
 npm install -g eagle-mem
 eagle-mem install
 ```
 
-That's it. Eagle Mem registers 5 lifecycle hooks in Claude Code and is fully automatic from here.
-
-## New project
-
-Open Claude Code in your project. Eagle Mem activates and shows:
+**2. Open Claude Code** in any project directory. Eagle Mem activates automatically:
 
 ```
 █▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
 ██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
 
 Project: my-app
-Sessions: 0 recent | Memories: 0 | Tasks: 0 pending
+Sessions: 5 recent | Memories: 3 | Tasks: 2 pending
+Last: Added auth middleware with JWT validation
 ```
 
-Since no overview exists, Eagle Mem prompts Claude to build one on your first message. After that, every session starts with full context — you don't do anything.
+**3. That's it.** Everything else is automatic:
+- Session summaries captured on every Claude turn
+- Claude's memories, plans, and tasks mirrored into Eagle Mem
+- Full context re-injected after every `/compact`, `/clear`, or new session
+- Past sessions searched on every prompt via FTS5
 
-**What happens automatically:**
-- Every Claude turn end: session summary saved
-- Every tool use: file touches recorded, Claude's memories/plans/tasks mirrored
-- Every session start (including after `/compact`): overview + summaries + memories + tasks injected
-- Every prompt: FTS5 searches past sessions for relevant context
-
-## Existing project
-
-If you've been using Claude Code on a project and want to backfill everything:
-
-```bash
-eagle-mem refresh .
-```
-
-This runs three steps:
-1. **Scan** — analyzes your codebase structure (languages, frameworks, entry points)
-2. **Index** — chunks source files into FTS5-searchable pieces
-3. **Memory sync** — imports all existing Claude Code memories, plans, and tasks
-
-Now open Claude Code. Eagle Mem injects your full history from the start.
+> **Have existing Claude Code history?** Run `eagle-mem refresh` inside your project directory to backfill — it scans your codebase, indexes source files, and imports all existing memories, plans, and tasks.
 
 ## Day-to-day usage
 
