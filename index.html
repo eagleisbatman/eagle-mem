@@ -270,8 +270,8 @@
         </div>
         <div class="highlight">
           <h3>Skills</h3>
-          <span class="num">4</span>
-          <p>Search, overview, tasks, prune</p>
+          <span class="num">7</span>
+          <p>Search, overview, scan, index, memories, tasks, prune</p>
         </div>
         <div class="highlight">
           <h3>Tables</h3>
@@ -368,8 +368,36 @@
         </div>
       </section>
 
+      <section class="details" style="grid-template-columns: 1fr 1fr;">
+        <div class="feature">
+          <h3>// v2.0.0 &mdash; skill playbooks</h3>
+          <p>
+            All 7 skills rewritten as deep operational playbooks. They teach Claude
+            <em>how to reason</em> about the task, not which CLI commands to type.
+          </p>
+          <ul>
+            <li><strong>Decision trees</strong> &mdash; each skill walks through what to check, when to act, and what to skip</li>
+            <li><strong>80-150 lines each</strong> &mdash; deep enough to handle edge cases without losing focus</li>
+            <li><strong><code>eagle-mem refresh</code></strong> &mdash; new unified command: scan + index + memory sync in one step</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// v2.0.0 &mdash; spectral fixes</h3>
+          <p>
+            Four fixes from a 4-agent Spectral review (security, architecture,
+            code quality, data integrity).
+          </p>
+          <ul>
+            <li><strong>Session liveness</strong> &mdash; <code>last_activity_at</code> column + trigger, 7-day sweep for long-lived sessions</li>
+            <li><strong>Overview source tracking</strong> &mdash; <code>scan</code> vs <code>manual</code> column replaces fragile length heuristic</li>
+            <li><strong>Atomic dedup</strong> &mdash; observation insert uses <code>INSERT...WHERE NOT EXISTS</code> (no TOCTOU gap)</li>
+            <li><strong>Refresh diagnostics</strong> &mdash; full output on failure instead of truncated tail</li>
+          </ul>
+        </div>
+      </section>
+
       <footer>
-        Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
+        v2.0.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
       </footer>
     </main>
   </body>
