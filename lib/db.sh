@@ -14,15 +14,45 @@ PRAGMA trusted_schema=ON;
 .output stdout"
 
 eagle_db() {
-    { echo "$EAGLE_DB_SETUP"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
+    local _eagle_db_err
+    _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_err.$$")
+    local _eagle_db_out
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    local _eagle_db_rc=$?
+    if [ -s "$_eagle_db_err" ]; then
+        cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null
+    fi
+    rm -f "$_eagle_db_err" 2>/dev/null
+    [ -n "$_eagle_db_out" ] && printf '%s\n' "$_eagle_db_out"
+    return $_eagle_db_rc
 }
 
 eagle_db_pipe() {
-    { echo "$EAGLE_DB_SETUP"; echo ".bail on"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
+    local _eagle_db_err
+    _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_pipe_err.$$")
+    local _eagle_db_out
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".bail on"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    local _eagle_db_rc=$?
+    if [ -s "$_eagle_db_err" ]; then
+        cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null
+    fi
+    rm -f "$_eagle_db_err" 2>/dev/null
+    [ -n "$_eagle_db_out" ] && printf '%s\n' "$_eagle_db_out"
+    return $_eagle_db_rc
 }
 
 eagle_db_json() {
-    { echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>>"$EAGLE_MEM_LOG"
+    local _eagle_db_err
+    _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_json_err.$$")
+    local _eagle_db_out
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    local _eagle_db_rc=$?
+    if [ -s "$_eagle_db_err" ]; then
+        cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null
+    fi
+    rm -f "$_eagle_db_err" 2>/dev/null
+    [ -n "$_eagle_db_out" ] && printf '%s\n' "$_eagle_db_out"
+    return $_eagle_db_rc
 }
 
 eagle_ensure_db() {
@@ -615,7 +645,7 @@ eagle_add_feature_smoke_test() {
     local command; command=$(eagle_sql_escape "$2")
     local description; description=$(eagle_sql_escape "${3:-}")
 
-    eagle_db "INSERT INTO feature_smoke_tests (feature_id, command, description)
+    eagle_db "INSERT OR IGNORE INTO feature_smoke_tests (feature_id, command, description)
         VALUES ($feature_id, '$command', '$description');"
 }
 
@@ -690,6 +720,7 @@ eagle_find_features_for_file() {
     local file_path="$2"
     local fname; fname=$(basename "$file_path")
     local fname_esc; fname_esc=$(eagle_sql_escape "$fname")
+    local fname_like; fname_like=$(eagle_like_escape "$fname_esc")
 
     eagle_db "SELECT f.name, f.description, f.last_verified_at,
         ff.role,
@@ -703,7 +734,7 @@ eagle_find_features_for_file() {
         JOIN feature_files ff ON ff.feature_id = f.id
         WHERE f.project = '$project'
         AND f.status = 'active'
-        AND (ff.file_path LIKE '%$fname_esc' OR ff.file_path LIKE '%$fname_esc%')
+        AND (ff.file_path LIKE '%$fname_like' ESCAPE '\\' OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\')
         ORDER BY f.updated_at DESC
         LIMIT 3;"
 }

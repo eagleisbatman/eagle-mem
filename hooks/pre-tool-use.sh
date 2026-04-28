@@ -49,6 +49,7 @@ case "$cmd" in
                     [ -z "$changed_file" ] && continue
                     fname=$(basename "$changed_file")
                     fname_esc=$(eagle_sql_escape "$fname")
+                    fname_like=$(eagle_like_escape "$fname_esc")
 
                     feature_hits=$(eagle_db "SELECT DISTINCT f.name,
                         (SELECT GROUP_CONCAT(fst.command, '; ')
@@ -60,7 +61,7 @@ case "$cmd" in
                         JOIN feature_files ff ON ff.feature_id = f.id
                         WHERE f.project = '$p_esc'
                         AND f.status = 'active'
-                        AND (ff.file_path LIKE '%$fname_esc' OR ff.file_path LIKE '%$fname_esc%');")
+                        AND (ff.file_path LIKE '%$fname_like' ESCAPE '\\' OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\');")
 
                     while IFS='|' read -r feat_name feat_smoke feat_deps feat_verified; do
                         [ -z "$feat_name" ] && continue

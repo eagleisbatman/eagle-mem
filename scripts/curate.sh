@@ -213,6 +213,16 @@ If no rules needed, output: NONE"
                         max_lines=$(echo "$max_lines" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
                         reason=$(echo "$reason" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
+                        # Guard: skip malformed lines missing required fields
+                        if [ -z "$pattern" ] || [ -z "$strategy" ]; then
+                            eagle_log "WARN" "Curator: skipping malformed RULE line: $line"
+                            continue
+                        fi
+                        case "$strategy" in summary|truncate) ;; *)
+                            eagle_log "WARN" "Curator: skipping RULE with invalid strategy '$strategy'"
+                            continue
+                        ;; esac
+
                         [ "$max_lines" = "-" ] && max_lines=""
 
                         if [ "$DRY_RUN" -eq 1 ]; then
@@ -291,6 +301,12 @@ Rules:
                     fname=$(echo "$fname" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
                     fdesc=$(echo "$fdesc" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
                     ffiles=$(echo "$ffiles" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+                    # Guard: skip malformed lines missing required name
+                    if [ -z "$fname" ]; then
+                        eagle_log "WARN" "Curator: skipping malformed FEATURE line: $line"
+                        continue
+                    fi
 
                     if [ "$DRY_RUN" -eq 1 ]; then
                         eagle_info "  Feature: $fname — $fdesc"

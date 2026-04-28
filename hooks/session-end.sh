@@ -38,4 +38,7 @@ fi
 eagle_end_session "$session_id"
 eagle_log "INFO" "SessionEnd: session=$session_id marked completed"
 
+# Prune observations older than 90 days (keeps DB size bounded)
+eagle_prune_observations 90 "$project"
+
 exit 0

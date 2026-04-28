@@ -9,6 +9,9 @@ EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
 DB="$EAGLE_MEM_DIR/memory.db"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Restrict permissions: DB and config contain session data and may contain
+# residual secrets despite redaction. Owner-only access (700 dir, 600 files).
+umask 077
 mkdir -p "$EAGLE_MEM_DIR"
 
 run_migration() {

@@ -18,7 +18,7 @@ eagle_header "Uninstall"
 # ─── Remove hooks from settings.json ──────────────────────
 
 if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
-    for event in SessionStart Stop PostToolUse SessionEnd UserPromptSubmit; do
+    for event in SessionStart Stop PostToolUse PreToolUse SessionEnd UserPromptSubmit; do
         if jq -e ".hooks.${event}" "$SETTINGS" &>/dev/null; then
             tmp=$(mktemp)
             jq ".hooks.${event} = [.hooks.${event}[]? | select(any(.hooks[]?; .command | contains(\"eagle-mem\")) | not)]" "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"

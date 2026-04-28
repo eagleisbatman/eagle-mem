@@ -152,7 +152,10 @@ eagle_ok "Files copied to $EAGLE_MEM_DIR"
 
 # ─── Run migrations ────────────────────────────────────────
 
-"$EAGLE_MEM_DIR/db/migrate.sh" 2>/dev/null | grep -v -E '^(wal|5000|Eagle Mem database)$' > /dev/null
+if ! "$EAGLE_MEM_DIR/db/migrate.sh" 2>/dev/null; then
+    eagle_err "Database migration failed"
+    exit 1
+fi
 eagle_ok "Database ready"
 
 # ─── Patch settings.json ───────────────────────────────────
@@ -242,7 +245,7 @@ else
         echo ""
         eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
     else
-        eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+        eagle_ok "Statusline ${DIM}(existing — cannot auto-patch; add Eagle Mem manually)${RESET}"
     fi
 fi
 

@@ -50,19 +50,30 @@ eagle_config_set() {
     local key="$2"
     local value="$3"
 
+    # Validate section/key are alphanumeric+underscore (safe for grep/sed patterns)
+    if [[ ! "$section" =~ ^[A-Za-z0-9_-]+$ ]] || [[ ! "$key" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        eagle_log "ERROR" "config_set: invalid section/key: [$section] $key"
+        return 1
+    fi
+
     if [ ! -f "$EAGLE_CONFIG_FILE" ]; then
         eagle_config_init
     fi
 
+    # Escape sed metacharacters in value to prevent injection via |, &, \, /
+    local safe_value
+    safe_value=$(printf '%s' "$value" | sed 's/[|&/\]/\\&/g')
+
     if grep -q "^\[${section}\]" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
         if grep -q "^[[:space:]]*${key}[[:space:]]*=" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
-            sed -i '' "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${value}\"|" "$EAGLE_CONFIG_FILE"
+            sed -i '' "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${safe_value}\"|" "$EAGLE_CONFIG_FILE"
         else
             sed -i '' "/^\[${section}\]/a\\
-${key} = \"${value}\"
+${key} = \"${safe_value}\"
 " "$EAGLE_CONFIG_FILE"
         fi
     else
+        # printf is safe — no sed interpolation needed for append
         printf '\n[%s]\n%s = "%s"\n' "$section" "$key" "$value" >> "$EAGLE_CONFIG_FILE"
     fi
 }
@@ -115,7 +126,10 @@ eagle_config_init() {
         model="gpt-4o-mini"
     fi
 
-    cat > "$EAGLE_CONFIG_FILE" << TOML
+    # Create config with restrictive permissions from the start (no TOCTOU window)
+    (
+        umask 077
+        cat > "$EAGLE_CONFIG_FILE" << TOML
 # Eagle Mem configuration
 # Docs: https://github.com/eagleisbatman/eagle-mem
 
@@ -144,7 +158,7 @@ schedule = "manual"
 # Additional secret patterns (regex) beyond built-in defaults
 # extra_patterns = ["MY_CUSTOM_SECRET_.*"]
 TOML
-
+    )
     eagle_log "INFO" "Config initialized: provider=$provider model=$model"
 }
 
@@ -236,11 +250,12 @@ _eagle_call_anthropic() {
             messages: [{role: "user", content: $prompt}]
         }')
 
+    # Pass API key via config stdin to avoid exposing it in process list (ps aux)
     local response
     response=$(curl -sf "https://api.anthropic.com/v1/messages" \
         --connect-timeout 5 \
         --max-time 120 \
-        -H "x-api-key: ${api_key}" \
+        -K <(printf 'header = "x-api-key: %s"' "$api_key") \
         -H "anthropic-version: 2023-06-01" \
         -H "content-type: application/json" \
         -d "$body" 2>/dev/null)
@@ -280,11 +295,12 @@ _eagle_call_openai() {
             ]
         }')
 
+    # Pass API key via config stdin to avoid exposing it in process list (ps aux)
     local response
     response=$(curl -sf "https://api.openai.com/v1/chat/completions" \
         --connect-timeout 5 \
         --max-time 120 \
-        -H "Authorization: Bearer ${api_key}" \
+        -K <(printf 'header = "Authorization: Bearer %s"' "$api_key") \
         -H "content-type: application/json" \
         -d "$body" 2>/dev/null)
 

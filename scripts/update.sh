@@ -46,7 +46,11 @@ eagle_ok "Files updated"
 
 # ─── Run pending migrations ────────────────────────────────
 
-migration_output=$("$EAGLE_MEM_DIR/db/migrate.sh" 2>/dev/null | grep -v -E '^(wal|5000)$')
+migration_output=$("$EAGLE_MEM_DIR/db/migrate.sh" 2>&1) || {
+    eagle_err "Database migration failed"
+    eagle_err "$migration_output"
+    exit 1
+}
 if echo "$migration_output" | grep -q "applied:"; then
     echo "$migration_output" | grep "applied:" | while read -r line; do
         eagle_ok "Migration: ${line#*applied: }"

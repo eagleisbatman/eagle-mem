@@ -154,8 +154,11 @@ key_files=$(echo "$key_files" | eagle_redact)
 # ─── Write to database ─────────────────────────────────────
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
-    eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files"
-    eagle_log "INFO" "Stop: summary saved for session=$session_id"
+    if eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files"; then
+        eagle_log "INFO" "Stop: summary saved for session=$session_id"
+    else
+        eagle_log "ERROR" "Stop: summary insert FAILED for session=$session_id — check DB constraints"
+    fi
 fi
 
 exit 0

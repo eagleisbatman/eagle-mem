@@ -13,6 +13,10 @@ EAGLE_SKILLS_DIR="$HOME/.claude/skills"
 eagle_log() {
     local level="$1"
     shift
+    # Ensure log file is owner-only (may contain debug data)
+    if [ ! -f "$EAGLE_MEM_LOG" ]; then
+        touch "$EAGLE_MEM_LOG" 2>/dev/null && chmod 600 "$EAGLE_MEM_LOG" 2>/dev/null
+    fi
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [$level] $*" >> "$EAGLE_MEM_LOG" 2>/dev/null || true
 }
 
@@ -42,6 +46,12 @@ eagle_fts_sanitize() {
     printf '%s' "$1" | sed 's/[*"(){}^~:]/  /g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
+# Escape SQL LIKE wildcards (% and _) so literal filenames match exactly.
+# Apply AFTER eagle_sql_escape, since this only handles LIKE metacharacters.
+eagle_like_escape() {
+    printf '%s' "$1" | sed 's/%/\\%/g; s/_/\\_/g'
+}
+
 # Validate a session ID is safe for use in file paths (no traversal).
 # Claude Code session IDs are UUIDs or hex strings — reject anything else.
 eagle_validate_session_id() {
@@ -64,21 +74,34 @@ eagle_read_stdin() {
 # Stripe/AWS/GitHub/Anthropic/OpenAI key patterns, named env vars.
 eagle_redact() {
     sed -E \
-        -e 's/(Bearer )[^ ]*/\1[REDACTED]/gi' \
-        -e 's/(api[_-]?key[= :])[^ ]*/\1[REDACTED]/gi' \
-        -e 's/(password[= :])[^ ]*/\1[REDACTED]/gi' \
-        -e 's/(secret[= :])[^ ]*/\1[REDACTED]/gi' \
-        -e 's/(token[= :])[^ ]*/\1[REDACTED]/gi' \
-        -e 's/(Authorization: )[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(Bearer )[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(api[_-]?key[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(password[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(secret[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(token[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(Authorization: )[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(client_secret[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(private_key[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
+        -e 's/(access_token[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
         -e 's/sk_live_[A-Za-z0-9]+/[REDACTED]/g' \
         -e 's/sk_test_[A-Za-z0-9]+/[REDACTED]/g' \
+        -e 's/whsec_[A-Za-z0-9]+/[REDACTED]/g' \
         -e 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' \
         -e 's/ghp_[A-Za-z0-9]{36}/[REDACTED]/g' \
         -e 's/gho_[A-Za-z0-9]{36}/[REDACTED]/g' \
+        -e 's/glpat-[A-Za-z0-9_-]{20,}/[REDACTED]/g' \
         -e 's/sk-ant-[A-Za-z0-9_-]+/[REDACTED]/g' \
         -e 's/sk-[A-Za-z0-9]{20,}/[REDACTED]/g' \
-        -e 's/(ANTHROPIC_API_KEY[= :])[^ ]*/\1[REDACTED]/g' \
-        -e 's/(OPENAI_API_KEY[= :])[^ ]*/\1[REDACTED]/g'
+        -e 's/AIza[0-9A-Za-z_-]{35}/[REDACTED]/g' \
+        -e 's/xox[abps]-[A-Za-z0-9-]+/[REDACTED]/g' \
+        -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED_JWT]/g' \
+        -e 's|(https?://[^/:]+:)[^@]+(@)|\1[REDACTED]\2|g' \
+        -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/[REDACTED_PRIVATE_KEY]/g' \
+        -e 's/(ANTHROPIC_API_KEY[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
+        -e 's/(OPENAI_API_KEY[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
+        -e 's/(GOOGLE_API_KEY[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
+        -e 's/(SLACK_TOKEN[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
+        -e 's/(DATABASE_URL[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g'
 }
 
 # Collect project files into a destination file.

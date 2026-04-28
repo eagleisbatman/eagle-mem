@@ -31,6 +31,10 @@ esac
 
 project=$(eagle_project_from_cwd "$cwd")
 
+# Ensure session row exists before inserting observations (FK constraint).
+# PostToolUse can race SessionStart — the session row might not exist yet.
+eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
+
 files_read="[]"
 files_modified="[]"
 tool_summary=""
@@ -237,6 +241,8 @@ case "$tool_name" in
         ;;
 esac
 
-eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category"
+if ! eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category"; then
+    eagle_log "ERROR" "PostToolUse: observation insert failed for session=$session_id tool=$tool_name"
+fi
 
 exit 0
