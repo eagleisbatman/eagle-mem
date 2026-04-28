@@ -28,6 +28,8 @@ case "$command" in
     prune)      bash "$SCRIPTS_DIR/prune.sh" "$@" ;;
     memories)   bash "$SCRIPTS_DIR/memories.sh" "$@" ;;
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
+    curate)     bash "$SCRIPTS_DIR/curate.sh" "$@" ;;
+    feature)    bash "$SCRIPTS_DIR/feature.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)
