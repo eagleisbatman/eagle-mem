@@ -29,6 +29,8 @@ project=$(eagle_project_from_cwd "$cwd")
 # Skip ephemeral directories (tmp, Downloads, etc.) — no tracking
 [ -z "$project" ] && exit 0
 
+p_esc=$(eagle_sql_escape "$project")
+
 eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type"
 
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"

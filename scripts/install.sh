@@ -142,7 +142,7 @@ cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
 cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
 cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
-cp "$PACKAGE_DIR"/scripts/statusline-em.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
+cp "$PACKAGE_DIR"/scripts/*.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
 
 chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
 chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh

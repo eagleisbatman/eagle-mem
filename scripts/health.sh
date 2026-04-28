@@ -13,8 +13,6 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/provider.sh"
 
-eagle_header "Health Check"
-
 project=""
 JSON_OUT=0
 
@@ -25,6 +23,13 @@ while [ $# -gt 0 ]; do
         *) shift ;;
     esac
 done
+
+# In JSON mode, redirect all text output to stderr so stdout is clean JSON
+if [ "$JSON_OUT" -eq 1 ]; then
+    exec 3>&1 1>&2
+fi
+
+eagle_header "Health Check"
 
 if [ -z "$project" ]; then
     project=$(eagle_project_from_cwd "$(pwd)")
@@ -214,5 +219,5 @@ if [ "$JSON_OUT" -eq 1 ]; then
         '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
           enrichment:{total:$total_summaries, enriched:$enriched_summaries},
           features:$features, command_rules:$command_rules,
-          provider:$provider, noise_pct:$noise_pct}'
+          provider:$provider, noise_pct:$noise_pct}' >&3
 fi
