@@ -27,6 +27,7 @@ cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 project=$(eagle_project_from_cwd "$cwd")
+[ -z "$project" ] && exit 0
 
 context=""
 

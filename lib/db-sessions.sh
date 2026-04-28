@@ -66,3 +66,34 @@ eagle_count_session_summaries() {
     local sid; sid=$(eagle_sql_escape "$1")
     eagle_db "SELECT COUNT(*) FROM summaries WHERE session_id = '$sid';"
 }
+
+eagle_meta_get() {
+    local key; key=$(eagle_sql_escape "$1")
+    local project="${2:-}"
+    if [ -n "$project" ]; then
+        local p_esc; p_esc=$(eagle_sql_escape "$project")
+        eagle_db "SELECT value FROM eagle_meta WHERE key = '$key' AND project = '$p_esc' LIMIT 1;"
+    else
+        eagle_db "SELECT value FROM eagle_meta WHERE key = '$key' AND project IS NULL LIMIT 1;"
+    fi
+}
+
+eagle_meta_set() {
+    local key; key=$(eagle_sql_escape "$1")
+    local value; value=$(eagle_sql_escape "$2")
+    local project="${3:-}"
+    if [ -n "$project" ]; then
+        local p_esc; p_esc=$(eagle_sql_escape "$project")
+        eagle_db "INSERT INTO eagle_meta (key, project, value) VALUES ('$key', '$p_esc', '$value')
+                  ON CONFLICT(key, project) DO UPDATE SET value = excluded.value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
+    else
+        eagle_db "INSERT INTO eagle_meta (key, project, value) VALUES ('$key', NULL, '$value')
+                  ON CONFLICT(key, project) DO UPDATE SET value = excluded.value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
+    fi
+}
+
+eagle_count_sessions_since() {
+    local project; project=$(eagle_sql_escape "$1")
+    local since; since=$(eagle_sql_escape "$2")
+    eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$project' AND started_at > '$since';"
+}

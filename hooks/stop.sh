@@ -12,6 +12,7 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
+. "$LIB_DIR/provider.sh"
 
 eagle_ensure_db
 
@@ -29,6 +30,7 @@ agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 [ -n "$agent_type" ] && [ "$agent_type" != "main" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
+[ -z "$project" ] && exit 0
 
 eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path"
 
@@ -111,21 +113,25 @@ if [ -n "$summary_block" ]; then
     eagle_log "INFO" "Stop: parsed eagle-summary block"
 fi
 
-# ─── Heuristic fallback: extract from tool calls ───────────
+# ─── Guard: skip fallback work if summary already exists ──
+# Stop fires every assistant turn. Without this, the heuristic and LLM
+# enrichment blocks fire on turn 2+ — wasting tokens and producing
+# empty inserts that get rejected.
 
-if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-    # Skip heuristic if we already have a summary for this session.
-    # Stop fires every turn -- without this guard, each turn creates a duplicate row.
+existing_count=0
+if [ -z "$summary_block" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
     existing_count=$(eagle_count_session_summaries "$session_id")
-    if [ "${existing_count:-0}" -gt 0 ]; then
-        eagle_log "INFO" "Stop: skipping heuristic — summary already exists for session=$session_id (count=$existing_count)"
-    else
+fi
+
+if [ -z "$summary_block" ] && [ "${existing_count:-0}" -eq 0 ]; then
+
+    # ─── Heuristic fallback: extract from tool calls ───────────
+
+    if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
         eagle_log "INFO" "Stop: no eagle-summary found, using heuristic fallback"
 
-        # Extract first user prompt as "request"
         request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
 
-        # Extract files from Read/Write/Edit tool calls
         heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
         heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
 
@@ -138,6 +144,52 @@ if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; 
 
         completed="(auto-captured from tool usage)"
     fi
+
+    # ─── LLM enrichment: extract decisions/gotchas/key_files ──
+
+    if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
+        provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
+        if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
+            excerpt=$(echo "$text_content" | tail -c 2000)
+
+            enrich_prompt="Extract from this Claude Code session excerpt:
+1. DECISIONS: architectural or design choices made (with WHY). One per line.
+2. GOTCHAS: non-obvious pitfalls, bugs found, things that surprised. One per line.
+3. KEY_FILES: important files that were central to the work. One per line.
+
+SESSION EXCERPT:
+$excerpt
+
+Output EXACTLY this format (omit sections with nothing to report):
+DECISIONS:
+- <decision> — why: <reason>
+GOTCHAS:
+- <gotcha>
+KEY_FILES:
+- <filepath>"
+
+            enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 512 2>/dev/null) || true
+
+            if [ -n "$enrich_result" ]; then
+                extract_section() {
+                    local result="$1" header="$2"
+                    echo "$result" | awk -v h="$header:" '
+                        $0 == h || $0 ~ "^"h { found=1; next }
+                        found && /^[A-Z_]+:/ { exit }
+                        found && /^- / { sub(/^- /, ""); lines[++n] = $0 }
+                        END { for (i=1; i<=n; i++) { printf "%s", lines[i]; if (i<n) printf "; " } }
+                    '
+                }
+                decisions=$(extract_section "$enrich_result" "DECISIONS")
+                gotchas=$(extract_section "$enrich_result" "GOTCHAS")
+                key_files=$(extract_section "$enrich_result" "KEY_FILES")
+                [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ] && eagle_log "INFO" "Stop: LLM enrichment extracted for session=$session_id"
+            fi
+        fi
+    fi
+
+elif [ -z "$summary_block" ] && [ "${existing_count:-0}" -gt 0 ]; then
+    eagle_log "INFO" "Stop: skipping fallback — summary already exists for session=$session_id (count=$existing_count)"
 fi
 
 # ─── Redact secrets from all text fields before storage ────

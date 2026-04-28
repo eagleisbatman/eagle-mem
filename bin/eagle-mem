@@ -30,6 +30,7 @@ case "$command" in
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     curate)     bash "$SCRIPTS_DIR/curate.sh" "$@" ;;
     feature)    bash "$SCRIPTS_DIR/feature.sh" "$@" ;;
+    health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)

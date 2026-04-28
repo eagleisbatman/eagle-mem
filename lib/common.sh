@@ -25,6 +25,18 @@ eagle_log() {
 
 eagle_project_from_cwd() {
     local cwd="${1:-$(pwd)}"
+    local resolved="$cwd"
+
+    # Resolve /private/tmp → /tmp on macOS
+    case "$resolved" in /private/tmp*) resolved="/tmp${resolved#/private/tmp}" ;; esac
+
+    # Skip ephemeral directories — return empty so hooks early-exit
+    case "$resolved" in
+        /tmp|/tmp/*|/var/tmp|/var/tmp/*) echo ""; return ;;
+        "$HOME/Downloads"|"$HOME/Downloads/"*) echo ""; return ;;
+        "$HOME/Desktop"|"$HOME/Desktop/"*) echo ""; return ;;
+    esac
+
     local git_root
     git_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
     if [ -n "$git_root" ]; then

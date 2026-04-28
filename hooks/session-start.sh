@@ -26,6 +26,9 @@ model=$(echo "$input" | jq -r '.model // empty')
 
 project=$(eagle_project_from_cwd "$cwd")
 
+# Skip ephemeral directories (tmp, Downloads, etc.) — no tracking
+[ -z "$project" ] && exit 0
+
 eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type"
 
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
@@ -130,6 +133,15 @@ Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent m
 
 if [ -n "$update_notice" ]; then
     context+="=== EAGLE MEM — $update_notice ===
+
+"
+fi
+
+# Nudge if last session lacked enrichment
+last_enriched=$(eagle_last_session_enriched "$project")
+if [ "${last_enriched:-1}" = "0" ] && [ "$stat_with_summaries" -gt 0 ]; then
+    context+="=== EAGLE MEM — Enrichment Reminder ===
+The previous session's summary did NOT include decisions, gotchas, or key_files. These fields power Eagle Mem's self-learning (feature discovery, anti-regression, command intelligence). Please emit an <eagle-summary> block at the end of this session with these fields populated.
 
 "
 fi

@@ -130,6 +130,17 @@ eagle_search_decisions_for_file() {
         LIMIT 1;"
 }
 
+eagle_last_session_enriched() {
+    local project; project=$(eagle_sql_escape "$1")
+    eagle_db "SELECT CASE
+        WHEN (decisions IS NOT NULL AND decisions != '')
+          OR (gotchas IS NOT NULL AND gotchas != '')
+          OR (key_files IS NOT NULL AND key_files != '')
+        THEN 1 ELSE 0 END
+        FROM summaries WHERE project = '$project'
+        ORDER BY created_at DESC LIMIT 1;"
+}
+
 eagle_search_stale_memories() {
     local project; project=$(eagle_sql_escape "$1")
     local fts_query; fts_query=$(eagle_sql_escape "$2")

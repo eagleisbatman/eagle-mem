@@ -361,5 +361,6 @@ echo ""
 if [ "$DRY_RUN" -eq 1 ]; then
     eagle_footer "Dry run complete. Run without --dry-run to apply changes."
 else
+    eagle_meta_set "last_curated_at" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$project"
     eagle_footer "Curation complete for '$project'."
 fi

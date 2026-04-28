@@ -31,6 +31,7 @@ esac
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
+[ -z "$project" ] && exit 0
 
 # Ensure session row exists before inserting observations (FK constraint).
 # PostToolUse can race SessionStart — the session row might not exist yet.

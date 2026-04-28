@@ -27,6 +27,7 @@ echo -e "    ${CYAN}prune${RESET}       Remove old observations and orphaned chu
 echo -e "    ${CYAN}config${RESET}      View or change LLM provider settings"
 echo -e "    ${CYAN}curate${RESET}      Run the self-learning curator (LLM-powered analysis)"
 echo -e "    ${CYAN}feature${RESET}     Manage feature graph (list/show/verify/add)"
+echo -e "    ${CYAN}health${RESET}      Diagnose self-learning pipeline health"
 echo -e "    ${CYAN}install${RESET}     First-time setup: hooks, database, skills"
 echo -e "    ${CYAN}update${RESET}      Re-deploy hooks and run migrations"
 echo -e "    ${CYAN}uninstall${RESET}   Remove hooks and optionally delete data"

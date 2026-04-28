@@ -151,8 +151,9 @@ model = "claude-haiku-4-5-20251001"
 model = "gpt-4o-mini"
 
 [curator]
-# How often the curator runs: "manual", "daily", "weekly"
+# "auto" = triggers at session end after min_sessions; "manual" = CLI only
 schedule = "manual"
+min_sessions = 5
 
 [redaction]
 # Additional secret patterns (regex) beyond built-in defaults
