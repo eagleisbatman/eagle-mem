@@ -67,7 +67,7 @@ parse_field() {
         $0 ~ "^"f":" {
             sub("^"f":[[:space:]]*", ""); found=1; val=$0; next
         }
-        found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes):/ { exit }
+        found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes|decisions|gotchas|key_files):/ { exit }
         found { val = val " " $0 }
         END { if (found) print val }
     '
@@ -81,6 +81,9 @@ next_steps=""
 files_read="[]"
 files_modified="[]"
 notes=""
+decisions=""
+gotchas=""
+key_files=""
 
 if [ -n "$summary_block" ]; then
     request=$(parse_field "$summary_block" "request")
@@ -88,6 +91,9 @@ if [ -n "$summary_block" ]; then
     learned=$(parse_field "$summary_block" "learned")
     completed=$(parse_field "$summary_block" "completed")
     next_steps=$(parse_field "$summary_block" "next_steps")
+    decisions=$(parse_field "$summary_block" "decisions")
+    gotchas=$(parse_field "$summary_block" "gotchas")
+    key_files=$(parse_field "$summary_block" "key_files")
 
     raw_fr=$(parse_field "$summary_block" "files_read")
     raw_fm=$(parse_field "$summary_block" "files_modified")
@@ -137,7 +143,7 @@ fi
 # ─── Write to database ─────────────────────────────────────
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
-    eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes"
+    eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files"
     eagle_log "INFO" "Stop: summary saved for session=$session_id"
 fi
 

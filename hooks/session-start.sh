@@ -66,12 +66,68 @@ if [ -f "$version_file" ] && [ -s "$version_file" ]; then
     fi
 fi
 
+# ─── Gather stats ───────────────────────────────────────────
+
+p_esc=$(eagle_sql_escape "$project")
+
+stat_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p_esc';")
+stat_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc';")
+stat_memories=$(eagle_db "SELECT COUNT(*) FROM claude_memories WHERE project = '$p_esc';")
+stat_tasks_pending=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'pending';")
+stat_tasks_progress=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'in_progress';")
+stat_tasks_done=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'completed';")
+stat_chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$p_esc';")
+stat_observations=$(eagle_db "SELECT COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project = '$p_esc');")
+stat_plans=$(eagle_db "SELECT COUNT(*) FROM claude_plans WHERE project = '$p_esc';")
+stat_last_active=$(eagle_db "SELECT COALESCE(MAX(date(COALESCE(last_activity_at, started_at))), 'never') FROM sessions WHERE project = '$p_esc';")
+stat_last_summary=$(eagle_db "SELECT request FROM summaries WHERE project = '$p_esc' ORDER BY created_at DESC LIMIT 1;")
+
+# Trim to defaults
+stat_sessions="${stat_sessions:-0}"
+stat_summaries="${stat_summaries:-0}"
+stat_memories="${stat_memories:-0}"
+stat_tasks_pending="${stat_tasks_pending:-0}"
+stat_tasks_progress="${stat_tasks_progress:-0}"
+stat_tasks_done="${stat_tasks_done:-0}"
+stat_chunks="${stat_chunks:-0}"
+stat_observations="${stat_observations:-0}"
+stat_plans="${stat_plans:-0}"
+
+# Build task summary line
+task_parts=""
+[ "$stat_tasks_progress" -gt 0 ] && task_parts="${stat_tasks_progress} in progress"
+if [ "$stat_tasks_pending" -gt 0 ]; then
+    [ -n "$task_parts" ] && task_parts+=", "
+    task_parts+="${stat_tasks_pending} pending"
+fi
+if [ "$stat_tasks_done" -gt 0 ]; then
+    [ -n "$task_parts" ] && task_parts+=", "
+    task_parts+="${stat_tasks_done} completed"
+fi
+[ -z "$task_parts" ] && task_parts="none"
+
+# Truncate last summary for display
+stat_last_display="${stat_last_summary:0:60}"
+[ ${#stat_last_summary} -gt 60 ] && stat_last_display+="..."
+[ -z "$stat_last_display" ] && stat_last_display="(no sessions yet)"
+
 # ─── Build context injection ────────────────────────────────
 
-eagle_logo="█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
-██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █"
+eagle_banner="======================================
+       Eagle Mem Loaded
+======================================
+ Project      | $project
+ Sessions     | $stat_sessions total ($stat_summaries with summaries)
+ Memories     | $stat_memories stored
+ Plans        | $stat_plans saved
+ Tasks        | $task_parts
+ Code Index   | $stat_chunks chunks indexed
+ Observations | $stat_observations captured
+ Last Active  | $stat_last_active
+ Last Work    | $stat_last_display
+======================================"
 
-context="$eagle_logo
+context="$eagle_banner
 
 === EAGLE MEM — Active (trigger: $source_type) ===
 Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
@@ -105,7 +161,7 @@ if [ -n "$recent" ]; then
     context+="=== EAGLE MEM ===
 Recent sessions for project '$project':
 "
-    while IFS='|' read -r request completed learned next_steps created_at; do
+    while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files; do
         [ -z "$request" ] && [ -z "$completed" ] && continue
         context+="
 --- $created_at ---"
@@ -115,6 +171,12 @@ Request: $request"
 Completed: $completed"
         [ -n "$learned" ] && context+="
 Learned: $learned"
+        [ -n "$decisions" ] && context+="
+Decisions: $decisions"
+        [ -n "$gotchas" ] && context+="
+Gotchas: $gotchas"
+        [ -n "$key_files" ] && context+="
+Key files: $key_files"
         [ -n "$next_steps" ] && context+="
 Next steps: $next_steps"
     done <<< "$recent"
@@ -122,17 +184,32 @@ Next steps: $next_steps"
 "
 fi
 
-# ─── Mirrored Claude memories ──────────────────────────────
+# ─── Mirrored Claude memories (with age) ─────────────────
 
-memories=$(eagle_list_claude_memories "$project" 5)
+memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at,
+    CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
+    FROM claude_memories
+    WHERE project = '$p_esc'
+    ORDER BY updated_at DESC
+    LIMIT 5;")
 if [ -n "$memories" ]; then
     context+="
 === EAGLE MEM — Memories ===
 Recent memories for '$project':
 "
-    while IFS='|' read -r mname mtype mdesc _fpath _updated; do
+    while IFS='|' read -r mname mtype mdesc _fpath _updated days_ago; do
         [ -z "$mname" ] && continue
-        context+="  - [$mtype] $mname: $mdesc
+        age_label=""
+        if [ -n "$days_ago" ] && [ "$days_ago" -gt 0 ] 2>/dev/null; then
+            if [ "$days_ago" -eq 1 ]; then
+                age_label=" (1 day ago)"
+            else
+                age_label=" (${days_ago} days ago)"
+            fi
+        else
+            age_label=" (today)"
+        fi
+        context+="  - [$mtype] $mname: $mdesc$age_label
 "
     done <<< "$memories"
 fi
@@ -155,7 +232,7 @@ fi
 # ─── Claude Code tasks ───────────────────────────────────
 
 synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
-    WHERE project = '$(eagle_sql_escape "$project")'
+    WHERE project = '$p_esc'
     AND status IN ('in_progress', 'pending')
     AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
     ORDER BY
@@ -183,29 +260,62 @@ context+="
 === EAGLE MEM INSTRUCTIONS ===
 You have persistent memory powered by Eagle Mem. When you recall context from a previous session or use injected memory, attribute it: \"From Eagle Mem:\" or \"Eagle Mem recalls:\". This helps the user understand where the context came from.
 
-IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded using this exact format:
+IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded by reproducing this exact banner:
 
 \`\`\`
-$eagle_logo
-
-Project: <project name>
-Sessions: N recent | Memories: N | Tasks: N pending
-Last: [one-line summary of most recent session]
+$eagle_banner
 \`\`\`
 
-This gives the user visibility into the context you received.
+This gives the user visibility into the full context Eagle Mem loaded for this session.
 
-Before your final response in this session, emit a summary block:
+MEMORY FRESHNESS: The memories above include age indicators. If you make a change (edit a file, update a config, change a pattern) that contradicts what a loaded memory says, you MUST update that memory file immediately. Read the memory file, edit it to reflect the new reality, and the PostToolUse hook will sync the update to Eagle Mem. Stale memories mislead future sessions — keeping them current is as important as writing good code.
+
+=== EAGLE MEM — SESSION SUMMARY (MANDATORY) ===
+You MUST emit an <eagle-summary> block before your FINAL response in this session. This is how Eagle Mem captures what happened — without it, the next session starts blind and wastes tokens rediscovering context.
+
+FORMAT — emit this block exactly. Every field is REQUIRED. Do not skip fields, do not leave them empty, do not write \"N/A\".
+
 <eagle-summary>
-request: What the user asked for
-investigated: Key files/areas explored
-learned: Non-obvious discoveries
-completed: What was accomplished
-next_steps: What should happen next
-files_read: [list of files read]
-files_modified: [list of files modified]
+request: [One sentence: what did the user ask for?]
+investigated: [Comma-separated file paths you read or explored]
+learned: [Non-obvious technical discoveries — things a future session could not guess from reading the code]
+completed: [What was accomplished — be specific about what shipped, not what was \"worked on\"]
+next_steps: [Concrete actions for the next session, not vague aspirations]
+decisions:
+  - [Choice made] Why: [the reason — what constraint or tradeoff drove this choice]
+  - [Choice made] Why: [reason]
+gotchas:
+  - [What failed, surprised, or does not work the obvious way. Be specific — \"X does not work because Y\" not just \"X was tricky\"]
+key_files:
+  - [path/to/file.ext] — [one-line role: what this file does in the context of this work]
+  - [path/to/other.ext] — [role]
+files_read: [file1, file2, ...]
+files_modified: [file1, file2, ...]
 </eagle-summary>
-This helps Eagle Mem track what happened for future sessions.
+
+EXAMPLE — this is what a well-written summary looks like:
+
+<eagle-summary>
+request: Add JWT authentication middleware to the API
+investigated: src/middleware/auth.ts, src/routes/users.ts, package.json, src/config/env.ts
+learned: express-jwt v8 changed its API — req.auth replaces req.user. The error handler must check err.name === 'UnauthorizedError', not err.status === 401.
+completed: JWT middleware deployed on all /api routes. Token validation, role-based guards, and 401/403 error responses all working. Added JWKS endpoint support for key rotation.
+next_steps: Add refresh token rotation; rate-limit the /auth/token endpoint
+decisions:
+  - Chose RS256 over HS256 for JWT signing. Why: allows key rotation via JWKS without redeploying; HS256 requires shared secret on every service.
+  - Put auth middleware at router level, not app level. Why: healthcheck and public routes must remain unauthenticated; per-router mounting is explicit about what is protected.
+gotchas:
+  - express-jwt v8 is ESM-only — require() fails silently and returns undefined. Must use dynamic import().
+  - Setting token expiry below 5 min causes refresh storms under load — the refresh endpoint itself requires a valid (but expired) token, creating a chicken-and-egg problem.
+key_files:
+  - src/middleware/auth.ts — JWT validation + role guard middleware
+  - src/config/env.ts — JWKS_URI and JWT_ISSUER environment config
+  - src/routes/users.ts — first route to use the new auth guard (reference implementation)
+files_read: [src/middleware/auth.ts, src/routes/users.ts, package.json, src/config/env.ts]
+files_modified: [src/middleware/auth.ts, src/config/env.ts, src/routes/users.ts, package.json]
+</eagle-summary>
+
+WHY THIS MATTERS: Eagle Mem re-injects this summary at the start of future sessions. The 'decisions' field prevents re-debating settled choices. The 'gotchas' field prevents repeating the same mistakes. The 'key_files' field tells the next session exactly where to start reading instead of exploring blindly. Write these fields as if you are briefing a colleague who will pick up your work tomorrow — because that is exactly what happens.
 "
 
 # Output context (plain text stdout = additionalContext for SessionStart)

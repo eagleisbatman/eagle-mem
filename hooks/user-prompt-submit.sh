@@ -52,12 +52,18 @@ context=""
 if [ -n "$results" ]; then
     context+="=== EAGLE MEM — Relevant Memory ===
 "
-    while IFS='|' read -r req completed learned _next_steps created_at _proj; do
+    while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
         context+="[$created_at] "
         [ -n "$req" ] && context+="$req"
         [ -n "$completed" ] && context+=" → $completed"
         [ -n "$learned" ] && context+=" (Learned: $learned)"
+        [ -n "$decisions" ] && context+="
+  Decisions: $decisions"
+        [ -n "$gotchas" ] && context+="
+  Gotchas: $gotchas"
+        [ -n "$key_files" ] && context+="
+  Key files: $key_files"
         context+="
 "
     done <<< "$results"

@@ -124,6 +124,40 @@ case "$tool_name" in
         ;;
 esac
 
+# ─── Stale memory hint ──────────────────────────────────
+# After editing a project file, FTS5-search memories for the filename.
+# If a memory mentions this file, remind Claude to check for staleness.
+case "$tool_name" in
+    Write|Edit)
+        if [ -n "$fp" ]; then
+            fname=$(basename "$fp")
+            fname_stem="${fname%.*}"
+            case "$fp" in
+                "$HOME/.claude/"*) ;; # skip Claude config files
+                *)
+                    if [ ${#fname_stem} -ge 3 ]; then
+                        fts_query=$(eagle_fts_sanitize "$fname_stem")
+                        if [ -n "$fts_query" ]; then
+                            fts_esc=$(eagle_sql_escape "$fts_query")
+                            p_esc=$(eagle_sql_escape "$project")
+                            stale_hit=$(eagle_db "SELECT m.memory_name
+                                FROM claude_memories m
+                                JOIN claude_memories_fts f ON f.rowid = m.id
+                                WHERE claude_memories_fts MATCH '$fts_esc'
+                                AND m.project = '$p_esc'
+                                LIMIT 1;")
+                            if [ -n "$stale_hit" ]; then
+                                stale_msg="Eagle Mem: Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, update the memory."
+                                jq -nc --arg ctx "$stale_msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
+                            fi
+                        fi
+                    fi
+                    ;;
+            esac
+        fi
+        ;;
+esac
+
 eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified"
 
 exit 0

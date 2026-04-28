@@ -85,9 +85,12 @@ eagle_insert_summary() {
     local files_read; files_read=$(eagle_sql_escape "$8")
     local files_modified; files_modified=$(eagle_sql_escape "$9")
     local notes; notes=$(eagle_sql_escape "${10:-}")
+    local decisions; decisions=$(eagle_sql_escape "${11:-}")
+    local gotchas; gotchas=$(eagle_sql_escape "${12:-}")
+    local key_files; key_files=$(eagle_sql_escape "${13:-}")
 
     eagle_db_pipe <<SQL
-INSERT INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes)
+INSERT INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files)
 VALUES (
     '$session_id',
     '$project',
@@ -98,7 +101,10 @@ VALUES (
     '$next_steps',
     '$files_read',
     '$files_modified',
-    '$notes'
+    '$notes',
+    '$decisions',
+    '$gotchas',
+    '$key_files'
 )
 ON CONFLICT(session_id) DO UPDATE SET
     project        = excluded.project,
@@ -109,7 +115,10 @@ ON CONFLICT(session_id) DO UPDATE SET
     next_steps     = COALESCE(NULLIF(excluded.next_steps, ''), summaries.next_steps),
     files_read     = COALESCE(NULLIF(excluded.files_read, '[]'), summaries.files_read),
     files_modified = COALESCE(NULLIF(excluded.files_modified, '[]'), summaries.files_modified),
-    notes          = COALESCE(NULLIF(excluded.notes, ''), summaries.notes);
+    notes          = COALESCE(NULLIF(excluded.notes, ''), summaries.notes),
+    decisions      = COALESCE(NULLIF(excluded.decisions, ''), summaries.decisions),
+    gotchas        = COALESCE(NULLIF(excluded.gotchas, ''), summaries.gotchas),
+    key_files      = COALESCE(NULLIF(excluded.key_files, ''), summaries.key_files);
 SQL
 }
 
@@ -117,7 +126,7 @@ eagle_get_recent_summaries() {
     local project; project=$(eagle_sql_escape "$1")
     local limit; limit=$(eagle_sql_int "${2:-5}")
 
-    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at
+    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.decisions, s.gotchas, s.key_files
               FROM summaries s
               WHERE s.project = '$project'
               AND s.request NOT LIKE '%<local-command-caveat>%'
@@ -137,7 +146,7 @@ eagle_search_summaries() {
         where_clause="AND s.project = '$project'"
     fi
 
-    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.project
+    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.project, s.decisions, s.gotchas, s.key_files
               FROM summaries s
               JOIN summaries_fts f ON f.rowid = s.id
               WHERE summaries_fts MATCH '$query'

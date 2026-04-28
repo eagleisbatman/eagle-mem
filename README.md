@@ -1,6 +1,7 @@
 ```
-█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
-██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
+======================================
+Eagle Mem
+======================================
 ```
 
 # Eagle Mem
@@ -21,12 +22,19 @@ eagle-mem install
 **2. Open Claude Code** in any project directory. Eagle Mem activates and shows what it loaded:
 
 ```
-█▀▀ ▄▀█ █▀▀ █   █▀▀   █▀▄▀█ █▀▀ █▀▄▀█
-██▄ █▀█ █▄█ █▄▄ ██▄   █ ▀ █ ██▄ █ ▀ █
-
-Project: my-app
-Sessions: 5 recent | Memories: 3 | Tasks: 2 pending
-Last: Added auth middleware with JWT validation
+======================================
+       Eagle Mem Loaded
+======================================
+ Project      | my-app
+ Sessions     | 42 total (18 with summaries)
+ Memories     | 7 stored
+ Plans        | 2 saved
+ Tasks        | 1 in progress, 3 pending, 12 completed
+ Code Index   | 156 chunks indexed
+ Observations | 340 captured
+ Last Active  | 2026-04-28
+ Last Work    | Added auth middleware with JWT validation
+======================================
 ```
 
 From here, everything is automatic. You don't run any commands — Eagle Mem captures session summaries, mirrors Claude's memories and tasks, and re-injects context after every `/compact` or new session.
