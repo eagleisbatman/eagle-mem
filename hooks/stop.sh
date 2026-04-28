@@ -116,7 +116,7 @@ fi
 if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
     # Skip heuristic if we already have a summary for this session.
     # Stop fires every turn -- without this guard, each turn creates a duplicate row.
-    existing_count=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE session_id = '$(eagle_sql_escape "$session_id")';")
+    existing_count=$(eagle_count_session_summaries "$session_id")
     if [ "${existing_count:-0}" -gt 0 ]; then
         eagle_log "INFO" "Stop: skipping heuristic — summary already exists for session=$session_id (count=$existing_count)"
     else

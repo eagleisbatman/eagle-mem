@@ -27,7 +27,6 @@ cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 project=$(eagle_project_from_cwd "$cwd")
-p_esc=$(eagle_sql_escape "$project")
 
 context=""
 
@@ -35,7 +34,7 @@ context=""
 
 case "$cmd" in
     *"git push"*|*"gh pr create"*)
-        has_features=$(eagle_db "SELECT COUNT(*) FROM features WHERE project = '$p_esc' AND status = 'active';")
+        has_features=$(eagle_count_active_features "$project")
         if [ "${has_features:-0}" -gt 0 ]; then
             changed_files=""
             if [ -n "$cwd" ] && [ -d "$cwd" ]; then
@@ -49,19 +48,8 @@ case "$cmd" in
                     [ -z "$changed_file" ] && continue
                     fname=$(basename "$changed_file")
                     fname_esc=$(eagle_sql_escape "$fname")
-                    fname_like=$(eagle_like_escape "$fname_esc")
 
-                    feature_hits=$(eagle_db "SELECT DISTINCT f.name,
-                        (SELECT GROUP_CONCAT(fst.command, '; ')
-                         FROM feature_smoke_tests fst WHERE fst.feature_id = f.id) as smoke,
-                        (SELECT GROUP_CONCAT(fd.target || ':' || fd.name, ', ')
-                         FROM feature_dependencies fd WHERE fd.feature_id = f.id) as deps,
-                        f.last_verified_at
-                        FROM features f
-                        JOIN feature_files ff ON ff.feature_id = f.id
-                        WHERE f.project = '$p_esc'
-                        AND f.status = 'active'
-                        AND (ff.file_path LIKE '%$fname_like' ESCAPE '\\' OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\');")
+                    feature_hits=$(eagle_find_feature_for_push "$project" "$fname_esc")
 
                     while IFS='|' read -r feat_name feat_smoke feat_deps feat_verified; do
                         [ -z "$feat_name" ] && continue
@@ -93,16 +81,8 @@ esac
 
 # Extract the base command for rule matching
 base_cmd=$(echo "$cmd" | awk '{print $1}' | sed 's|.*/||')
-cmd_esc=$(eagle_sql_escape "$base_cmd")
 
-rule=$(eagle_db "SELECT strategy, max_lines, reason
-    FROM command_rules
-    WHERE enabled = 1
-    AND (project = '$p_esc' OR project IS NULL)
-    AND ('$cmd_esc' LIKE pattern OR '$cmd_esc' = pattern)
-    ORDER BY
-        CASE WHEN project IS NOT NULL THEN 0 ELSE 1 END
-    LIMIT 1;")
+rule=$(eagle_get_command_rule "$project" "$base_cmd")
 
 if [ -n "$rule" ]; then
     IFS='|' read -r strategy max_lines reason <<< "$rule"

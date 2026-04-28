@@ -438,7 +438,7 @@ memories_sync() {
     eagle_info "Scanning for Claude Code auto-memory files..."
     echo ""
 
-    local claude_mem_root="$HOME/.claude/projects"
+    local claude_mem_root="$EAGLE_CLAUDE_PROJECTS_DIR"
     local mem_synced=0
     local mem_skipped=0
 
@@ -471,7 +471,7 @@ memories_sync() {
     eagle_info "Scanning for Claude Code plan files..."
     echo ""
 
-    local plans_dir="$HOME/.claude/plans"
+    local plans_dir="$EAGLE_CLAUDE_PLANS_DIR"
     local plan_synced=0
     local plan_skipped=0
 
@@ -504,7 +504,7 @@ memories_sync() {
     eagle_info "Scanning for Claude Code task files..."
     echo ""
 
-    local tasks_dir="$HOME/.claude/tasks"
+    local tasks_dir="$EAGLE_CLAUDE_TASKS_DIR"
     local task_synced=0
     local task_skipped=0
 

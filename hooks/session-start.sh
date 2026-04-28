@@ -33,10 +33,7 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 # ─── Sweep stuck sessions (no activity for 7 days) ─────────
 # Uses last_activity_at (updated by trigger on every observation insert)
 # so long-lived sessions with regular compactions aren't falsely abandoned
-eagle_db "UPDATE sessions SET status = 'abandoned'
-    WHERE status = 'active'
-    AND id != '$(eagle_sql_escape "$session_id")'
-    AND COALESCE(last_activity_at, started_at) < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days');"
+eagle_abandon_stale_sessions "$session_id"
 
 # ─── Version check (non-blocking) ────────────────────────────
 
@@ -68,30 +65,27 @@ fi
 
 # ─── Gather stats ───────────────────────────────────────────
 
-p_esc=$(eagle_sql_escape "$project")
+stat_sessions=0; stat_summaries=0; stat_with_summaries=0; stat_memories=0
+stat_tasks_pending=0; stat_tasks_progress=0; stat_tasks_done=0
+stat_chunks=0; stat_observations=0; stat_plans=0
+stat_last_active="never"; stat_last_summary=""
 
-stat_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p_esc';")
-stat_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc';")
-stat_memories=$(eagle_db "SELECT COUNT(*) FROM claude_memories WHERE project = '$p_esc';")
-stat_tasks_pending=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'pending';")
-stat_tasks_progress=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'in_progress';")
-stat_tasks_done=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p_esc' AND status = 'completed';")
-stat_chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$p_esc';")
-stat_observations=$(eagle_db "SELECT COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project = '$p_esc');")
-stat_plans=$(eagle_db "SELECT COUNT(*) FROM claude_plans WHERE project = '$p_esc';")
-stat_last_active=$(eagle_db "SELECT COALESCE(MAX(date(COALESCE(last_activity_at, started_at))), 'never') FROM sessions WHERE project = '$p_esc';")
-stat_last_summary=$(eagle_db "SELECT request FROM summaries WHERE project = '$p_esc' ORDER BY created_at DESC LIMIT 1;")
-
-# Trim to defaults
-stat_sessions="${stat_sessions:-0}"
-stat_summaries="${stat_summaries:-0}"
-stat_memories="${stat_memories:-0}"
-stat_tasks_pending="${stat_tasks_pending:-0}"
-stat_tasks_progress="${stat_tasks_progress:-0}"
-stat_tasks_done="${stat_tasks_done:-0}"
-stat_chunks="${stat_chunks:-0}"
-stat_observations="${stat_observations:-0}"
-stat_plans="${stat_plans:-0}"
+while IFS='|' read -r key val; do
+    case "$key" in
+        sessions)        stat_sessions="$val" ;;
+        summaries)       stat_summaries="$val" ;;
+        with_summaries)  stat_with_summaries="$val" ;;
+        memories)        stat_memories="$val" ;;
+        plans)           stat_plans="$val" ;;
+        tasks_pending)   stat_tasks_pending="$val" ;;
+        tasks_progress)  stat_tasks_progress="$val" ;;
+        tasks_done)      stat_tasks_done="$val" ;;
+        chunks)          stat_chunks="$val" ;;
+        observations)    stat_observations="$val" ;;
+        last_active)     stat_last_active="$val" ;;
+        last_summary)    stat_last_summary="$val" ;;
+    esac
+done <<< "$(eagle_get_project_stats "$project")"
 
 # Build task summary line
 task_parts=""
@@ -117,7 +111,7 @@ eagle_banner="======================================
        Eagle Mem Loaded
 ======================================
  Project      | $project
- Sessions     | $stat_sessions total ($stat_summaries with summaries)
+ Sessions     | $stat_sessions total ($stat_with_summaries with summaries)
  Memories     | $stat_memories stored
  Plans        | $stat_plans saved
  Tasks        | $task_parts

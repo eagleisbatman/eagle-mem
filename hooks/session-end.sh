@@ -25,7 +25,7 @@ project=$(eagle_project_from_cwd "$cwd")
 # Final sweep: re-capture all task files to catch status changes
 # Claude Code may update task status without triggering PostToolUse
 if eagle_validate_session_id "$session_id"; then
-    task_dir="$HOME/.claude/tasks/$session_id"
+    task_dir="$EAGLE_CLAUDE_TASKS_DIR/$session_id"
     if [ -d "$task_dir" ]; then
         for task_file in "$task_dir"/*.json; do
             [ ! -f "$task_file" ] && continue

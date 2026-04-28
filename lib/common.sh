@@ -9,6 +9,9 @@ EAGLE_MEM_DB="$EAGLE_MEM_DIR/memory.db"
 EAGLE_MEM_LOG="$EAGLE_MEM_DIR/eagle-mem.log"
 EAGLE_SETTINGS="${EAGLE_SETTINGS:-$HOME/.claude/settings.json}"
 EAGLE_SKILLS_DIR="$HOME/.claude/skills"
+EAGLE_CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+EAGLE_CLAUDE_PLANS_DIR="$HOME/.claude/plans"
+EAGLE_CLAUDE_TASKS_DIR="$HOME/.claude/tasks"
 
 eagle_log() {
     local level="$1"
