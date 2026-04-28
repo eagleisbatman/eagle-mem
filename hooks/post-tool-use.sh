@@ -34,6 +34,9 @@ project=$(eagle_project_from_cwd "$cwd")
 files_read="[]"
 files_modified="[]"
 tool_summary=""
+output_bytes=""
+output_lines=""
+command_category=""
 
 case "$tool_name" in
     Read)
@@ -55,6 +58,32 @@ case "$tool_name" in
         cmd=$(echo "$input" | jq -r '.tool_input.command // empty' | cut -c1-200)
         cmd=$(echo "$cmd" | eagle_redact)
         tool_summary="Bash: $cmd"
+
+        # Output metrics
+        tool_output=$(echo "$input" | jq -r '.tool_result.stdout // empty' 2>/dev/null)
+        if [ -n "$tool_output" ]; then
+            output_bytes=${#tool_output}
+            output_lines=$(echo "$tool_output" | wc -l | tr -d ' ')
+        fi
+
+        # Command category extraction
+        first_word=$(echo "$cmd" | awk '{print $1}' | sed 's|.*/||')
+        case "$first_word" in
+            git|gh) command_category="git" ;;
+            npm|npx|pnpm|yarn|bun) command_category="js" ;;
+            pip|pip3|python|python3|uv) command_category="python" ;;
+            cargo|rustc) command_category="rust" ;;
+            go) command_category="go" ;;
+            docker|docker-compose|podman) command_category="docker" ;;
+            kubectl|helm|k9s) command_category="k8s" ;;
+            aws|gcloud|az) command_category="cloud" ;;
+            make|cmake|ninja) command_category="build" ;;
+            grep|find|ls|cat|head|tail|wc|sort|sed|awk) command_category="files" ;;
+            curl|wget|http) command_category="http" ;;
+            *test*|jest|pytest|vitest|mocha) command_category="test" ;;
+            *lint*|eslint|ruff|golangci-lint) command_category="lint" ;;
+            *) command_category="other" ;;
+        esac
         ;;
     TaskCreate|TaskUpdate)
         task_subject=$(echo "$input" | jq -r '.tool_input.subject // empty')
@@ -208,6 +237,6 @@ case "$tool_name" in
         ;;
 esac
 
-eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified"
+eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category"
 
 exit 0
