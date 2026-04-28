@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# ═══════════════════════════════════════════════════════════
+# ════════��══════════��═══════════════════════════════════════
 # Eagle Mem — Health Check
 # Diagnoses how well the self-learning pipeline is working
-# ═══════════════════════════════════════════════════════════
+# ════════���══════════════════════════════════════════════════
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +24,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# In JSON mode, redirect all text output to stderr so stdout is clean JSON
 if [ "$JSON_OUT" -eq 1 ]; then
     exec 3>&1 1>&2
 fi
@@ -49,12 +48,41 @@ score=0
 max_score=0
 issues=()
 
-# ─── 1. Summary enrichment rate ──────────────────────────
+# ─��─ 1. Summary capture rate (25 pts) ───────────────────
 
-max_score=$((max_score + 30))
+max_score=$((max_score + 25))
 
+total_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p_esc';")
 total_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc';")
+heuristic_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc' AND completed = '(auto-captured)';")
 enriched_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc' AND (decisions IS NOT NULL AND decisions != '' OR gotchas IS NOT NULL AND gotchas != '' OR key_files IS NOT NULL AND key_files != '');")
+
+if [ "${total_sessions:-0}" -eq 0 ]; then
+    capture_pct=0
+else
+    capture_pct=$((total_summaries * 100 / total_sessions))
+fi
+
+model_summaries=$((total_summaries - heuristic_summaries))
+
+if [ "${total_summaries:-0}" -gt 0 ]; then
+    if [ "$capture_pct" -ge 50 ]; then
+        eagle_ok "Capture: ${total_summaries}/${total_sessions} sessions (${capture_pct}%) — ${model_summaries} from model, ${heuristic_summaries} heuristic"
+        score=$((score + 25))
+    elif [ "$capture_pct" -ge 20 ]; then
+        eagle_warn "Capture: ${total_summaries}/${total_sessions} sessions (${capture_pct}%) — ${heuristic_summaries} heuristic"
+        score=$((score + 15))
+    else
+        eagle_fail "Capture: ${total_summaries}/${total_sessions} sessions (${capture_pct}%)"
+        score=$((score + 5))
+    fi
+else
+    eagle_dim "  No summaries yet"
+fi
+
+# ─── 2. Enrichment rate (25 pts) ────────────────────────
+
+max_score=$((max_score + 25))
 
 if [ "${total_summaries:-0}" -eq 0 ]; then
     enrich_pct=0
@@ -62,122 +90,106 @@ else
     enrich_pct=$((enriched_summaries * 100 / total_summaries))
 fi
 
-if [ "$enrich_pct" -ge 50 ]; then
-    eagle_ok "Enriched summaries: ${enriched_summaries}/${total_summaries} (${enrich_pct}%)"
-    score=$((score + 30))
-elif [ "$enrich_pct" -ge 20 ]; then
-    eagle_warn "Enriched summaries: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) — aim for 50%+"
-    score=$((score + 15))
-    issues+=("Low enrichment rate (${enrich_pct}%). Eagle-summary blocks aren't being emitted reliably.")
-elif [ "${total_summaries:-0}" -gt 0 ]; then
-    eagle_fail "Enriched summaries: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) — self-learning not working"
-    issues+=("Critical: ${enrich_pct}% enrichment. Decisions/gotchas/key_files are not being captured.")
+if [ "${total_summaries:-0}" -gt 0 ]; then
+    if [ "$enrich_pct" -ge 50 ]; then
+        eagle_ok "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) have decisions/gotchas/key_files"
+        score=$((score + 25))
+    elif [ "$enrich_pct" -ge 20 ]; then
+        eagle_warn "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) — LLM extraction may need tuning"
+        score=$((score + 12))
+        issues+=("Low enrichment (${enrich_pct}%). Check LLM provider is responsive: eagle-mem config")
+    elif [ "${enriched_summaries:-0}" -gt 0 ]; then
+        eagle_fail "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%)"
+        score=$((score + 5))
+        issues+=("${enrich_pct}% enrichment. Decisions/gotchas/key_files mostly missing.")
+    else
+        eagle_fail "Enriched: 0/${total_summaries} — no summaries have decisions/gotchas/key_files"
+        issues+=("Zero enrichment. Check provider config: eagle-mem config")
+    fi
 else
-    eagle_dim "  No summaries yet"
+    eagle_dim "  No summaries to enrich"
 fi
 
-# ─── 2. Feature discovery ────────────────────────────────
-
-max_score=$((max_score + 20))
-
-feature_count=$(eagle_db "SELECT COUNT(*) FROM features WHERE project = '$p_esc' AND status = 'active';")
-feature_file_count=$(eagle_db "SELECT COUNT(*) FROM feature_files ff JOIN features f ON ff.feature_id = f.id WHERE f.project = '$p_esc' AND f.status = 'active';")
-
-if [ "${feature_count:-0}" -ge 3 ]; then
-    eagle_ok "Features tracked: ${feature_count} (${feature_file_count} files mapped)"
-    score=$((score + 20))
-elif [ "${feature_count:-0}" -ge 1 ]; then
-    eagle_warn "Features tracked: ${feature_count} — curator needs more sessions"
-    score=$((score + 10))
-    issues+=("Only ${feature_count} features discovered. Run curator more often.")
-else
-    eagle_fail "Features tracked: 0 — feature graph is empty"
-    issues+=("No features discovered. Run: eagle-mem curate")
-fi
-
-# ─── 3. Command intelligence ─────────────────────────────
+# ─── 3. Feature discovery (15 pts) ─────────────────────
 
 max_score=$((max_score + 15))
 
-rule_count=$(eagle_db "SELECT COUNT(*) FROM command_rules WHERE (project = '$p_esc' OR project IS NULL) AND enabled = 1;")
-obs_with_metrics=$(eagle_db "SELECT COUNT(*) FROM observations WHERE project = '$p_esc' AND tool_name = 'Bash' AND output_bytes IS NOT NULL AND output_bytes > 0;")
+feature_count=$(eagle_db "SELECT COUNT(*) FROM features WHERE project = '$p_esc' AND status = 'active';")
 
-if [ "${rule_count:-0}" -ge 2 ]; then
-    eagle_ok "Command rules: ${rule_count} active (${obs_with_metrics} observations with metrics)"
+if [ "${feature_count:-0}" -ge 3 ]; then
+    eagle_ok "Features: ${feature_count} tracked"
     score=$((score + 15))
-elif [ "${rule_count:-0}" -ge 1 ]; then
-    eagle_warn "Command rules: ${rule_count} — learning in progress"
+elif [ "${feature_count:-0}" -ge 1 ]; then
+    eagle_warn "Features: ${feature_count} — curator needs more sessions"
     score=$((score + 8))
-elif [ "${obs_with_metrics:-0}" -gt 20 ]; then
-    eagle_fail "Command rules: 0 (but ${obs_with_metrics} observations available — run curator)"
-    issues+=("Command metrics collected but no rules generated yet.")
 else
-    eagle_dim "  Command metrics: ${obs_with_metrics} observations (need more data)"
-    score=$((score + 5))
+    eagle_fail "Features: 0 — run: eagle-mem curate"
+    issues+=("No features discovered. Run: eagle-mem curate")
 fi
 
-# ─── 4. Provider configured ──────────────────────────────
+# ─── 4. Provider configured (15 pts) ───────────────────
 
 max_score=$((max_score + 15))
 
 provider=$(eagle_config_get "provider" "type" "none")
 if [ "$provider" != "none" ]; then
     model=$(eagle_config_get "$provider" "model" "default")
-    eagle_ok "LLM provider: ${provider} (${model})"
+    eagle_ok "Provider: ${provider} (${model})"
     score=$((score + 15))
 else
-    eagle_fail "No LLM provider — curator and enrichment extraction disabled"
+    eagle_fail "No LLM provider — curator and enrichment disabled"
     issues+=("Configure a provider: eagle-mem config init")
 fi
 
-# ─── 5. Project data quality ─────────────────────────────
+# ─── 5. Data quality (10 pts) ──────────────────────────
 
 max_score=$((max_score + 10))
 
-tmp_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project IN ('tmp', 'private', '');")
-total_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions;")
+# Count noise: ephemeral projects + single-char project names
+noise_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project IN ('tmp', 'private', '', 'T') OR LENGTH(project) <= 1;")
+all_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions;")
 
-if [ "${total_sessions:-0}" -eq 0 ]; then
+if [ "${all_sessions:-0}" -eq 0 ]; then
     noise_pct=0
 else
-    noise_pct=$((tmp_sessions * 100 / total_sessions))
+    noise_pct=$((noise_sessions * 100 / all_sessions))
 fi
 
 if [ "$noise_pct" -le 5 ]; then
-    eagle_ok "Data quality: ${tmp_sessions} ephemeral sessions (${noise_pct}% noise)"
+    eagle_ok "Data quality: ${noise_pct}% noise (${noise_sessions} ephemeral sessions)"
     score=$((score + 10))
 elif [ "$noise_pct" -le 20 ]; then
-    eagle_warn "Data quality: ${tmp_sessions} ephemeral sessions (${noise_pct}% noise)"
+    eagle_warn "Data quality: ${noise_pct}% noise (${noise_sessions}/${all_sessions})"
     score=$((score + 5))
-    issues+=("${noise_pct}% of sessions from ephemeral dirs. Skiplist should prevent new ones.")
+    issues+=("${noise_pct}% noise. Skiplist prevents new pollution; prune old: eagle-mem prune")
 else
-    eagle_fail "Data quality: ${noise_pct}% noise — ${tmp_sessions}/${total_sessions} sessions from ephemeral dirs"
-    issues+=("Heavy ephemeral pollution. Update Eagle Mem to get skiplist protection.")
+    eagle_fail "Data quality: ${noise_pct}% noise (${noise_sessions}/${all_sessions})"
+    issues+=("Heavy noise. Run: eagle-mem prune to clean ephemeral data.")
 fi
 
-# ─── 6. Curator activity ─────────────────────────────────
+# ─── 6. Curator activity (10 pts) ──────────────────────
 
 max_score=$((max_score + 10))
 
 curator_schedule=$(eagle_config_get "curator" "schedule" "manual")
-last_curated=$(eagle_db "SELECT value FROM eagle_meta WHERE key = 'last_curated_at' AND (project = '$p_esc' OR project IS NULL) ORDER BY CASE WHEN project IS NOT NULL THEN 0 ELSE 1 END LIMIT 1;" 2>/dev/null || echo "")
+last_curated=$(eagle_db "SELECT value FROM eagle_meta WHERE key = 'last_curated_at' AND project = '$p_esc' LIMIT 1;" 2>/dev/null || echo "")
 
 if [ -n "$last_curated" ]; then
     eagle_ok "Curator: last run ${last_curated} (schedule: ${curator_schedule})"
     score=$((score + 10))
 elif [ "$curator_schedule" = "auto" ]; then
-    eagle_warn "Curator: auto-scheduled but hasn't run yet"
+    eagle_warn "Curator: auto-scheduled, hasn't run yet (triggers on session start)"
     score=$((score + 5))
-    issues+=("Auto-curate is configured but hasn't run. It triggers at session end.")
+    issues+=("Auto-curate configured but hasn't fired. Needs ${_min_sessions:-5}+ sessions since last run.")
 else
     eagle_fail "Curator: never run (schedule: ${curator_schedule})"
-    issues+=("Curator has never run. Try: eagle-mem curate --dry-run")
+    issues+=("Run: eagle-mem curate --dry-run")
 fi
 
-# ─── Score ────────────────────────────────────────────────
+# ─── Score ───────���────────────────────────────────────────
 
 echo ""
-echo -e "  ${DIM}─────────────────────────────────────${RESET}"
+echo -e "  ${DIM}────���────────────────────────────────${RESET}"
 
 pct=$((score * 100 / max_score))
 if [ "$pct" -ge 80 ]; then
@@ -210,14 +222,17 @@ if [ "$JSON_OUT" -eq 1 ]; then
         --argjson max_score "$max_score" \
         --argjson pct "$pct" \
         --arg grade "$grade" \
+        --argjson total_sessions "${total_sessions:-0}" \
         --argjson total_summaries "${total_summaries:-0}" \
+        --argjson heuristic_summaries "${heuristic_summaries:-0}" \
         --argjson enriched_summaries "${enriched_summaries:-0}" \
         --argjson features "${feature_count:-0}" \
-        --argjson command_rules "${rule_count:-0}" \
         --arg provider "$provider" \
         --argjson noise_pct "$noise_pct" \
+        --arg last_curated "${last_curated:-never}" \
         '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
-          enrichment:{total:$total_summaries, enriched:$enriched_summaries},
-          features:$features, command_rules:$command_rules,
-          provider:$provider, noise_pct:$noise_pct}' >&3
+          capture:{sessions:$total_sessions, summaries:$total_summaries, heuristic:$heuristic_summaries},
+          enrichment:$enriched_summaries,
+          features:$features, provider:$provider,
+          noise_pct:$noise_pct, last_curated:$last_curated}' >&3
 fi

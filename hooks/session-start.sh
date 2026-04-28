@@ -8,9 +8,11 @@ set +e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
+SCRIPTS_DIR="$SCRIPT_DIR/../scripts"
 
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
+. "$LIB_DIR/provider.sh"
 
 eagle_ensure_db
 
@@ -39,6 +41,25 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 # Uses last_activity_at (updated by trigger on every observation insert)
 # so long-lived sessions with regular compactions aren't falsely abandoned
 eagle_abandon_stale_sessions "$session_id"
+
+# ─── Auto-curate trigger (background, non-blocking) ──────────
+# Moved here from SessionEnd because SessionEnd rarely fires in long-lived sessions.
+# SessionStart fires on every new session, resume, and compaction — reliable trigger.
+curator_schedule=$(eagle_config_get "curator" "schedule" "manual")
+if [ "$curator_schedule" = "auto" ]; then
+    _curator_provider=$(eagle_config_get "provider" "type" "none")
+    if [ "$_curator_provider" != "none" ]; then
+        _min_sessions=$(eagle_config_get "curator" "min_sessions" "5")
+        _min_sessions=$(eagle_sql_int "$_min_sessions")
+        _last_curated=$(eagle_meta_get "last_curated_at" "$project")
+        _since="${_last_curated:-1970-01-01T00:00:00Z}"
+        _sessions_since=$(eagle_count_sessions_since "$project" "$_since")
+        if [ "${_sessions_since:-0}" -ge "$_min_sessions" ]; then
+            eagle_log "INFO" "SessionStart: auto-curate triggered (${_sessions_since} sessions since last curate)"
+            nohup bash "$SCRIPTS_DIR/curate.sh" -p "$project" >> "$EAGLE_MEM_LOG" 2>&1 &
+        fi
+    fi
+fi
 
 # ─── Version check (non-blocking) ────────────────────────────
 
@@ -127,38 +148,25 @@ eagle_banner="======================================
 ======================================"
 
 context="$eagle_banner
-
-=== EAGLE MEM — Active (trigger: $source_type) ===
-Eagle Mem (https://github.com/eagleisbatman/eagle-mem) is providing persistent memory for this session. It tracks summaries, observations, tasks, and code context across sessions via SQLite + FTS5. Mention Eagle Mem by name when referencing recalled context.
-
 "
 
 if [ -n "$update_notice" ]; then
-    context+="=== EAGLE MEM — $update_notice ===
-
-"
-fi
-
-# Nudge if last session lacked enrichment
-last_enriched=$(eagle_last_session_enriched "$project")
-if [ "${last_enriched:-1}" = "0" ] && [ "$stat_with_summaries" -gt 0 ]; then
-    context+="=== EAGLE MEM — Enrichment Reminder ===
-The previous session's summary did NOT include decisions, gotchas, or key_files. These fields power Eagle Mem's self-learning (feature discovery, anti-regression, command intelligence). Please emit an <eagle-summary> block at the end of this session with these fields populated.
-
+    context+="
+=== $update_notice ===
 "
 fi
 
 # Project overview
 overview=$(eagle_get_overview "$project")
 if [ -n "$overview" ]; then
-    context+="=== EAGLE MEM — Project Overview ===
+    context+="
+=== Project Overview ===
 $overview
-
 "
 else
-    context+="=== EAGLE MEM — Action Required ===
-No overview exists for '$project'. On the user's first prompt, run /eagle-mem-overview to build a structured project briefing. The skill has full instructions for what to read and how to write a rich overview.
-
+    context+="
+=== Action Required ===
+No overview exists for '$project'. Run /eagle-mem-overview to build one.
 "
 fi
 
@@ -166,8 +174,8 @@ fi
 recent=$(eagle_get_recent_summaries "$project" 5)
 
 if [ -n "$recent" ]; then
-    context+="=== EAGLE MEM ===
-Recent sessions for project '$project':
+    context+="
+=== Recent Sessions ===
 "
     while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files; do
         [ -z "$request" ] && [ -z "$completed" ] && continue
@@ -202,8 +210,7 @@ memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, up
     LIMIT 5;")
 if [ -n "$memories" ]; then
     context+="
-=== EAGLE MEM — Memories ===
-Recent memories for '$project':
+=== Memories ===
 "
     while IFS='|' read -r mname mtype mdesc _fpath _updated days_ago; do
         [ -z "$mname" ] && continue
@@ -227,8 +234,7 @@ fi
 plans=$(eagle_list_claude_plans "$project" 3)
 if [ -n "$plans" ]; then
     context+="
-=== EAGLE MEM — Plans ===
-Recent plans for '$project':
+=== Plans ===
 "
     while IFS='|' read -r ptitle _pproj _fpath _updated; do
         [ -z "$ptitle" ] && continue
@@ -249,8 +255,7 @@ synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
     LIMIT 10;")
 if [ -n "$synced_tasks" ]; then
     context+="
-=== EAGLE MEM — Tasks ===
-Tasks for '$project':
+=== Tasks ===
 "
     while IFS='|' read -r tsubject tstatus tblocked; do
         [ -z "$tsubject" ] && continue
@@ -263,72 +268,37 @@ Tasks for '$project':
     done <<< "$synced_tasks"
 fi
 
-# Emit the eagle-summary instruction
-context+="
-=== EAGLE MEM INSTRUCTIONS ===
-You have persistent memory powered by Eagle Mem. When you recall context from a previous session or use injected memory, attribute it: \"From Eagle Mem:\" or \"Eagle Mem recalls:\". This helps the user understand where the context came from.
+# ─── Instructions (full on startup, minimal on compact) ──
 
-IMPORTANT: At the start of your VERY NEXT response (this fires on session start, /clear, AND context compaction — always show this block, even if you think you showed it before, because prior context may have been compressed away). Show the user what Eagle Mem loaded by reproducing this exact banner:
-
-\`\`\`
-$eagle_banner
-\`\`\`
-
-This gives the user visibility into the full context Eagle Mem loaded for this session.
-
-ANTI-REGRESSION: When Eagle Mem surfaces decision history about a file you are reading (via PostToolUse context), those decisions were made deliberately in past sessions. Do NOT revert or change the implementation approach without explicit user request. If you believe a past decision should change, state why and ask the user before proceeding. This prevents the common regression where Claude 'improves' code back to an older approach that was already rejected.
-
-SECRET SAFETY: Never include raw API keys, tokens, passwords, or secrets in eagle-summary fields or any text that Eagle Mem stores. Reference secrets by name (e.g., 'the Stripe API key', 'GOOGLE_APPLICATION_CREDENTIALS_JSON') not by value. Eagle Mem redacts common patterns automatically, but prevention is better than redaction.
-
-MEMORY FRESHNESS: The memories above include age indicators. If you make a change (edit a file, update a config, change a pattern) that contradicts what a loaded memory says, you MUST update that memory file immediately. Read the memory file, edit it to reflect the new reality, and the PostToolUse hook will sync the update to Eagle Mem. Stale memories mislead future sessions — keeping them current is as important as writing good code.
-
-=== EAGLE MEM — SESSION SUMMARY (MANDATORY) ===
-You MUST emit an <eagle-summary> block before your FINAL response in this session. This is how Eagle Mem captures what happened — without it, the next session starts blind and wastes tokens rediscovering context.
-
-FORMAT — emit this block exactly. Every field is REQUIRED. Do not skip fields, do not leave them empty, do not write \"N/A\".
-
-<eagle-summary>
-request: [One sentence: what did the user ask for?]
-investigated: [Comma-separated file paths you read or explored]
-learned: [Non-obvious technical discoveries — things a future session could not guess from reading the code]
-completed: [What was accomplished — be specific about what shipped, not what was \"worked on\"]
-next_steps: [Concrete actions for the next session, not vague aspirations]
-decisions:
-  - [Choice made] Why: [the reason — what constraint or tradeoff drove this choice]
-  - [Choice made] Why: [reason]
-gotchas:
-  - [What failed, surprised, or does not work the obvious way. Be specific — \"X does not work because Y\" not just \"X was tricky\"]
-key_files:
-  - [path/to/file.ext] — [one-line role: what this file does in the context of this work]
-  - [path/to/other.ext] — [role]
-files_read: [file1, file2, ...]
-files_modified: [file1, file2, ...]
-</eagle-summary>
-
-EXAMPLE — this is what a well-written summary looks like:
-
-<eagle-summary>
-request: Add JWT authentication middleware to the API
-investigated: src/middleware/auth.ts, src/routes/users.ts, package.json, src/config/env.ts
-learned: express-jwt v8 changed its API — req.auth replaces req.user. The error handler must check err.name === 'UnauthorizedError', not err.status === 401.
-completed: JWT middleware deployed on all /api routes. Token validation, role-based guards, and 401/403 error responses all working. Added JWKS endpoint support for key rotation.
-next_steps: Add refresh token rotation; rate-limit the /auth/token endpoint
-decisions:
-  - Chose RS256 over HS256 for JWT signing. Why: allows key rotation via JWKS without redeploying; HS256 requires shared secret on every service.
-  - Put auth middleware at router level, not app level. Why: healthcheck and public routes must remain unauthenticated; per-router mounting is explicit about what is protected.
-gotchas:
-  - express-jwt v8 is ESM-only — require() fails silently and returns undefined. Must use dynamic import().
-  - Setting token expiry below 5 min causes refresh storms under load — the refresh endpoint itself requires a valid (but expired) token, creating a chicken-and-egg problem.
-key_files:
-  - src/middleware/auth.ts — JWT validation + role guard middleware
-  - src/config/env.ts — JWKS_URI and JWT_ISSUER environment config
-  - src/routes/users.ts — first route to use the new auth guard (reference implementation)
-files_read: [src/middleware/auth.ts, src/routes/users.ts, package.json, src/config/env.ts]
-files_modified: [src/middleware/auth.ts, src/config/env.ts, src/routes/users.ts, package.json]
-</eagle-summary>
-
-WHY THIS MATTERS: Eagle Mem re-injects this summary at the start of future sessions. The 'decisions' field prevents re-debating settled choices. The 'gotchas' field prevents repeating the same mistakes. The 'key_files' field tells the next session exactly where to start reading instead of exploring blindly. Write these fields as if you are briefing a colleague who will pick up your work tomorrow — because that is exactly what happens.
+if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
+    context+="
+=== Eagle Mem (compact reload) ===
+Persistent memory active. Attribute recalled context to Eagle Mem. Do not revert past decisions surfaced by PostToolUse without asking the user. Emit <eagle-summary> before your final response.
 "
+else
+    context+="
+=== Eagle Mem ===
+Persistent memory active for '$project'. Attribute recalled context: \"Eagle Mem recalls:\" When PostToolUse surfaces past decisions about a file, do not revert without explicit user request. Never include raw secrets in eagle-summary fields. If you change something that contradicts a loaded memory, update that memory file.
+
+Emit an <eagle-summary> block before your FINAL response:
+
+<eagle-summary>
+request: [what the user asked for]
+investigated: [file paths read or explored]
+learned: [non-obvious discoveries a future session couldn't guess from code]
+completed: [what shipped — be specific]
+next_steps: [concrete actions for next session]
+decisions:
+  - [choice] Why: [reason]
+gotchas:
+  - [what failed or surprised — \"X doesn't work because Y\"]
+key_files:
+  - [path] — [role in this work]
+files_read: [file1, file2]
+files_modified: [file1, file2]
+</eagle-summary>
+"
+fi
 
 # Output context (plain text stdout = additionalContext for SessionStart)
 if [ -n "$context" ]; then

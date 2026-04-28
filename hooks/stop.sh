@@ -2,8 +2,9 @@
 # ═══════════════════════════════════════════════════════════
 # Eagle Mem — Stop hook
 # Fires when Claude's turn ends
-# Parses <eagle-summary> from transcript, saves to DB
-# Falls back to heuristic extraction if no summary block
+# Primary: extracts summary from transcript heuristically
+# Bonus: eagle-summary block overrides where present
+# LLM enrichment fills in decisions/gotchas/key_files
 # ═══════════════════════════════════════════════════════════
 set +e
 
@@ -37,122 +38,109 @@ eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcr
 # Ensure session exists (may not if SessionStart didn't fire)
 eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
 
-# ─── Try to parse <eagle-summary> from transcript ──────────
+# ─── Guard: skip if summary already exists for this session ──
+# Stop fires every assistant turn. Only process once per session.
 
-summary_block=""
-if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-    # Extract all text from the last assistant message using jq on JSONL
-    # Real transcript format: top-level .type == "assistant", content in .message.content[]
-    text_content=$(jq -rs '
-        [.[] | select(.type == "assistant")] | last |
-        if . then
-            [.message.content[]? | select(.type == "text") | .text] | join("\n")
-        else "" end
-    ' "$transcript_path" 2>/dev/null)
-
-    # Strip <private>...</private> blocks before processing (case-insensitive, tolerates attributes/whitespace)
-    text_content=$(echo "$text_content" | sed -E '/<[Pp][Rr][Ii][Vv][Aa][Tt][Ee][^>]*>/,/<\/[Pp][Rr][Ii][Vv][Aa][Tt][Ee][[:space:]]*>/d')
-
-    # Parse <eagle-summary> block
-    if [ -n "$text_content" ] && echo "$text_content" | grep -q '<eagle-summary>' 2>/dev/null; then
-        summary_block=$(echo "$text_content" | sed -n '/<eagle-summary>/,/<\/eagle-summary>/p' | sed '1d;$d')
-    fi
+existing_count=$(eagle_count_session_summaries "$session_id")
+if [ "${existing_count:-0}" -gt 0 ]; then
+    eagle_log "INFO" "Stop: summary already exists for session=$session_id — skipping"
+    exit 0
 fi
 
-# ─── Extract fields from summary block ─────────────────────
+[ -z "$transcript_path" ] || [ ! -f "$transcript_path" ] && exit 0
 
-parse_field() {
-    local block="$1"
-    local field="$2"
-    echo "$block" | awk -v f="$field" '
-        BEGIN { IGNORECASE=1; found=0 }
-        $0 ~ "^"f":" {
-            sub("^"f":[[:space:]]*", ""); found=1; val=$0; next
-        }
-        found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes|decisions|gotchas|key_files):/ { exit }
-        found { val = val " " $0 }
-        END { if (found) print val }
-    '
-}
+# ─── Primary: heuristic extraction from transcript ───────────
 
-request=""
-investigated=""
-learned=""
-completed=""
-next_steps=""
+request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
+
+heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+
 files_read="[]"
 files_modified="[]"
+if [ -n "$heuristic_reads" ]; then
+    files_read=$(echo "$heuristic_reads" | jq -Rsc 'split("\n") | map(select(. != ""))')
+fi
+if [ -n "$heuristic_writes" ]; then
+    files_modified=$(echo "$heuristic_writes" | jq -Rsc 'split("\n") | map(select(. != ""))')
+fi
+
+investigated=""
+learned=""
+completed="(auto-captured)"
+next_steps=""
 notes=""
 decisions=""
 gotchas=""
 key_files=""
 
+eagle_log "INFO" "Stop: heuristic extraction complete"
+
+# ─── Bonus: eagle-summary block overrides where present ──────
+
+text_content=$(jq -rs '
+    [.[] | select(.type == "assistant")] | last |
+    if . then
+        [.message.content[]? | select(.type == "text") | .text] | join("\n")
+    else "" end
+' "$transcript_path" 2>/dev/null)
+
+# Strip <private>...</private> blocks
+text_content=$(echo "$text_content" | sed -E '/<[Pp][Rr][Ii][Vv][Aa][Tt][Ee][^>]*>/,/<\/[Pp][Rr][Ii][Vv][Aa][Tt][Ee][[:space:]]*>/d')
+
+summary_block=""
+if [ -n "$text_content" ] && echo "$text_content" | grep -q '<eagle-summary>' 2>/dev/null; then
+    summary_block=$(echo "$text_content" | sed -n '/<eagle-summary>/,/<\/eagle-summary>/p' | sed '1d;$d')
+fi
+
 if [ -n "$summary_block" ]; then
-    request=$(parse_field "$summary_block" "request")
-    investigated=$(parse_field "$summary_block" "investigated")
-    learned=$(parse_field "$summary_block" "learned")
-    completed=$(parse_field "$summary_block" "completed")
-    next_steps=$(parse_field "$summary_block" "next_steps")
-    decisions=$(parse_field "$summary_block" "decisions")
-    gotchas=$(parse_field "$summary_block" "gotchas")
-    key_files=$(parse_field "$summary_block" "key_files")
+    parse_field() {
+        local block="$1"
+        local field="$2"
+        echo "$block" | awk -v f="$field" '
+            BEGIN { IGNORECASE=1; found=0 }
+            $0 ~ "^"f":" {
+                sub("^"f":[[:space:]]*", ""); found=1; val=$0; next
+            }
+            found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes|decisions|gotchas|key_files):/ { exit }
+            found { val = val " " $0 }
+            END { if (found) print val }
+        '
+    }
 
-    raw_fr=$(parse_field "$summary_block" "files_read")
-    raw_fm=$(parse_field "$summary_block" "files_modified")
+    # Override heuristic fields with eagle-summary where non-empty
+    _val=$(parse_field "$summary_block" "request");       [ -n "$_val" ] && request="$_val"
+    _val=$(parse_field "$summary_block" "investigated");  [ -n "$_val" ] && investigated="$_val"
+    _val=$(parse_field "$summary_block" "learned");       [ -n "$_val" ] && learned="$_val"
+    _val=$(parse_field "$summary_block" "completed");     [ -n "$_val" ] && completed="$_val"
+    _val=$(parse_field "$summary_block" "next_steps");    [ -n "$_val" ] && next_steps="$_val"
+    _val=$(parse_field "$summary_block" "decisions");     [ -n "$_val" ] && decisions="$_val"
+    _val=$(parse_field "$summary_block" "gotchas");       [ -n "$_val" ] && gotchas="$_val"
+    _val=$(parse_field "$summary_block" "key_files");     [ -n "$_val" ] && key_files="$_val"
 
-    # Convert bracket-list to JSON array (handles special chars safely)
+    # Convert bracket-list to JSON array
     to_json_array() {
         local raw="$1"
         raw=$(echo "$raw" | sed 's/^\[//;s/\]$//')
         echo "$raw" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | jq -Rsc 'split("\n") | map(select(. != ""))'
     }
 
+    raw_fr=$(parse_field "$summary_block" "files_read")
+    raw_fm=$(parse_field "$summary_block" "files_modified")
     [ -n "$raw_fr" ] && files_read=$(to_json_array "$raw_fr")
     [ -n "$raw_fm" ] && files_modified=$(to_json_array "$raw_fm")
 
-    eagle_log "INFO" "Stop: parsed eagle-summary block"
+    eagle_log "INFO" "Stop: eagle-summary block merged over heuristic data"
 fi
 
-# ─── Guard: skip fallback work if summary already exists ──
-# Stop fires every assistant turn. Without this, the heuristic and LLM
-# enrichment blocks fire on turn 2+ — wasting tokens and producing
-# empty inserts that get rejected.
+# ─── LLM enrichment: fill in decisions/gotchas/key_files ─────
 
-existing_count=0
-if [ -z "$summary_block" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-    existing_count=$(eagle_count_session_summaries "$session_id")
-fi
+if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
+    provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
+    if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
+        excerpt=$(echo "$text_content" | tail -c 2000)
 
-if [ -z "$summary_block" ] && [ "${existing_count:-0}" -eq 0 ]; then
-
-    # ─── Heuristic fallback: extract from tool calls ───────────
-
-    if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-        eagle_log "INFO" "Stop: no eagle-summary found, using heuristic fallback"
-
-        request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
-
-        heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
-        heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
-
-        if [ -n "$heuristic_reads" ]; then
-            files_read=$(echo "$heuristic_reads" | jq -Rsc 'split("\n") | map(select(. != ""))')
-        fi
-        if [ -n "$heuristic_writes" ]; then
-            files_modified=$(echo "$heuristic_writes" | jq -Rsc 'split("\n") | map(select(. != ""))')
-        fi
-
-        completed="(auto-captured from tool usage)"
-    fi
-
-    # ─── LLM enrichment: extract decisions/gotchas/key_files ──
-
-    if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
-        provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
-        if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
-            excerpt=$(echo "$text_content" | tail -c 2000)
-
-            enrich_prompt="Extract from this Claude Code session excerpt:
+        enrich_prompt="Extract from this Claude Code session excerpt:
 1. DECISIONS: architectural or design choices made (with WHY). One per line.
 2. GOTCHAS: non-obvious pitfalls, bugs found, things that surprised. One per line.
 3. KEY_FILES: important files that were central to the work. One per line.
@@ -168,28 +156,24 @@ GOTCHAS:
 KEY_FILES:
 - <filepath>"
 
-            enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 512 2>/dev/null) || true
+        enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 512 2>/dev/null) || true
 
-            if [ -n "$enrich_result" ]; then
-                extract_section() {
-                    local result="$1" header="$2"
-                    echo "$result" | awk -v h="$header:" '
-                        $0 == h || $0 ~ "^"h { found=1; next }
-                        found && /^[A-Z_]+:/ { exit }
-                        found && /^- / { sub(/^- /, ""); lines[++n] = $0 }
-                        END { for (i=1; i<=n; i++) { printf "%s", lines[i]; if (i<n) printf "; " } }
-                    '
-                }
-                decisions=$(extract_section "$enrich_result" "DECISIONS")
-                gotchas=$(extract_section "$enrich_result" "GOTCHAS")
-                key_files=$(extract_section "$enrich_result" "KEY_FILES")
-                [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ] && eagle_log "INFO" "Stop: LLM enrichment extracted for session=$session_id"
-            fi
+        if [ -n "$enrich_result" ]; then
+            extract_section() {
+                local result="$1" header="$2"
+                echo "$result" | awk -v h="$header:" '
+                    $0 == h || $0 ~ "^"h { found=1; next }
+                    found && /^[A-Z_]+:/ { exit }
+                    found && /^- / { sub(/^- /, ""); lines[++n] = $0 }
+                    END { for (i=1; i<=n; i++) { printf "%s", lines[i]; if (i<n) printf "; " } }
+                '
+            }
+            decisions=$(extract_section "$enrich_result" "DECISIONS")
+            gotchas=$(extract_section "$enrich_result" "GOTCHAS")
+            key_files=$(extract_section "$enrich_result" "KEY_FILES")
+            [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ] && eagle_log "INFO" "Stop: LLM enrichment extracted for session=$session_id"
         fi
     fi
-
-elif [ -z "$summary_block" ] && [ "${existing_count:-0}" -gt 0 ]; then
-    eagle_log "INFO" "Stop: skipping fallback — summary already exists for session=$session_id (count=$existing_count)"
 fi
 
 # ─── Redact secrets from all text fields before storage ────

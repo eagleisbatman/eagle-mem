@@ -50,9 +50,9 @@ eagle_get_command_rule() {
     eagle_db "SELECT strategy, max_lines, reason
         FROM command_rules
         WHERE enabled = 1
-        AND (project = '$project' OR project IS NULL)
+        AND (project = '$project' OR project = '')
         AND ('$cmd' LIKE pattern OR '$cmd' = pattern)
-        ORDER BY CASE WHEN project IS NOT NULL THEN 0 ELSE 1 END
+        ORDER BY CASE WHEN project != '' THEN 0 ELSE 1 END
         LIMIT 1;"
 }
 

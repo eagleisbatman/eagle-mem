@@ -27,12 +27,14 @@ eagle_project_from_cwd() {
     local cwd="${1:-$(pwd)}"
     local resolved="$cwd"
 
-    # Resolve /private/tmp → /tmp on macOS
+    # Normalize macOS /private prefixes
     case "$resolved" in /private/tmp*) resolved="/tmp${resolved#/private/tmp}" ;; esac
+    case "$resolved" in /private/var/*) resolved="/var${resolved#/private/var}" ;; esac
 
     # Skip ephemeral directories — return empty so hooks early-exit
     case "$resolved" in
         /tmp|/tmp/*|/var/tmp|/var/tmp/*) echo ""; return ;;
+        /var/folders|/var/folders/*) echo ""; return ;;
         "$HOME/Downloads"|"$HOME/Downloads/"*) echo ""; return ;;
         "$HOME/Desktop"|"$HOME/Desktop/"*) echo ""; return ;;
     esac
@@ -42,6 +44,12 @@ eagle_project_from_cwd() {
     if [ -n "$git_root" ]; then
         basename "$git_root"
     else
+        local name
+        name=$(basename "$cwd")
+        # Reject single-character project names (likely temp dir fragments)
+        if [ ${#name} -le 1 ]; then
+            echo ""; return
+        fi
         basename "$cwd"
     fi
 }
