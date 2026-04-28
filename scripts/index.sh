@@ -162,7 +162,7 @@ DELETE FROM code_chunks WHERE project = '$project_sql' AND file_path = '$file_sq
         end=$((start + CHUNK_SIZE - 1))
         [ "$end" -gt "$total_lines" ] && end="$total_lines"
 
-        content=$(sed -n "${start},${end}p" "$full_path")
+        content=$(sed -n "${start},${end}p" "$full_path" | eagle_redact)
         content_sql=$(eagle_sql_escape "$content")
 
         txn_sql+="

@@ -140,6 +140,17 @@ if [ -z "$request" ] && [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; 
     fi
 fi
 
+# ─── Redact secrets from all text fields before storage ────
+
+request=$(echo "$request" | eagle_redact)
+investigated=$(echo "$investigated" | eagle_redact)
+learned=$(echo "$learned" | eagle_redact)
+completed=$(echo "$completed" | eagle_redact)
+next_steps=$(echo "$next_steps" | eagle_redact)
+decisions=$(echo "$decisions" | eagle_redact)
+gotchas=$(echo "$gotchas" | eagle_redact)
+key_files=$(echo "$key_files" | eagle_redact)
+
 # ─── Write to database ─────────────────────────────────────
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then

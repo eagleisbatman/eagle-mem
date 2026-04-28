@@ -268,6 +268,10 @@ $eagle_banner
 
 This gives the user visibility into the full context Eagle Mem loaded for this session.
 
+ANTI-REGRESSION: When Eagle Mem surfaces decision history about a file you are reading (via PostToolUse context), those decisions were made deliberately in past sessions. Do NOT revert or change the implementation approach without explicit user request. If you believe a past decision should change, state why and ask the user before proceeding. This prevents the common regression where Claude 'improves' code back to an older approach that was already rejected.
+
+SECRET SAFETY: Never include raw API keys, tokens, passwords, or secrets in eagle-summary fields or any text that Eagle Mem stores. Reference secrets by name (e.g., 'the Stripe API key', 'GOOGLE_APPLICATION_CREDENTIALS_JSON') not by value. Eagle Mem redacts common patterns automatically, but prevention is better than redaction.
+
 MEMORY FRESHNESS: The memories above include age indicators. If you make a change (edit a file, update a config, change a pattern) that contradicts what a loaded memory says, you MUST update that memory file immediately. Read the memory file, edit it to reflect the new reality, and the PostToolUse hook will sync the update to Eagle Mem. Stale memories mislead future sessions — keeping them current is as important as writing good code.
 
 === EAGLE MEM — SESSION SUMMARY (MANDATORY) ===

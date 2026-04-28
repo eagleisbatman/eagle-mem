@@ -53,23 +53,7 @@ case "$tool_name" in
         ;;
     Bash)
         cmd=$(echo "$input" | jq -r '.tool_input.command // empty' | cut -c1-200)
-        # Redact common secret patterns before storing
-        cmd=$(echo "$cmd" | sed -E \
-            -e 's/(Bearer )[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(api[_-]?key[= :])[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(password[= :])[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(secret[= :])[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(token[= :])[^ ]*/\1[REDACTED]/gi' \
-            -e 's/(Authorization: )[^ ]*/\1[REDACTED]/gi' \
-            -e 's/sk_live_[A-Za-z0-9]+/[REDACTED]/g' \
-            -e 's/sk_test_[A-Za-z0-9]+/[REDACTED]/g' \
-            -e 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' \
-            -e 's/ghp_[A-Za-z0-9]{36}/[REDACTED]/g' \
-            -e 's/gho_[A-Za-z0-9]{36}/[REDACTED]/g' \
-            -e 's/sk-ant-[A-Za-z0-9_-]+/[REDACTED]/g' \
-            -e 's/sk-[A-Za-z0-9]{20,}/[REDACTED]/g' \
-            -e 's/(ANTHROPIC_API_KEY[= :])[^ ]*/\1[REDACTED]/g' \
-            -e 's/(OPENAI_API_KEY[= :])[^ ]*/\1[REDACTED]/g')
+        cmd=$(echo "$cmd" | eagle_redact)
         tool_summary="Bash: $cmd"
         ;;
     TaskCreate|TaskUpdate)
@@ -151,6 +135,72 @@ case "$tool_name" in
                                 jq -nc --arg ctx "$stale_msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
                             fi
                         fi
+                    fi
+                    ;;
+            esac
+        fi
+        ;;
+esac
+
+# ─── Decision + feature surfacing on Read ──────────────────
+# When Claude reads a file, surface past decisions and feature pipeline context.
+case "$tool_name" in
+    Read)
+        if [ -n "$fp" ]; then
+            fname=$(basename "$fp")
+            fname_stem="${fname%.*}"
+            read_context=""
+            case "$fp" in
+                "$HOME/.claude/"*) ;; # skip Claude config files
+                *)
+                    p_esc=$(eagle_sql_escape "$project")
+
+                    # Decision history from summaries
+                    if [ ${#fname_stem} -ge 3 ]; then
+                        fts_query=$(eagle_fts_sanitize "$fname_stem")
+                        if [ -n "$fts_query" ]; then
+                            fts_esc=$(eagle_sql_escape "$fts_query")
+                            decision_hit=$(eagle_db "SELECT s.decisions
+                                FROM summaries s
+                                JOIN summaries_fts f ON f.rowid = s.id
+                                WHERE summaries_fts MATCH '$fts_esc'
+                                AND s.project = '$p_esc'
+                                AND s.decisions IS NOT NULL
+                                AND s.decisions != ''
+                                ORDER BY s.created_at DESC
+                                LIMIT 1;")
+                            if [ -n "$decision_hit" ]; then
+                                read_context+="Eagle Mem decision history for '${fname}': ${decision_hit} — Do not revert without explicit user request. "
+                            fi
+                        fi
+                    fi
+
+                    # Feature pipeline context
+                    feature_hit=$(eagle_find_features_for_file "$project" "$fp")
+                    if [ -n "$feature_hit" ]; then
+                        while IFS='|' read -r feat_name feat_desc feat_verified _role feat_deps feat_other_files feat_smoke; do
+                            [ -z "$feat_name" ] && continue
+                            read_context+="Eagle Mem: '${fname}' is part of feature '${feat_name}'"
+                            [ -n "$feat_desc" ] && read_context+=" ($feat_desc)"
+                            read_context+="."
+                            if [ -n "$feat_verified" ]; then
+                                read_context+=" Last verified: ${feat_verified}."
+                            fi
+                            if [ -n "$feat_deps" ]; then
+                                read_context+=" Dependencies: ${feat_deps}."
+                            fi
+                            if [ -n "$feat_other_files" ]; then
+                                read_context+=" Other files in pipeline: ${feat_other_files}."
+                            fi
+                            if [ -n "$feat_smoke" ]; then
+                                read_context+=" Smoke tests: ${feat_smoke}."
+                            fi
+                            read_context+=" Changes require re-testing after deploy. "
+                        done <<< "$feature_hit"
+                    fi
+
+                    if [ -n "$read_context" ]; then
+                        jq -nc --arg ctx "$read_context" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
                     fi
                     ;;
             esac

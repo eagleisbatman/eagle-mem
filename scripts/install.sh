@@ -181,6 +181,10 @@ eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
     "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
     "UserPromptSubmit hook"
 
+eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" \
+    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+    "PreToolUse hook"
+
 # ─── Install skills ────────────────────────────────────────
 
 if [ -d "$PACKAGE_DIR/skills" ]; then
@@ -240,6 +244,16 @@ else
     else
         eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
     fi
+fi
+
+# ─── Initialize config ────────────────────────────────────
+
+. "$LIB_DIR/provider.sh"
+if [ ! -f "$EAGLE_CONFIG_FILE" ]; then
+    eagle_config_init
+    eagle_ok "Config created ${DIM}(auto-detected provider)${RESET}"
+else
+    eagle_ok "Config ${DIM}(already exists)${RESET}"
 fi
 
 # ─── Save installed version ───────────────────────────────

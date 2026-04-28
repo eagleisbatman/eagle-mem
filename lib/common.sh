@@ -59,6 +59,28 @@ eagle_read_stdin() {
     echo "$input"
 }
 
+# Redact secrets from text before storage.
+# Covers: Bearer tokens, API keys, passwords, secrets, tokens,
+# Stripe/AWS/GitHub/Anthropic/OpenAI key patterns, named env vars.
+eagle_redact() {
+    sed -E \
+        -e 's/(Bearer )[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(api[_-]?key[= :])[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(password[= :])[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(secret[= :])[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(token[= :])[^ ]*/\1[REDACTED]/gi' \
+        -e 's/(Authorization: )[^ ]*/\1[REDACTED]/gi' \
+        -e 's/sk_live_[A-Za-z0-9]+/[REDACTED]/g' \
+        -e 's/sk_test_[A-Za-z0-9]+/[REDACTED]/g' \
+        -e 's/AKIA[A-Z0-9]{16}/[REDACTED]/g' \
+        -e 's/ghp_[A-Za-z0-9]{36}/[REDACTED]/g' \
+        -e 's/gho_[A-Za-z0-9]{36}/[REDACTED]/g' \
+        -e 's/sk-ant-[A-Za-z0-9_-]+/[REDACTED]/g' \
+        -e 's/sk-[A-Za-z0-9]{20,}/[REDACTED]/g' \
+        -e 's/(ANTHROPIC_API_KEY[= :])[^ ]*/\1[REDACTED]/g' \
+        -e 's/(OPENAI_API_KEY[= :])[^ ]*/\1[REDACTED]/g'
+}
+
 # Collect project files into a destination file.
 # Uses git ls-files when available, falls back to find with common exclusions.
 # Usage: eagle_collect_files <target_dir> <output_file>

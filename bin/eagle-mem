@@ -27,6 +27,7 @@ case "$command" in
     refresh)    bash "$SCRIPTS_DIR/refresh.sh" "$@" ;;
     prune)      bash "$SCRIPTS_DIR/prune.sh" "$@" ;;
     memories)   bash "$SCRIPTS_DIR/memories.sh" "$@" ;;
+    config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)
