@@ -87,6 +87,35 @@ if [ "${has_chunks:-0}" -gt 0 ]; then
     fi
 fi
 
+# ─── Context pressure detection (turn counter since last compact) ──
+
+if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
+    counter_file="$EAGLE_MEM_DIR/.turn-counter.${session_id}"
+    turn_count=0
+    [ -f "$counter_file" ] && turn_count=$(cat "$counter_file" 2>/dev/null | tr -d '[:space:]')
+    turn_count=${turn_count:-0}
+    turn_count=$((turn_count + 1))
+    echo "$turn_count" > "$counter_file" 2>/dev/null
+
+    if [ "$turn_count" -ge 30 ]; then
+        context+="
+=== EAGLE MEM — Context Pressure: CRITICAL ($turn_count turns since compact) ===
+IMMEDIATELY emit a detailed <eagle-summary> covering ALL work this session.
+Tell the user to run /compact NOW to avoid losing context.
+"
+        echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
+    elif [ "$turn_count" -ge 20 ]; then
+        context+="
+=== EAGLE MEM — Context Pressure: HIGH ($turn_count turns since compact) ===
+Include a thorough <eagle-summary> in your next response — capture all decisions, gotchas, and learned context before compaction.
+Suggest the user run /compact to free context for continued work.
+"
+        echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
+    else
+        rm -f "$EAGLE_MEM_DIR/.context-pressure" 2>/dev/null
+    fi
+fi
+
 [ -z "$context" ] && exit 0
 
 context+="

@@ -127,6 +127,12 @@ fi
 # ─── LLM enrichment: fill in decisions/gotchas/key_files ─────
 # Check both local vars (from eagle-summary block) AND existing DB enrichment.
 # Skip LLM call if either source already has enrichment data.
+# Exception: under context pressure, force re-enrichment for richest summary.
+
+context_pressure=0
+if [ -f "$EAGLE_MEM_DIR/.context-pressure" ]; then
+    context_pressure=1
+fi
 
 existing_enrichment=""
 if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
@@ -134,7 +140,7 @@ if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
     existing_enrichment=$(eagle_db "SELECT decisions||gotchas||key_files FROM summaries WHERE session_id='$s_esc';")
 fi
 
-if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ] && [ -z "$existing_enrichment" ]; then
+if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ] && { [ -z "$existing_enrichment" ] || [ "$context_pressure" -eq 1 ]; }; then
     provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
     if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 2000)

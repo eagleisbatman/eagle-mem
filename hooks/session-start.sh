@@ -37,6 +37,18 @@ eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$sou
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
 eagle_abandon_stale_sessions "$session_id"
 
+# ─── Reset turn counter on compact/clear ─────────────────
+
+case "$source_type" in
+    compact|clear)
+        echo "0" > "$EAGLE_MEM_DIR/.turn-counter.${session_id}" 2>/dev/null
+        rm -f "$EAGLE_MEM_DIR/.context-pressure" 2>/dev/null
+        ;;
+    startup)
+        echo "0" > "$EAGLE_MEM_DIR/.turn-counter.${session_id}" 2>/dev/null
+        ;;
+esac
+
 # ─── Background automation (non-blocking) ────────────────
 
 eagle_sessionstart_auto_provision "$project" "$cwd" "$SCRIPTS_DIR"
@@ -46,6 +58,7 @@ eagle_sessionstart_auto_curate "$project" "$SCRIPTS_DIR"
 find "$EAGLE_MEM_DIR/read-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/mod-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/edit-tracker" -type f -mtime +1 -delete 2>/dev/null &
+find "$EAGLE_MEM_DIR" -name ".turn-counter.*" -mtime +1 -delete 2>/dev/null &
 
 # ─── Version check (non-blocking) ────────────────────────
 
