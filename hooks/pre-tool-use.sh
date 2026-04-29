@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
 # Eagle Mem — PreToolUse hook
-# Fires before Bash and Read tool calls
+# Fires before Bash, Read, Edit, Write tool calls
 # 1. Surfaces feature verification checklists before git push
 # 2. Truncates noisy commands via updatedInput (curator-learned rules)
 # 3. Detects Read-after-Edit/Write (content already in context)
 # 4. Nudges on repeated file reads (dedup tracker)
+# 5. Co-edit nudge on Edit/Write (curator-learned pairs)
+# 6. Stuck loop detection (repeated edits to same file)
 # ═══════════════════════════════════════════════════════════
 set +e
 
@@ -21,7 +23,7 @@ input=$(eagle_read_stdin)
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
 
 case "$tool_name" in
-    Bash|Read) ;;
+    Bash|Read|Edit|Write) ;;
     *) exit 0 ;;
 esac
 
@@ -113,6 +115,42 @@ ${context}"
                 context+="Eagle Mem: '${base_cmd}' is typically noisy (${reason}). Consider piping through tail or checking exit code only."
                 ;;
         esac
+    fi
+    ;;
+
+Edit|Write)
+    fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+    if [ -n "$fp" ]; then
+        # ─── Stuck loop detection ─────────────────────────
+        if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
+            edit_tracker="$EAGLE_MEM_DIR/edit-tracker/${session_id}"
+            if [ -f "$edit_tracker" ]; then
+                edit_count=$(grep -cFx -- "$fp" "$edit_tracker" 2>/dev/null)
+                edit_count=${edit_count:-0}
+                if [ "$edit_count" -ge 8 ]; then
+                    context+="Eagle Mem: '$(basename "$fp")' has been edited ${edit_count} times this session. You may be stuck — consider stepping back to rethink your approach before making more changes. "
+                elif [ "$edit_count" -ge 5 ]; then
+                    context+="Eagle Mem: '$(basename "$fp")' has been edited ${edit_count} times this session. If the changes aren't converging, consider a different approach. "
+                fi
+            fi
+        fi
+
+        # ─── Co-edit nudge (skip SQLite call if no co-edit hints exist) ──
+        _proj_hash=$(printf '%s' "$project" | shasum | cut -c1-8)
+        co_edit_marker="$EAGLE_MEM_DIR/.co-edit-active.${_proj_hash}"
+        co_edits=""
+        if [ -f "$co_edit_marker" ]; then
+            co_edits=$(eagle_get_co_edits "$project" "$fp")
+        fi
+        if [ -n "$co_edits" ]; then
+            partners=""
+            IFS=',' read -ra co_arr <<< "$co_edits"
+            for co_file in "${co_arr[@]}"; do
+                [ -n "$co_file" ] && partners+="$(basename "$co_file"), "
+            done
+            partners=${partners%, }
+            context+="Eagle Mem: When you change '$(basename "$fp")' you usually also touch: $partners"
+        fi
     fi
     ;;
 

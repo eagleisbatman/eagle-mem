@@ -192,6 +192,14 @@ eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" \
     "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
     "PreToolUse hook (Read)"
 
+eagle_patch_hook "$SETTINGS" "PreToolUse" "Edit" \
+    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+    "PreToolUse hook (Edit)"
+
+eagle_patch_hook "$SETTINGS" "PreToolUse" "Write" \
+    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+    "PreToolUse hook (Write)"
+
 # ─── Install skills ────────────────────────────────────────
 
 if [ -d "$PACKAGE_DIR/skills" ]; then

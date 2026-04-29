@@ -6,6 +6,8 @@
 # 2. Superseded decision detection
 # 3. Command compression rules
 # 4. Feature auto-discovery
+# 5. Co-edit pattern detection
+# 6. Hot file detection
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -348,7 +350,167 @@ else
     eagle_dim "  Not enough session data for feature discovery"
 fi
 
-# ─── 5. Session compression (--full only) ─────────────────
+# ─── 5. Co-edit pattern detection (pure SQL) ─────────────
+
+eagle_info "Analyzing co-edit patterns..."
+
+# Need 3+ sessions with edits — with fewer, every pair trivially co-occurs
+edit_sessions=$(eagle_db "SELECT COUNT(DISTINCT session_id) FROM observations
+    WHERE project = '$p_esc' AND tool_name IN ('Edit', 'Write');")
+
+co_edit_data=""
+if [ "${edit_sessions:-0}" -ge 3 ]; then
+    co_edit_data=$(eagle_db "WITH edits AS (
+        SELECT session_id,
+            CASE tool_name
+                WHEN 'Edit' THEN SUBSTR(tool_input_summary, 6)
+                WHEN 'Write' THEN SUBSTR(tool_input_summary, 7)
+            END as file_path
+        FROM observations
+        WHERE project = '$p_esc'
+        AND tool_name IN ('Edit', 'Write')
+        AND tool_input_summary IS NOT NULL
+    ),
+    file_stats AS (
+        SELECT file_path, COUNT(DISTINCT session_id) as edit_sessions
+        FROM edits GROUP BY file_path
+    ),
+    -- Filter files edited in >85% of all edit sessions (like .env — changes with everything)
+    noisy_files AS (
+        SELECT file_path FROM file_stats
+        WHERE CAST(edit_sessions AS REAL) / $edit_sessions > 0.85
+    )
+    SELECT e1.file_path as f1, e2.file_path as f2,
+        COUNT(DISTINCT e1.session_id) as co_sessions
+    FROM edits e1
+    JOIN edits e2 ON e1.session_id = e2.session_id AND e1.file_path < e2.file_path
+    WHERE e1.file_path NOT IN (SELECT file_path FROM noisy_files)
+    AND e2.file_path NOT IN (SELECT file_path FROM noisy_files)
+    GROUP BY f1, f2
+    HAVING co_sessions >= 2
+    ORDER BY co_sessions DESC
+    LIMIT 30;")
+fi
+
+if [ -n "$co_edit_data" ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "  Co-edit pairs found:"
+    fi
+
+    co_edit_count=0
+    declare -A co_map
+
+    while IFS='|' read -r f1 f2 co_sessions; do
+        [ -z "$f1" ] || [ -z "$f2" ] && continue
+
+        # Build comma-separated partner list per file (both directions)
+        if [ -n "${co_map[$f1]+x}" ]; then
+            co_map[$f1]="${co_map[$f1]},$f2"
+        else
+            co_map[$f1]="$f2"
+        fi
+        if [ -n "${co_map[$f2]+x}" ]; then
+            co_map[$f2]="${co_map[$f2]},$f1"
+        else
+            co_map[$f2]="$f1"
+        fi
+        co_edit_count=$((co_edit_count + 1))
+    done <<< "$co_edit_data"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        for f in "${!co_map[@]}"; do
+            eagle_info "    $(basename "$f") → ${co_map[$f]}"
+        done
+    else
+        {
+            echo "BEGIN;"
+            echo "DELETE FROM file_hints WHERE project = '$(eagle_sql_escape "$project")' AND hint_type = 'co_edit';"
+            for f in "${!co_map[@]}"; do
+                local_f=$(eagle_sql_escape "$f")
+                local_v=$(eagle_sql_escape "${co_map[$f]}")
+                echo "INSERT INTO file_hints (project, hint_type, file_path, hint_value) VALUES ('$(eagle_sql_escape "$project")', 'co_edit', '$local_f', '$local_v') ON CONFLICT(project, hint_type, file_path) DO UPDATE SET hint_value = excluded.hint_value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
+            done
+            echo "COMMIT;"
+        } | eagle_db_pipe
+        _proj_hash=$(printf '%s' "$project" | shasum | cut -c1-8)
+        touch "$EAGLE_MEM_DIR/.co-edit-active.${_proj_hash}"
+        eagle_log "INFO" "Curator: stored ${#co_map[@]} co-edit hints from $co_edit_count pairs"
+    fi
+    eagle_ok "$co_edit_count co-edit pairs found (${#co_map[@]} files)"
+else
+    if [ "$DRY_RUN" -eq 0 ]; then
+        eagle_delete_file_hints "$project" "co_edit"
+        _proj_hash=$(printf '%s' "$project" | shasum | cut -c1-8)
+        rm -f "$EAGLE_MEM_DIR/.co-edit-active.${_proj_hash}"
+    fi
+    eagle_dim "  Not enough edit data for co-edit detection (need 3+ sessions, have ${edit_sessions:-0})"
+fi
+
+# ─── 6. Hot file detection (pure SQL) ────────────────────
+
+eagle_info "Detecting hot files..."
+
+total_sessions=$(eagle_db "SELECT COUNT(DISTINCT session_id) FROM observations
+    WHERE project = '$p_esc' AND tool_name = 'Read';")
+
+hot_file_data=""
+if [ "${total_sessions:-0}" -ge 3 ]; then
+    hot_file_data=$(eagle_db "WITH read_stats AS (
+        SELECT
+            SUBSTR(tool_input_summary, 6) as file_path,
+            COUNT(*) as total_reads,
+            COUNT(DISTINCT session_id) as sessions_read
+        FROM observations
+        WHERE project = '$p_esc'
+        AND tool_name = 'Read'
+        AND tool_input_summary IS NOT NULL
+        GROUP BY file_path
+    )
+    SELECT file_path, total_reads, sessions_read,
+        CAST(total_reads * 1.0 / sessions_read AS INTEGER) as reads_per_session
+    FROM read_stats
+    WHERE (CAST(sessions_read AS REAL) / $total_sessions > 0.5
+           OR total_reads * 1.0 / sessions_read >= 10)
+    AND total_reads >= 5
+    ORDER BY reads_per_session DESC
+    LIMIT 15;")
+fi
+
+if [ -n "$hot_file_data" ]; then
+    hot_files=""
+    hot_count=0
+
+    while IFS='|' read -r hf_path hf_reads hf_sessions hf_rps; do
+        [ -z "$hf_path" ] && continue
+        if [ -n "$hot_files" ]; then
+            hot_files+=","
+        fi
+        hot_files+="$hf_path"
+        hot_count=$((hot_count + 1))
+
+        if [ "$DRY_RUN" -eq 1 ]; then
+            eagle_info "    $(basename "$hf_path") — ${hf_rps} reads/session, ${hf_sessions}/${total_sessions} sessions"
+        fi
+    done <<< "$hot_file_data"
+
+    if [ "$DRY_RUN" -eq 0 ] && [ -n "$hot_files" ]; then
+        {
+            echo "BEGIN;"
+            echo "DELETE FROM file_hints WHERE project = '$(eagle_sql_escape "$project")' AND hint_type = 'hot_file';"
+            echo "INSERT INTO file_hints (project, hint_type, file_path, hint_value) VALUES ('$(eagle_sql_escape "$project")', 'hot_file', '', '$(eagle_sql_escape "$hot_files")') ON CONFLICT(project, hint_type, file_path) DO UPDATE SET hint_value = excluded.hint_value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
+            echo "COMMIT;"
+        } | eagle_db_pipe
+        eagle_log "INFO" "Curator: stored $hot_count hot files"
+    fi
+    eagle_ok "$hot_count hot files detected"
+else
+    if [ "$DRY_RUN" -eq 0 ]; then
+        eagle_delete_file_hints "$project" "hot_file"
+    fi
+    eagle_dim "  Not enough session data for hot file detection (need 3+ sessions, have ${total_sessions:-0})"
+fi
+
+# ─── 7. Session compression (--full only) ─────────────────
 
 if [ "$FULL" -eq 1 ]; then
     eagle_info "Compressing old sessions..."

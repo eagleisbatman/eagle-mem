@@ -75,8 +75,8 @@ Six hooks fire automatically at different points in Claude Code's lifecycle:
 
 | Hook | Fires when | What it does |
 |------|-----------|--------------|
-| **SessionStart** | startup, resume, clear, compact | Injects overview, summaries, memories, tasks. Auto-provisions new projects (scan, index). |
-| **PreToolUse** | before Bash and Read calls | Rewrites noisy commands (learned rules), detects redundant reads |
+| **SessionStart** | startup, resume, clear, compact | Injects overview, summaries, memories, tasks, core files, working set. Auto-provisions new projects (scan, index). |
+| **PreToolUse** | before Bash, Read, Edit, and Write calls | Rewrites noisy commands (learned rules), detects redundant reads, nudges co-edit partners |
 | **UserPromptSubmit** | user sends a message | FTS5 search for relevant past context |
 | **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, tracks modifications |
 | **Stop** | Claude's turn ends | Extracts `<eagle-summary>`, strips `<private>` tags |
@@ -89,7 +89,7 @@ These run automatically via SessionStart — no commands needed:
 - **Auto-scan** — new project with no overview triggers a codebase scan
 - **Auto-index** — new or stale project triggers FTS5 source indexing
 - **Auto-prune** — observations over 10K rows trigger cleanup
-- **Auto-curate** — the self-learning curator analyzes observation data and generates project-specific command rules (requires LLM provider)
+- **Auto-curate** — the self-learning curator analyzes observation data and generates command rules, co-edit patterns, and hot file detection (partially requires LLM provider)
 
 ### Token savings
 
@@ -99,6 +99,10 @@ Eagle Mem actively reduces token consumption:
 - **Command rewriting** — PreToolUse rewrites noisy Bash commands to pipe through `head -N` via `updatedInput`. Rules are learned by the curator from real usage, not hardcoded.
 - **Read-after-modify detection** — detects when you read a file that was just edited or written, nudges that the diff is already in context
 - **Read dedup tracking** — files read 3+ times in a session get a soft nudge
+- **Co-edit nudges** — learned from observation data: when you edit file X, PreToolUse reminds you that you usually also touch file Y
+- **Hot file awareness** — curator identifies files read in 50%+ of sessions; SessionStart flags them as "likely in context" to reduce re-reads
+- **Working set recovery** — on compact, SessionStart injects the files you were actively editing so you resume without re-reading everything
+- **Stuck loop detection** — if the same file is edited 5+ times in one session, PreToolUse nudges to reconsider the approach
 
 ### Data
 
@@ -112,6 +116,7 @@ Single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text sea
 | overviews | One overview per project (auto-scan or manual) |
 | code_chunks | FTS5-indexed source file chunks |
 | command_rules | Curator-learned command output rules |
+| file_hints | Curator-learned file access patterns (co-edit pairs) |
 | claude_memories | Mirror of Claude Code auto-memories |
 | claude_plans | Mirror of Claude Code plans |
 | claude_tasks | Mirror of Claude Code tasks |

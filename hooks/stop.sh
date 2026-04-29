@@ -38,15 +38,6 @@ eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcr
 # Ensure session exists (may not if SessionStart didn't fire)
 eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
 
-# ─── Guard: skip if summary already exists for this session ──
-# Stop fires every assistant turn. Only process once per session.
-
-existing_count=$(eagle_count_session_summaries "$session_id")
-if [ "${existing_count:-0}" -gt 0 ]; then
-    eagle_log "INFO" "Stop: summary already exists for session=$session_id — skipping"
-    exit 0
-fi
-
 [ -z "$transcript_path" ] || [ ! -f "$transcript_path" ] && exit 0
 
 # ─── Primary: heuristic extraction from transcript ───────────
@@ -67,7 +58,7 @@ fi
 
 investigated=""
 learned=""
-completed="(auto-captured)"
+completed=""
 next_steps=""
 notes=""
 decisions=""
@@ -134,8 +125,16 @@ if [ -n "$summary_block" ]; then
 fi
 
 # ─── LLM enrichment: fill in decisions/gotchas/key_files ─────
+# Check both local vars (from eagle-summary block) AND existing DB enrichment.
+# Skip LLM call if either source already has enrichment data.
 
+existing_enrichment=""
 if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
+    s_esc=$(eagle_sql_escape "$session_id")
+    existing_enrichment=$(eagle_db "SELECT decisions||gotchas||key_files FROM summaries WHERE session_id='$s_esc';")
+fi
+
+if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ] && [ -z "$existing_enrichment" ]; then
     provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
     if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 2000)

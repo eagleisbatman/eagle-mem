@@ -45,6 +45,7 @@ eagle_sessionstart_auto_curate "$project" "$SCRIPTS_DIR"
 
 find "$EAGLE_MEM_DIR/read-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/mod-tracker" -type f -mtime +1 -delete 2>/dev/null &
+find "$EAGLE_MEM_DIR/edit-tracker" -type f -mtime +1 -delete 2>/dev/null &
 
 # ─── Version check (non-blocking) ────────────────────────
 
@@ -262,6 +263,36 @@ if [ -n "$synced_tasks" ]; then
         context+="  - [$tstatus] $tsubject$block_marker
 "
     done <<< "$synced_tasks"
+fi
+
+# ─── Core files (hot file hints from curator) ───────────
+
+hot_files=$(eagle_get_hot_files "$project")
+if [ -n "$hot_files" ]; then
+    context+="
+=== Core Files (frequently read — re-read sparingly if unchanged) ===
+"
+    IFS=',' read -ra hf_arr <<< "$hot_files"
+    for hf in "${hf_arr[@]}"; do
+        [ -n "$hf" ] && context+="  - $(basename "$hf")
+"
+    done
+fi
+
+# ─── Working set (on compact — what you were editing) ────
+
+if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
+    working_set=$(eagle_get_working_set "$session_id")
+    if [ -n "$working_set" ]; then
+        context+="
+=== Working Set (files you were modifying before compact) ===
+"
+        while IFS='|' read -r ws_path ws_edits; do
+            [ -z "$ws_path" ] && continue
+            context+="  - $(basename "$ws_path") (${ws_edits} edits)
+"
+        done <<< "$working_set"
+    fi
 fi
 
 # ─── Instructions (compressed) ───────────────────────────

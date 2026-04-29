@@ -113,6 +113,11 @@ if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_i
                 _mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || _mod_tmp="${mod_file}.$$"
                 tail -3 "$mod_file" > "$_mod_tmp" && mv "$_mod_tmp" "$mod_file" || rm -f "$_mod_tmp"
             fi
+
+            # Full edit history for stuck loop detection (not truncated)
+            edit_dir="$EAGLE_MEM_DIR/edit-tracker"
+            mkdir -p "$edit_dir" 2>/dev/null
+            echo "$fp" >> "$edit_dir/${session_id}"
             ;;
     esac
 fi

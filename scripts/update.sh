@@ -77,6 +77,8 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
     eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
     eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Edit" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Write" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
 
     eagle_ok "Hooks registered"
 fi
