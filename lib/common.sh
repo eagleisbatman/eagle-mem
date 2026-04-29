@@ -157,3 +157,42 @@ eagle_collect_files() {
             | sed 's|^\./||') > "$output_file"
     fi
 }
+
+eagle_patch_claude_md() {
+    local claude_md="$HOME/.claude/CLAUDE.md"
+    local marker="## Eagle Mem — Persistent Memory"
+
+    if [ -f "$claude_md" ] && grep -qF "$marker" "$claude_md" 2>/dev/null; then
+        return 1
+    fi
+
+    mkdir -p "$HOME/.claude"
+
+    cat >> "$claude_md" << 'EAGLE_MD'
+
+---
+
+## Eagle Mem — Persistent Memory
+
+Eagle Mem hooks are active in every project. SessionStart injects context (overview, recent sessions, memories, tasks, core files). Stop captures session summaries. PostToolUse mirrors memories/plans/tasks.
+
+**Rule:** Before your final response in every session, emit an `<eagle-summary>` block so the Stop hook can capture a rich summary instead of just heuristics.
+
+```
+<eagle-summary>
+request: [what user asked] | completed: [what shipped] | learned: [non-obvious discoveries]
+next_steps: [concrete actions] | decisions: [choice — why] | gotchas: [what surprised]
+key_files: [path — role] | files_read: [...] | files_modified: [...]
+</eagle-summary>
+```
+
+**Why:** Without this block, summaries degrade to "(auto-captured)" with no decisions, gotchas, or learned context. Rich summaries are what make future sessions useful.
+
+**How to apply:**
+- Emit `<eagle-summary>` before your final text response, every session
+- When Eagle Mem injects context at SessionStart, attribute it: "Eagle Mem recalls:"
+- Do not revert decisions surfaced by PostToolUse without asking the user
+- Never put raw secrets in the summary — Eagle Mem redacts but defense in depth
+- If you contradict a loaded memory, update the memory file
+EAGLE_MD
+}

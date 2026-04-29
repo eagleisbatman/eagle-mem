@@ -114,6 +114,14 @@ else
     eagle_ok "Project names up to date"
 fi
 
+# ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
+
+if eagle_patch_claude_md; then
+    eagle_ok "CLAUDE.md updated ${DIM}(eagle-summary instructions added)${RESET}"
+else
+    eagle_ok "CLAUDE.md up to date"
+fi
+
 # ─── Save installed version ───────────────────────────────
 
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")

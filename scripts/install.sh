@@ -271,6 +271,14 @@ else
     eagle_ok "Config ${DIM}(already exists)${RESET}"
 fi
 
+# ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
+
+if eagle_patch_claude_md; then
+    eagle_ok "CLAUDE.md ${DIM}(eagle-summary instructions added)${RESET}"
+else
+    eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
+fi
+
 # ─── Save installed version ───────────────────────────────
 
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")

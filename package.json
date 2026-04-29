@@ -1,6 +1,6 @@
 {
   "name": "eagle-mem",
-  "version": "4.1.1",
+  "version": "4.1.2",
   "description": "Persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat",
   "bin": {
     "eagle-mem": "bin/eagle-mem"
