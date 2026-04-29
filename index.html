@@ -476,14 +476,15 @@
         <div class="feature">
           <h3>// automatic memory</h3>
           <p>
-            Five lifecycle hooks fire on every session event. You never run a
+            Six lifecycle hooks fire on every session event. You never run a
             &ldquo;save&rdquo; command &mdash; Eagle Mem captures context
             automatically.
           </p>
           <ul>
             <li><strong>SessionStart</strong> &mdash; injects overview, summaries, memories, plans, and in-progress tasks</li>
+            <li><strong>PreToolUse</strong> &mdash; rewrites noisy commands (learned rules), detects redundant reads</li>
             <li><strong>UserPromptSubmit</strong> &mdash; FTS5 search for relevant past memories</li>
-            <li><strong>PostToolUse</strong> &mdash; records file touches + mirrors Claude&rsquo;s memories, plans, and tasks</li>
+            <li><strong>PostToolUse</strong> &mdash; records file touches, mirrors memories/plans/tasks, tracks modifications</li>
             <li><strong>Stop</strong> &mdash; extracts <code>&lt;eagle-summary&gt;</code>, strips <code>&lt;private&gt;</code> tags</li>
             <li><strong>SessionEnd</strong> &mdash; re-syncs task statuses, marks session completed</li>
           </ul>
@@ -541,11 +542,24 @@
           </ul>
         </div>
         <div class="feature">
+          <h3>// token savings</h3>
+          <p>
+            Eagle Mem actively reduces token consumption through learned behavior,
+            not hardcoded rules.
+          </p>
+          <ul>
+            <li><strong>Command rewriting</strong> &mdash; PreToolUse rewrites noisy Bash commands to pipe through <code>head -N</code> via <code>updatedInput</code>. Rules are learned by the curator from real usage.</li>
+            <li><strong>Read-after-modify</strong> &mdash; detects when you read a file that was just edited or written, nudges that the diff is already in context</li>
+            <li><strong>Read dedup</strong> &mdash; files read 3+ times in a session get a soft nudge that contents are likely already in context</li>
+            <li><strong>Self-learning</strong> &mdash; the curator analyzes observation data to discover which commands are noisy and generates project-specific rules</li>
+          </ul>
+        </div>
+        <div class="feature">
           <h3>// compact-safe reload</h3>
           <p>
             When Claude Code compacts your conversation, Eagle Mem detects it and
-            re-injects the full context &mdash; overview, memories, tasks, and the
-            ASCII eagle.
+            re-injects the full context &mdash; overview, memories, tasks, and
+            recent session history.
           </p>
           <ul>
             <li><strong>Trigger-aware</strong> &mdash; shows startup vs compact vs clear vs resume</li>
@@ -556,7 +570,7 @@
       </section>
 
       <footer>
-        v2.0.2 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
+        v3.3.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
       </footer>
     </main>
   </body>
