@@ -85,13 +85,11 @@ fi
 
 if [ -d "$PACKAGE_DIR/skills" ]; then
     mkdir -p "$EAGLE_SKILLS_DIR"
-    # Remove stale symlinks for deleted skills
-    for existing in "$EAGLE_SKILLS_DIR"/eagle-mem-*/; do
-        local_path="${existing%/}"
-        [ ! -L "$local_path" ] && continue
-        skill_name=$(basename "$local_path")
+    # Remove stale symlinks for deleted skills (find catches broken symlinks; glob doesn't)
+    find "$EAGLE_SKILLS_DIR" -maxdepth 1 -name "eagle-mem-*" -type l 2>/dev/null | while read -r existing; do
+        skill_name=$(basename "$existing")
         if [ ! -d "$PACKAGE_DIR/skills/$skill_name" ]; then
-            rm "$local_path"
+            rm "$existing"
             eagle_ok "Removed stale skill: $skill_name"
         fi
     done
