@@ -36,16 +36,29 @@ Everything is automatic from here. Eagle Mem scans your codebase, indexes source
 
 ## Commands
 
-Six commands. Three for lifecycle, three for when you need to look something up or troubleshoot.
+Six commands. Three for lifecycle, three for lookup and troubleshooting.
 
 | Command | What it does |
 |---------|-------------|
 | `eagle-mem install` | First-time setup: hooks, database, skills |
 | `eagle-mem update` | Re-deploy hooks and run migrations after `npm update` |
 | `eagle-mem uninstall` | Remove hooks and optionally delete data |
-| `eagle-mem search "query"` | Search past sessions, memories, and code (FTS5) |
+| `eagle-mem search` | Single lookup command — see modes below |
 | `eagle-mem health` | Diagnose pipeline health and background automation |
 | `eagle-mem config` | View or change LLM provider settings |
+
+### Search modes
+
+| Mode | What it does |
+|------|-------------|
+| `eagle-mem search "query"` | FTS5 keyword search across session summaries |
+| `eagle-mem search --timeline` | Recent sessions in chronological order |
+| `eagle-mem search --overview` | View project overview |
+| `eagle-mem search --memories` | Mirrored Claude Code memories |
+| `eagle-mem search --tasks` | In-flight tasks (pending/in-progress) |
+| `eagle-mem search --files` | Most frequently modified files |
+| `eagle-mem search --stats` | Project statistics (counts) |
+| `eagle-mem search --session <id>` | Full observation trail for one session |
 
 ## Skills (inside Claude Code)
 

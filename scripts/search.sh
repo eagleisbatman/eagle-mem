@@ -25,6 +25,9 @@ show_help() {
     echo -e "    eagle-mem search ${CYAN}--session <id>${RESET}            ${DIM}# session details${RESET}"
     echo -e "    eagle-mem search ${CYAN}--files${RESET}                  ${DIM}# frequently modified files${RESET}"
     echo -e "    eagle-mem search ${CYAN}--stats${RESET}                  ${DIM}# project statistics${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--overview${RESET}                ${DIM}# project overview${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--memories${RESET}               ${DIM}# mirrored Claude memories${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--tasks${RESET}                  ${DIM}# in-flight tasks${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
     echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
@@ -51,6 +54,9 @@ while [ $# -gt 0 ]; do
         --session|-s)        mode="session"; session_id="$2"; shift 2 ;;
         --files|-f)          mode="files"; shift ;;
         --stats)             mode="stats"; shift ;;
+        --overview|-o)       mode="overview"; shift ;;
+        --memories|-m)       mode="memories"; shift ;;
+        --tasks)             mode="tasks"; shift ;;
         --project|-p)        project="$2"; shift 2 ;;
         --limit|-n)          limit="$2"; shift 2 ;;
         --all|-a)            cross_project=true; shift ;;
@@ -280,6 +286,211 @@ search_stats() {
     echo ""
 }
 
+# ─── Overview ────────────────────────────────────────────
+
+search_overview() {
+    local p; p=$(eagle_sql_escape "$project")
+
+    if [ "$json_output" = true ]; then
+        eagle_db_json "SELECT project, content, source, updated_at FROM overviews WHERE project = '$p';"
+        return
+    fi
+
+    local content
+    content=$(eagle_db "SELECT content FROM overviews WHERE project = '$p';")
+
+    if [ -z "$content" ]; then
+        eagle_dim "No overview for project '$project'"
+        eagle_dim "  Auto-scan runs on first session, or use /eagle-mem-overview for a rich briefing"
+        return
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Overview${RESET} ${DIM}($project)${RESET}"
+    echo -e "  ${DIM}─────────────────────────────────────${RESET}"
+    echo ""
+    echo "  $content"
+    echo ""
+
+    if [ -n "$query" ]; then
+        echo -e "  ${DIM}To update: eagle-mem search --overview set \"new overview text\"${RESET}"
+    fi
+}
+
+# ─── Memories ────────────────────────────────────────────
+
+search_memories() {
+    local p; p=$(eagle_sql_escape "$project")
+
+    local where_project=""
+    if [ "$cross_project" = false ]; then
+        where_project="WHERE project = '$p'"
+    fi
+
+    if [ -n "$query" ]; then
+        local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
+        local where_match="WHERE claude_memories_fts MATCH '$q'"
+        if [ "$cross_project" = false ]; then
+            where_match="$where_match AND m.project = '$p'"
+        fi
+
+        if [ "$json_output" = true ]; then
+            eagle_db_json "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at
+                           FROM claude_memories m
+                           JOIN claude_memories_fts f ON f.rowid = m.id
+                           $where_match
+                           ORDER BY rank
+                           LIMIT $limit;"
+            return
+        fi
+
+        local results
+        results=$(eagle_db "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at
+                            FROM claude_memories m
+                            JOIN claude_memories_fts f ON f.rowid = m.id
+                            $where_match
+                            ORDER BY rank
+                            LIMIT $limit;")
+
+        if [ -z "$results" ]; then
+            eagle_dim "No memories matching '$query'"
+            return
+        fi
+
+        echo ""
+        while IFS='|' read -r mname mtype mdesc mproj mupdated; do
+            [ -z "$mname" ] && continue
+            echo -e "  ${BOLD}$mname${RESET}  ${DIM}[$mtype]${RESET}"
+            [ "$cross_project" = true ] && echo -e "  ${DIM}project:${RESET} $mproj"
+            [ -n "$mdesc" ] && echo -e "  $mdesc"
+            echo ""
+        done <<< "$results"
+        return
+    fi
+
+    if [ "$json_output" = true ]; then
+        eagle_db_json "SELECT memory_name, memory_type, description, project, updated_at
+                       FROM claude_memories $where_project
+                       ORDER BY updated_at DESC LIMIT $limit;"
+        return
+    fi
+
+    local results
+    results=$(eagle_db "SELECT memory_name, memory_type, description, updated_at
+                        FROM claude_memories $where_project
+                        ORDER BY updated_at DESC LIMIT $limit;")
+
+    if [ -z "$results" ]; then
+        eagle_dim "No memories found"
+        return
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Memories${RESET} ${DIM}($project)${RESET}"
+    echo -e "  ${DIM}─────────────────────────────────────${RESET}"
+    echo ""
+
+    while IFS='|' read -r mname mtype mdesc mupdated; do
+        [ -z "$mname" ] && continue
+        echo -e "  ${CYAN}[$mtype]${RESET} ${BOLD}$mname${RESET}"
+        [ -n "$mdesc" ] && echo -e "         ${DIM}$mdesc${RESET}"
+    done <<< "$results"
+    echo ""
+}
+
+# ─── Tasks ───────────────────────────────────────────────
+
+search_tasks() {
+    local p; p=$(eagle_sql_escape "$project")
+
+    local where_project=""
+    if [ "$cross_project" = false ]; then
+        where_project="AND project = '$p'"
+    fi
+
+    if [ -n "$query" ]; then
+        local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
+
+        if [ "$json_output" = true ]; then
+            eagle_db_json "SELECT t.subject, t.status, t.project, t.updated_at
+                           FROM claude_tasks t
+                           JOIN claude_tasks_fts f ON f.rowid = t.id
+                           WHERE claude_tasks_fts MATCH '$q'
+                           ${where_project/AND/AND t.}
+                           ORDER BY rank
+                           LIMIT $limit;"
+            return
+        fi
+
+        local results
+        results=$(eagle_db "SELECT t.subject, t.status, t.project, t.updated_at
+                            FROM claude_tasks t
+                            JOIN claude_tasks_fts f ON f.rowid = t.id
+                            WHERE claude_tasks_fts MATCH '$q'
+                            ${where_project/AND/AND t.}
+                            ORDER BY rank
+                            LIMIT $limit;")
+
+        if [ -z "$results" ]; then
+            eagle_dim "No tasks matching '$query'"
+            return
+        fi
+
+        echo ""
+        while IFS='|' read -r tsubject tstatus tproj tupdated; do
+            [ -z "$tsubject" ] && continue
+            local color="$DIM"
+            case "$tstatus" in
+                in_progress) color="$YELLOW" ;;
+                completed) color="$GREEN" ;;
+                pending) color="$CYAN" ;;
+            esac
+            echo -e "  ${color}[$tstatus]${RESET} $tsubject"
+        done <<< "$results"
+        echo ""
+        return
+    fi
+
+    if [ "$json_output" = true ]; then
+        eagle_db_json "SELECT subject, status, project, updated_at
+                       FROM claude_tasks
+                       WHERE status IN ('in_progress', 'pending')
+                       $where_project
+                       ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC
+                       LIMIT $limit;"
+        return
+    fi
+
+    local results
+    results=$(eagle_db "SELECT subject, status, updated_at
+                        FROM claude_tasks
+                        WHERE status IN ('in_progress', 'pending')
+                        $where_project
+                        ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC
+                        LIMIT $limit;")
+
+    if [ -z "$results" ]; then
+        eagle_dim "No active tasks for project '$project'"
+        return
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Tasks${RESET} ${DIM}($project)${RESET}"
+    echo -e "  ${DIM}─────────────────────────────────────${RESET}"
+    echo ""
+
+    while IFS='|' read -r tsubject tstatus tupdated; do
+        [ -z "$tsubject" ] && continue
+        local color="$DIM"
+        case "$tstatus" in
+            in_progress) color="$YELLOW" ;;
+            pending) color="$CYAN" ;;
+        esac
+        echo -e "  ${color}[$tstatus]${RESET} $tsubject"
+    done <<< "$results"
+    echo ""
+}
+
 # ─── Dispatch ─────────────────────────────────────────────
 
 case "$mode" in
@@ -295,4 +506,7 @@ case "$mode" in
     session)     search_session ;;
     files)       search_files ;;
     stats)       search_stats ;;
+    overview)    search_overview ;;
+    memories)    search_memories ;;
+    tasks)       search_tasks ;;
 esac
