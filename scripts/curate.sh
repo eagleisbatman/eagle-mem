@@ -222,6 +222,13 @@ If no rules needed, output: NONE"
                             eagle_log "WARN" "Curator: skipping RULE with invalid strategy '$strategy'"
                             continue
                         ;; esac
+                        # Guard: reject dangerous LLM-generated patterns that match everything
+                        # Require at least 2 literal characters (not just wildcards)
+                        _literal_chars=$(printf '%s' "$pattern" | sed 's/[%_]//g')
+                        if [ ${#_literal_chars} -lt 2 ]; then
+                            eagle_log "WARN" "Curator: skipping overly broad pattern '$pattern' (needs >=2 literal chars)"
+                            continue
+                        fi
 
                         [ "$max_lines" = "-" ] && max_lines=""
 

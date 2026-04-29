@@ -11,7 +11,15 @@ eagle_patch_hook() {
     local command="$4"
     local description="${5:-}"
 
-    if jq -e ".hooks.${event}[]? | select(.hooks[]?.command == \"$command\")" "$settings" &>/dev/null; then
+    # Check both command AND matcher to avoid skipping entries with different matchers
+    # (e.g. PreToolUse with "Bash" vs "Read" matcher using the same script)
+    local match_query
+    if [ -n "$matcher" ]; then
+        match_query=".hooks.${event}[]? | select(.matcher == \"$matcher\" and (.hooks[]?.command == \"$command\"))"
+    else
+        match_query=".hooks.${event}[]? | select(.matcher == null and (.hooks[]?.command == \"$command\"))"
+    fi
+    if jq -e "$match_query" "$settings" &>/dev/null; then
         [ -n "$description" ] && eagle_ok "$description ${DIM}(already registered)${RESET}"
         return 0
     fi

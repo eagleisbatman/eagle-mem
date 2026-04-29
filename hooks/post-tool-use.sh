@@ -68,7 +68,7 @@ case "$tool_name" in
         cmd=$(echo "$cmd" | eagle_redact)
         tool_summary="Bash: $cmd"
 
-        tool_output=$(echo "$input" | jq -r '.tool_result.stdout // empty' 2>/dev/null)
+        tool_output=$(echo "$input" | jq -r '.tool_response.stdout // empty' 2>/dev/null)
         if [ -n "$tool_output" ]; then
             output_bytes=${#tool_output}
             output_lines=$(echo "$tool_output" | wc -l | tr -d ' ')
@@ -97,6 +97,25 @@ case "$tool_name" in
         tool_summary="$tool_name: $task_subject"
         ;;
 esac
+
+# ─── Track recent Edit/Write targets for Read-after-modify detection ──
+
+if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
+    case "$tool_name" in
+        Edit|Write)
+            mod_dir="$EAGLE_MEM_DIR/mod-tracker"
+            mkdir -p "$mod_dir" 2>/dev/null
+            mod_file="$mod_dir/${session_id}"
+            echo "$fp" >> "$mod_file"
+            # Keep only last 3 entries — use per-process tmp to avoid
+            # race when parallel PostToolUse hooks fire on same session
+            if [ -f "$mod_file" ]; then
+                _mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || _mod_tmp="${mod_file}.$$"
+                tail -3 "$mod_file" > "$_mod_tmp" && mv "$_mod_tmp" "$mod_file" || rm -f "$_mod_tmp"
+            fi
+            ;;
+    esac
+fi
 
 # ─── Dispatch to extracted responsibilities ───────────────
 

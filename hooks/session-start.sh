@@ -61,6 +61,10 @@ if [ "$curator_schedule" = "auto" ]; then
     fi
 fi
 
+# ─── Cleanup stale tracker files (non-blocking) ─────────────
+find "$EAGLE_MEM_DIR/read-tracker" -type f -mtime +1 -delete 2>/dev/null &
+find "$EAGLE_MEM_DIR/mod-tracker" -type f -mtime +1 -delete 2>/dev/null &
+
 # ─── Version check (non-blocking) ────────────────────────────
 
 update_notice=""

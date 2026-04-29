@@ -186,7 +186,11 @@ eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
 
 eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" \
     "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-    "PreToolUse hook"
+    "PreToolUse hook (Bash)"
+
+eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" \
+    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+    "PreToolUse hook (Read)"
 
 # ─── Install skills ────────────────────────────────────────
 

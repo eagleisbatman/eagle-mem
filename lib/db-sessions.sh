@@ -15,9 +15,9 @@ eagle_upsert_session() {
     eagle_db "INSERT INTO sessions (id, project, cwd, model, source, last_activity_at)
               VALUES ('$session_id', '$project', '$cwd', '$model', '$source', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
               ON CONFLICT(id) DO UPDATE SET
-                  cwd = COALESCE(excluded.cwd, sessions.cwd),
-                  model = COALESCE(excluded.model, sessions.model),
-                  source = COALESCE(excluded.source, sessions.source),
+                  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
+                  model = COALESCE(NULLIF(excluded.model, ''), sessions.model),
+                  source = COALESCE(NULLIF(excluded.source, ''), sessions.source),
                   status = 'active',
                   last_activity_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
 }
