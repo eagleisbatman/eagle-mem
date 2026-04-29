@@ -17,20 +17,11 @@ shift 2>/dev/null || true
 
 case "$command" in
     install)    bash "$SCRIPTS_DIR/install.sh" "$PACKAGE_DIR" "$@" ;;
-    uninstall)  bash "$SCRIPTS_DIR/uninstall.sh" "$@" ;;
     update)     bash "$SCRIPTS_DIR/update.sh" "$PACKAGE_DIR" "$@" ;;
-    scan)       bash "$SCRIPTS_DIR/scan.sh" "$@" ;;
-    index)      bash "$SCRIPTS_DIR/index.sh" "$@" ;;
+    uninstall)  bash "$SCRIPTS_DIR/uninstall.sh" "$@" ;;
     search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
-    tasks)      bash "$SCRIPTS_DIR/tasks.sh" "$@" ;;
-    overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
-    refresh)    bash "$SCRIPTS_DIR/refresh.sh" "$@" ;;
-    prune)      bash "$SCRIPTS_DIR/prune.sh" "$@" ;;
-    memories)   bash "$SCRIPTS_DIR/memories.sh" "$@" ;;
-    config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
-    curate)     bash "$SCRIPTS_DIR/curate.sh" "$@" ;;
-    feature)    bash "$SCRIPTS_DIR/feature.sh" "$@" ;;
     health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
+    config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)

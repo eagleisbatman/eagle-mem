@@ -151,8 +151,8 @@ model = "claude-haiku-4-5-20251001"
 model = "gpt-4o-mini"
 
 [curator]
-# "auto" = triggers at session end after min_sessions; "manual" = CLI only
-schedule = "manual"
+# "auto" = triggers at session start after min_sessions; "manual" = CLI only
+schedule = "auto"
 min_sessions = 5
 
 [redaction]

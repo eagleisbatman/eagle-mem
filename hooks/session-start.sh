@@ -13,6 +13,7 @@ SCRIPTS_DIR="$SCRIPT_DIR/../scripts"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/provider.sh"
+. "$LIB_DIR/hooks-sessionstart.sh"
 
 eagle_ensure_db
 
@@ -27,8 +28,6 @@ model=$(echo "$input" | jq -r '.model // empty')
 [ -z "$session_id" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
-
-# Skip ephemeral directories (tmp, Downloads, etc.) — no tracking
 [ -z "$project" ] && exit 0
 
 p_esc=$(eagle_sql_escape "$project")
@@ -36,36 +35,18 @@ p_esc=$(eagle_sql_escape "$project")
 eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type"
 
 eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
-
-# ─── Sweep stuck sessions (no activity for 7 days) ─────────
-# Uses last_activity_at (updated by trigger on every observation insert)
-# so long-lived sessions with regular compactions aren't falsely abandoned
 eagle_abandon_stale_sessions "$session_id"
 
-# ─── Auto-curate trigger (background, non-blocking) ──────────
-# Moved here from SessionEnd because SessionEnd rarely fires in long-lived sessions.
-# SessionStart fires on every new session, resume, and compaction — reliable trigger.
-curator_schedule=$(eagle_config_get "curator" "schedule" "manual")
-if [ "$curator_schedule" = "auto" ]; then
-    _curator_provider=$(eagle_config_get "provider" "type" "none")
-    if [ "$_curator_provider" != "none" ]; then
-        _min_sessions=$(eagle_config_get "curator" "min_sessions" "5")
-        _min_sessions=$(eagle_sql_int "$_min_sessions")
-        _last_curated=$(eagle_meta_get "last_curated_at" "$project")
-        _since="${_last_curated:-1970-01-01T00:00:00Z}"
-        _sessions_since=$(eagle_count_sessions_since "$project" "$_since")
-        if [ "${_sessions_since:-0}" -ge "$_min_sessions" ]; then
-            eagle_log "INFO" "SessionStart: auto-curate triggered (${_sessions_since} sessions since last curate)"
-            nohup bash "$SCRIPTS_DIR/curate.sh" -p "$project" >> "$EAGLE_MEM_LOG" 2>&1 &
-        fi
-    fi
-fi
+# ─── Background automation (non-blocking) ────────────────
 
-# ─── Cleanup stale tracker files (non-blocking) ─────────────
+eagle_sessionstart_auto_provision "$project" "$cwd" "$SCRIPTS_DIR"
+eagle_sessionstart_auto_prune "$project" "$SCRIPTS_DIR" "$(eagle_db "SELECT COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project='$p_esc');")"
+eagle_sessionstart_auto_curate "$project" "$SCRIPTS_DIR"
+
 find "$EAGLE_MEM_DIR/read-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/mod-tracker" -type f -mtime +1 -delete 2>/dev/null &
 
-# ─── Version check (non-blocking) ────────────────────────────
+# ─── Version check (non-blocking) ────────────────────────
 
 update_notice=""
 version_file="$EAGLE_MEM_DIR/.version"
@@ -93,7 +74,7 @@ if [ -f "$version_file" ] && [ -s "$version_file" ]; then
     fi
 fi
 
-# ─── Gather stats ───────────────────────────────────────────
+# ─── Gather stats ────────────────────────────────────────
 
 stat_sessions=0; stat_summaries=0; stat_with_summaries=0; stat_memories=0
 stat_tasks_pending=0; stat_tasks_progress=0; stat_tasks_done=0
@@ -117,7 +98,8 @@ while IFS='|' read -r key val; do
     esac
 done <<< "$(eagle_get_project_stats "$project")"
 
-# Build task summary line
+# ─── Build compressed banner (elide zero-value lines) ────
+
 task_parts=""
 [ "$stat_tasks_progress" -gt 0 ] && task_parts="${stat_tasks_progress} in progress"
 if [ "$stat_tasks_pending" -gt 0 ]; then
@@ -128,27 +110,26 @@ if [ "$stat_tasks_done" -gt 0 ]; then
     [ -n "$task_parts" ] && task_parts+=", "
     task_parts+="${stat_tasks_done} completed"
 fi
-[ -z "$task_parts" ] && task_parts="none"
 
-# Truncate last summary for display
 stat_last_display="${stat_last_summary:0:60}"
 [ ${#stat_last_summary} -gt 60 ] && stat_last_display+="..."
-[ -z "$stat_last_display" ] && stat_last_display="(no sessions yet)"
-
-# ─── Build context injection ────────────────────────────────
 
 eagle_banner="======================================
        Eagle Mem Loaded
 ======================================
  Project      | $project
- Sessions     | $stat_sessions total ($stat_with_summaries with summaries)
- Memories     | $stat_memories stored
- Plans        | $stat_plans saved
- Tasks        | $task_parts
- Code Index   | $stat_chunks chunks indexed
- Observations | $stat_observations captured
- Last Active  | $stat_last_active
- Last Work    | $stat_last_display
+ Sessions     | $stat_sessions ($stat_with_summaries with summaries)"
+[ "$stat_memories" -gt 0 ] && eagle_banner+="
+ Memories     | $stat_memories stored"
+[ "$stat_plans" -gt 0 ] && eagle_banner+="
+ Plans        | $stat_plans saved"
+[ -n "$task_parts" ] && eagle_banner+="
+ Tasks        | $task_parts"
+[ "$stat_chunks" -gt 0 ] && eagle_banner+="
+ Code Index   | $stat_chunks chunks"
+[ -n "$stat_last_display" ] && eagle_banner+="
+ Last Work    | $stat_last_display"
+eagle_banner+="
 ======================================"
 
 context="$eagle_banner
@@ -160,22 +141,33 @@ if [ -n "$update_notice" ]; then
 "
 fi
 
-# Project overview
+# ─── Project overview (capped at 500 chars) ──────────────
+
 overview=$(eagle_get_overview "$project")
 if [ -n "$overview" ]; then
+    if [ ${#overview} -gt 500 ]; then
+        overview="${overview:0:497}..."
+    fi
     context+="
-=== Project Overview ===
+=== Overview ===
 $overview
 "
 else
     context+="
-=== Action Required ===
-No overview exists for '$project'. Run /eagle-mem-overview to build one.
+=== New Project ===
+No overview yet — auto-scan is running. Run /eagle-mem-overview for a richer briefing.
 "
 fi
 
-# Recent summaries for this project (last 5 sessions)
-recent=$(eagle_get_recent_summaries "$project" 5)
+# ─── Recent sessions (1 on compact, 3 on startup) ────────
+
+if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
+    _summary_limit=1
+else
+    _summary_limit=3
+fi
+
+recent=$(eagle_get_recent_summaries "$project" "$_summary_limit")
 
 if [ -n "$recent" ]; then
     context+="
@@ -204,7 +196,7 @@ Next steps: $next_steps"
 "
 fi
 
-# ─── Mirrored Claude memories (with age) ─────────────────
+# ─── Memories (skip if none) ─────────────────────────────
 
 memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at,
     CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
@@ -233,7 +225,7 @@ if [ -n "$memories" ]; then
     done <<< "$memories"
 fi
 
-# ─── Mirrored Claude plans ────────────────────────────────
+# ─── Plans (skip if none) ────────────────────────────────
 
 plans=$(eagle_list_claude_plans "$project" 3)
 if [ -n "$plans" ]; then
@@ -247,7 +239,7 @@ if [ -n "$plans" ]; then
     done <<< "$plans"
 fi
 
-# ─── Claude Code tasks ───────────────────────────────────
+# ─── Tasks (skip if none) ────────────────────────────────
 
 synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
     WHERE project = '$p_esc'
@@ -272,39 +264,27 @@ if [ -n "$synced_tasks" ]; then
     done <<< "$synced_tasks"
 fi
 
-# ─── Instructions (full on startup, minimal on compact) ──
+# ─── Instructions (compressed) ───────────────────────────
 
 if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     context+="
-=== Eagle Mem (compact reload) ===
-Persistent memory active. Attribute recalled context to Eagle Mem. Do not revert past decisions surfaced by PostToolUse without asking the user. Emit <eagle-summary> before your final response.
+=== Eagle Mem ===
+Memory active. Attribute recalled context to Eagle Mem. Do not revert PostToolUse-surfaced decisions without asking. Emit <eagle-summary> before final response.
 "
 else
     context+="
 === Eagle Mem ===
-Persistent memory active for '$project'. Attribute recalled context: \"Eagle Mem recalls:\" When PostToolUse surfaces past decisions about a file, do not revert without explicit user request. Never include raw secrets in eagle-summary fields. If you change something that contradicts a loaded memory, update that memory file.
+Memory active for '$project'. Scan, index, prune, and self-learning run automatically — never ask the user to run these. Attribute recalled context: \"Eagle Mem recalls:\" Do not revert PostToolUse-surfaced decisions without user request. No raw secrets in summaries. If you contradict a loaded memory, update the memory file.
 
-Emit an <eagle-summary> block before your FINAL response:
-
+Before your final response, emit:
 <eagle-summary>
-request: [what the user asked for]
-investigated: [file paths read or explored]
-learned: [non-obvious discoveries a future session couldn't guess from code]
-completed: [what shipped — be specific]
-next_steps: [concrete actions for next session]
-decisions:
-  - [choice] Why: [reason]
-gotchas:
-  - [what failed or surprised — \"X doesn't work because Y\"]
-key_files:
-  - [path] — [role in this work]
-files_read: [file1, file2]
-files_modified: [file1, file2]
+request: [what user asked] | completed: [what shipped] | learned: [non-obvious discoveries]
+next_steps: [concrete actions] | decisions: [choice — why] | gotchas: [what surprised]
+key_files: [path — role] | files_read: [...] | files_modified: [...]
 </eagle-summary>
 "
 fi
 
-# Output context (plain text stdout = additionalContext for SessionStart)
 if [ -n "$context" ]; then
     echo "$context"
 fi

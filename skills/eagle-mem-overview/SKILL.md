@@ -17,10 +17,11 @@ description: >
 ## Judgment
 
 **Build an overview when:**
-- SessionStart says "No overview exists" — build on the user's first prompt
-- The current overview reads like scan metadata (file counts, directory listings) — upgrade it
+- SessionStart shows a scan-generated overview (file counts, directory listings) — upgrade it to a rich briefing
 - The user asks: "update overview", "summarize this project", "what is this project"
 - The project has changed significantly since the last overview (new major feature, architecture shift)
+
+Note: New projects are auto-scanned at SessionStart. The scan produces structural metadata. This skill upgrades that into a briefing with intent, architecture, and current state.
 
 **Don't rebuild when:**
 - The overview is already rich and current — just use it
@@ -64,11 +65,7 @@ If the output is empty or doesn't match what you wrote, the save failed. Retry o
 
 ### 4. Fallback for empty repos
 
-If no readable source files exist (fresh repo, no README), run a structural scan as a starting point:
-```bash
-eagle-mem scan .
-```
-Then tell the user: "I've generated a structural overview from scan. Once you add a README or source code, re-run `/eagle-mem-overview` for a richer briefing."
+If no readable source files exist (fresh repo, no README), Eagle Mem's auto-scan has already generated a structural overview in the background. Tell the user: "Auto-scan has captured the project structure. Once you add a README or source code, re-run `/eagle-mem-overview` for a richer briefing."
 
 ## What makes a good overview
 
@@ -86,6 +83,10 @@ A good overview lets a fresh Claude Code context window give useful answers with
 **Bad:**
 > eagle-mem: Node.js project (42 files, ~5k lines). Structure: bin/ (1), db/ (10), hooks/ (5), lib/ (3), scripts/ (13), skills/ (7). Entry: bin/eagle-mem. No tests detected.
 
+## How automation works
+
+Eagle Mem v4.0 auto-scans new projects at SessionStart — no user action needed. This skill exists to *upgrade* that scan into a rich, multi-paragraph briefing that captures intent, architecture, and current state.
+
 ## Reference
 
 ```bash
@@ -93,5 +94,4 @@ eagle-mem overview              # view current overview
 eagle-mem overview set "..."    # save new overview
 eagle-mem overview list         # all projects with overviews
 eagle-mem overview delete       # remove current project's overview
-eagle-mem scan .                # structural scan (fallback only)
 ```
