@@ -359,72 +359,36 @@
         </div>
       </div>
 
-      <!-- ─── Backfill ───────────────────────────── -->
-
-      <div class="getting-started" style="grid-template-columns: 1fr; margin-top: 20px;">
-        <div class="path">
-          <h2>Already using Claude Code on a project?</h2>
-          <p class="subtitle">Backfill your existing history into Eagle Mem in one command.</p>
-          <ol>
-            <li><code>cd ~/projects/my-app</code></li>
-            <li><code>eagle-mem refresh</code></li>
-          </ol>
-          <p style="color: var(--muted); font-size: 14px; font-family: var(--sans); margin-top: 12px; line-height: 1.6;">
-            This scans your codebase structure (languages, frameworks, entry points), indexes source files for code search, and imports all existing Claude Code memories, plans, and tasks. Open Claude Code after &mdash; it sees your full history.
-          </p>
-        </div>
-      </div>
-
       <!-- ─── Commands ───────────────────────────── -->
 
       <p class="section-title">Commands</p>
 
-      <section class="details" style="grid-template-columns: 1fr 1fr;">
+      <section class="details" style="grid-template-columns: 1fr 1fr 1fr;">
         <div class="feature">
-          <h3>// search past sessions</h3>
+          <h3>// lifecycle</h3>
+          <ul>
+            <li><strong><code>eagle-mem install</code></strong> &mdash; first-time setup: hooks, database, skills</li>
+            <li><strong><code>eagle-mem update</code></strong> &mdash; re-deploy hooks and run migrations after <code>npm update</code></li>
+            <li><strong><code>eagle-mem uninstall</code></strong> &mdash; remove hooks and optionally delete data</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// search &amp; diagnose</h3>
           <p>
             <code>eagle-mem search "auth middleware"</code><br><br>
             Search across session summaries, Claude memories, and indexed code using FTS5.
-            Use this when you know you worked on something but can&rsquo;t remember the details.
           </p>
           <p style="margin-top: 12px;">
-            <code>eagle-mem search --timeline</code><br><br>
-            Shows recent sessions in chronological order &mdash; useful for catching up after a break.
+            <code>eagle-mem health</code><br><br>
+            Diagnose pipeline health and background automation status.
           </p>
         </div>
         <div class="feature">
-          <h3>// project overview</h3>
+          <h3>// configure</h3>
           <p>
-            <code>eagle-mem overview</code><br><br>
-            View the overview that gets injected into every Claude Code session. This is what Claude reads first.
+            <code>eagle-mem config</code><br><br>
+            View or change LLM provider settings. Supports Ollama (local, free), Anthropic, and OpenAI for the self-learning curator.
           </p>
-          <p style="margin-top: 12px;">
-            <code>eagle-mem overview set "My app is a..."</code><br><br>
-            Set a custom overview. Or let Claude write one: run <code>/eagle-mem-overview</code> inside a session.
-          </p>
-        </div>
-        <div class="feature">
-          <h3>// sync &amp; maintain</h3>
-          <p>
-            <code>eagle-mem refresh</code><br><br>
-            Full re-sync: re-scans codebase, re-indexes source files, syncs new Claude Code memories and tasks.
-            Run this after major changes (new packages, restructured dirs, large pull).
-          </p>
-          <p style="margin-top: 12px;">
-            <code>eagle-mem prune</code><br><br>
-            Clean up old observations and orphaned code chunks. Safe to run anytime.
-          </p>
-        </div>
-        <div class="feature">
-          <h3>// more commands</h3>
-          <ul>
-            <li><strong><code>eagle-mem scan</code></strong> &mdash; re-analyze codebase structure</li>
-            <li><strong><code>eagle-mem index</code></strong> &mdash; re-index source files for code search</li>
-            <li><strong><code>eagle-mem memories</code></strong> &mdash; view or sync mirrored Claude Code memories and plans</li>
-            <li><strong><code>eagle-mem tasks</code></strong> &mdash; view mirrored Claude Code tasks</li>
-            <li><strong><code>eagle-mem update</code></strong> &mdash; re-deploy hooks after <code>npm update</code></li>
-            <li><strong><code>eagle-mem uninstall</code></strong> &mdash; remove hooks and optionally delete data</li>
-          </ul>
         </div>
       </section>
 
@@ -432,7 +396,7 @@
 
       <p class="section-title">Skills (inside Claude Code)</p>
 
-      <section class="details" style="grid-template-columns: 1fr 1fr 1fr;">
+      <section class="details" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
         <div class="feature">
           <h3>// /eagle-mem-search</h3>
           <p>
@@ -442,29 +406,20 @@
         <div class="feature">
           <h3>// /eagle-mem-overview</h3>
           <p>
-            Build a rich project briefing. Claude reads your README, entry points, and git history to write 2-3 paragraphs that capture what the project <em>does</em>. Injected at every session start.
+            Build a rich project briefing. Claude reads your README, entry points, and git history to write a multi-paragraph overview. Injected at every session start.
+          </p>
+        </div>
+        <div class="feature">
+          <h3>// /eagle-mem-memories</h3>
+          <p>
+            View and search Claude Code&rsquo;s auto-memories, plans, and tasks mirrored into Eagle Mem&rsquo;s FTS5 index. Cross-project search included.
           </p>
         </div>
         <div class="feature">
           <h3>// /eagle-mem-tasks</h3>
           <p>
-            Break complex work into tasks that survive <code>/compact</code>. Uses Claude Code&rsquo;s native TaskCreate/TaskUpdate. When context fills up, Eagle Mem re-injects task state so Claude picks up where it left off.
+            Break complex work into tasks that survive <code>/compact</code>. Uses Claude Code&rsquo;s native TaskCreate/TaskUpdate. Eagle Mem re-injects task state after compaction.
           </p>
-        </div>
-      </section>
-
-      <section class="details" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top: -28px; padding-top: 0;">
-        <div class="feature" style="padding: 20px 24px;">
-          <p><strong><code>/eagle-mem-scan</code></strong><br><span style="font-size: 13px;">Analyze codebase structure</span></p>
-        </div>
-        <div class="feature" style="padding: 20px 24px;">
-          <p><strong><code>/eagle-mem-index</code></strong><br><span style="font-size: 13px;">Index source files for code search</span></p>
-        </div>
-        <div class="feature" style="padding: 20px 24px;">
-          <p><strong><code>/eagle-mem-memories</code></strong><br><span style="font-size: 13px;">View &amp; sync mirrored memories</span></p>
-        </div>
-        <div class="feature" style="padding: 20px 24px;">
-          <p><strong><code>/eagle-mem-prune</code></strong><br><span style="font-size: 13px;">Database cleanup &amp; hygiene</span></p>
         </div>
       </section>
 
@@ -490,16 +445,16 @@
           </ul>
         </div>
         <div class="feature">
-          <h3>// project overview</h3>
+          <h3>// background automation</h3>
           <p>
-            Model-driven overviews &mdash; Claude reads your README, entry points, and
-            recent git history to understand what the project <em>does</em>, not just its file counts.
+            SessionStart triggers autonomous provisioning &mdash; no commands needed.
+            State-file debounce prevents thundering herd on compaction.
           </p>
           <ul>
-            <li><strong>Auto-trigger</strong> &mdash; if no overview exists, SessionStart prompts Claude to build one</li>
-            <li><strong>Synthesized</strong> &mdash; purpose, current state, and key tech in 2-3 sentences</li>
-            <li><strong>Injected</strong> &mdash; overview surfaces at every session start</li>
-            <li><strong>Scan fallback</strong> &mdash; structural scan for repos with no README</li>
+            <li><strong>Auto-scan</strong> &mdash; new project with no overview triggers codebase scan</li>
+            <li><strong>Auto-index</strong> &mdash; new or stale project triggers FTS5 source indexing</li>
+            <li><strong>Auto-prune</strong> &mdash; observations over 10K rows trigger cleanup</li>
+            <li><strong>Auto-curate</strong> &mdash; self-learning curator generates project-specific command rules</li>
           </ul>
         </div>
         <div class="feature">
@@ -570,7 +525,7 @@
       </section>
 
       <footer>
-        v3.3.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
+        v4.0.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
       </footer>
     </main>
   </body>
