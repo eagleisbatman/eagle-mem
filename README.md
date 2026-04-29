@@ -159,15 +159,26 @@ The `update` command copies new files, runs any pending database migrations, and
 
 ## How it works
 
-Five hooks fire automatically at different points in Claude Code's lifecycle:
+Six hooks fire automatically at different points in Claude Code's lifecycle:
 
 | Hook | Fires when | What it does |
 |------|-----------|--------------|
 | **SessionStart** | startup, resume, clear, compact | Injects overview, summaries, memories, tasks |
+| **PreToolUse** | before Bash and Read calls | Rewrites noisy commands (learned rules), detects redundant reads |
 | **UserPromptSubmit** | user sends a message | FTS5 search for relevant past context |
-| **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes |
+| **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, tracks modifications |
 | **Stop** | Claude's turn ends | Extracts `<eagle-summary>`, strips `<private>` tags |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
+
+### Token savings
+
+Eagle Mem actively reduces token consumption:
+
+- **Command rewriting** — PreToolUse rewrites noisy Bash commands (e.g., `find`, `grep`) to pipe through `head -N`, using `updatedInput` to modify the command before execution. Rules are learned by the curator from real usage, not hardcoded.
+- **Read-after-modify detection** — If you just edited or wrote a file, Eagle Mem nudges that the diff is already in context before a redundant Read.
+- **Read dedup tracking** — Files read 3+ times in a session get a soft nudge that contents are likely already in context.
+
+### Data
 
 Data lives in a single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text search):
 
@@ -178,6 +189,7 @@ Data lives in a single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FT
 | observations | Per-tool-use file touch records |
 | overviews | One overview per project (scan or manual) |
 | code_chunks | FTS5-indexed source file chunks |
+| command_rules | Curator-learned command output rules |
 | claude_memories | Mirror of Claude Code auto-memories |
 | claude_plans | Mirror of Claude Code plans |
 | claude_tasks | Mirror of Claude Code tasks |
