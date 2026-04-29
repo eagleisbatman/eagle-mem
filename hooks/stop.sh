@@ -42,7 +42,12 @@ eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
 
 # ─── Primary: heuristic extraction from transcript ───────────
 
-request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null | head -1 | cut -c1-500)
+request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null \
+    | grep -v '<local-command-caveat>' \
+    | grep -v '<system-reminder>' \
+    | grep -v '<command-name>' \
+    | grep -v '^\[{' \
+    | head -1 | cut -c1-500)
 
 heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
 heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
@@ -124,61 +129,102 @@ if [ -n "$summary_block" ]; then
     eagle_log "INFO" "Stop: eagle-summary block merged over heuristic data"
 fi
 
-# ─── LLM enrichment: fill in decisions/gotchas/key_files ─────
-# Check both local vars (from eagle-summary block) AND existing DB enrichment.
-# Skip LLM call if either source already has enrichment data.
-# Exception: under context pressure, force re-enrichment for richest summary.
+# ─── LLM enrichment: extract structured data when eagle-summary absent ──
+# Runs when: (a) no eagle-summary block, OR (b) heuristic data is thin
+# Skips when: eagle-summary already provided rich data, OR no text to analyze
 
 context_pressure=0
 if [ -f "$EAGLE_MEM_DIR/.context-pressure" ]; then
     context_pressure=1
 fi
 
-existing_enrichment=""
-if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ]; then
-    s_esc=$(eagle_sql_escape "$session_id")
-    existing_enrichment=$(eagle_db "SELECT decisions||gotchas||key_files FROM summaries WHERE session_id='$s_esc';")
+has_rich_data=0
+if [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ]; then
+    has_rich_data=1
 fi
 
-if [ -z "$decisions" ] && [ -z "$gotchas" ] && [ -z "$key_files" ] && { [ -z "$existing_enrichment" ] || [ "$context_pressure" -eq 1 ]; }; then
+request_is_polluted=0
+if echo "$request" | grep -qE '<(local-command-caveat|system-reminder|command-name)>' 2>/dev/null; then
+    request_is_polluted=1
+fi
+
+needs_enrichment=0
+if [ "$has_rich_data" -eq 0 ]; then
+    needs_enrichment=1
+elif [ "$context_pressure" -eq 1 ]; then
+    needs_enrichment=1
+elif [ -z "$completed" ] && [ -z "$learned" ]; then
+    needs_enrichment=1
+elif [ "$request_is_polluted" -eq 1 ]; then
+    needs_enrichment=1
+fi
+
+if [ "$needs_enrichment" -eq 1 ]; then
     provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
     if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
-        excerpt=$(echo "$text_content" | tail -c 2000)
+        excerpt=$(echo "$text_content" | tail -c 3000)
 
-        enrich_prompt="Extract from this Claude Code session excerpt:
-1. DECISIONS: architectural or design choices made (with WHY). One per line.
-2. GOTCHAS: non-obvious pitfalls, bugs found, things that surprised. One per line.
-3. KEY_FILES: important files that were central to the work. One per line.
+        enrich_prompt="Extract from this Claude Code session. Respond with EXACTLY these sections (omit empty ones):
 
-SESSION EXCERPT:
-$excerpt
+REQUEST:
+One-line summary of what the user asked for. No system tags or XML.
 
-Output EXACTLY this format (omit sections with nothing to report):
+COMPLETED:
+What was actually accomplished. Be specific about changes made.
+
+LEARNED:
+Non-obvious discoveries or insights from the session.
+
 DECISIONS:
 - <decision> — why: <reason>
+
 GOTCHAS:
 - <gotcha>
+
 KEY_FILES:
-- <filepath>"
+- <filepath>
 
-        enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 512 2>/dev/null) || true
+SESSION TEXT:
+$excerpt"
 
-        if [ -n "$enrich_result" ]; then
+        enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 768 2>/dev/null)
+        llm_rc=$?
+
+        if [ $llm_rc -ne 0 ] || [ -z "$enrich_result" ]; then
+            eagle_log "WARN" "Stop: LLM enrichment failed (rc=$llm_rc) for session=$session_id provider=$provider"
+        else
             extract_section() {
                 local result="$1" header="$2"
                 echo "$result" | awk -v h="$header:" '
                     $0 == h || $0 ~ "^"h { found=1; next }
                     found && /^[A-Z_]+:/ { exit }
-                    found && /^- / { sub(/^- /, ""); lines[++n] = $0 }
+                    found && /^[[:space:]]*$/ { next }
+                    found && /^- / { sub(/^- /, ""); lines[++n] = $0; next }
+                    found { lines[++n] = $0 }
                     END { for (i=1; i<=n; i++) { printf "%s", lines[i]; if (i<n) printf "; " } }
                 '
             }
-            decisions=$(extract_section "$enrich_result" "DECISIONS")
-            gotchas=$(extract_section "$enrich_result" "GOTCHAS")
-            key_files=$(extract_section "$enrich_result" "KEY_FILES")
-            [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ] && eagle_log "INFO" "Stop: LLM enrichment extracted for session=$session_id"
+            _req=$(extract_section "$enrich_result" "REQUEST")
+            _comp=$(extract_section "$enrich_result" "COMPLETED")
+            _learn=$(extract_section "$enrich_result" "LEARNED")
+            _dec=$(extract_section "$enrich_result" "DECISIONS")
+            _got=$(extract_section "$enrich_result" "GOTCHAS")
+            _kf=$(extract_section "$enrich_result" "KEY_FILES")
+
+            [ -z "$request" ] || [ "$request_is_polluted" -eq 1 ] && [ -n "$_req" ] && request="$_req"
+            [ -z "$completed" ] && [ -n "$_comp" ] && completed="$_comp"
+            [ -z "$learned" ] && [ -n "$_learn" ] && learned="$_learn"
+            [ -z "$decisions" ] && [ -n "$_dec" ] && decisions="$_dec"
+            [ -z "$gotchas" ] && [ -n "$_got" ] && gotchas="$_got"
+            [ -z "$key_files" ] && [ -n "$_kf" ] && key_files="$_kf"
+
+            eagle_log "INFO" "Stop: LLM enrichment extracted for session=$session_id (req=${#_req} comp=${#_comp} dec=${#_dec})"
         fi
+    else
+        eagle_log "INFO" "Stop: LLM enrichment skipped — provider=$provider text_len=${#text_content}"
     fi
+else
+    eagle_log "INFO" "Stop: LLM enrichment skipped — rich data already present"
 fi
 
 # ─── Redact secrets from all text fields before storage ────

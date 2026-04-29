@@ -81,6 +81,7 @@ eagle_search_summaries() {
               FROM summaries s
               JOIN summaries_fts f ON f.rowid = s.id
               WHERE summaries_fts MATCH '$query'
+              AND s.request NOT LIKE '%<local-command-caveat>%'
               $where_clause
               ORDER BY rank
               LIMIT $limit;"

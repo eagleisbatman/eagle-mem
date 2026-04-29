@@ -7,8 +7,9 @@ _EAGLE_DB_CORE_LOADED=1
 
 EAGLE_DB_SETUP=".headers off
 .output /dev/null
+PRAGMA busy_timeout=10000;
+PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
-PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
 PRAGMA trusted_schema=ON;
 .output stdout"

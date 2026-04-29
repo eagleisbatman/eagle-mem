@@ -95,7 +95,7 @@ eagle_ollama_best_model() {
     models=$(eagle_ollama_models "$1")
     [ -z "$models" ] && return 1
 
-    local preferred="mistral qwen3-coder gemma4 llama3 phi3 deepseek-coder"
+    local preferred="gemma4 gemma3 gemma2 mistral llama3 phi3 deepseek-coder"
     for pref in $preferred; do
         if echo "$models" | grep -qi "$pref"; then
             echo "$models" | grep -i "$pref" | head -1
