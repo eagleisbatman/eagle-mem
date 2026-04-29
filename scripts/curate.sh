@@ -168,24 +168,30 @@ command_stats=$(eagle_db "SELECT command_category,
     LIMIT 10;")
 
 if [ -n "$command_stats" ]; then
-    # Get specific noisy commands
-    noisy_commands=$(eagle_db "SELECT tool_input_summary,
+    # Get noisy commands grouped by base command (first 2 words) to catch variants
+    # e.g. "git diff", "git diff HEAD~1", "git -C /path diff" all group under "git diff"
+    noisy_commands=$(eagle_db "SELECT
+        CASE
+            WHEN tool_input_summary LIKE 'Bash: cd %' THEN 'cd ... && ' || SUBSTR(tool_input_summary, INSTR(tool_input_summary, '&& ') + 3, 40)
+            ELSE SUBSTR(tool_input_summary, 7, 40)
+        END as base_cmd,
         COUNT(*) as count,
         CAST(AVG(output_bytes) AS INTEGER) as avg_bytes,
+        CAST(MAX(output_bytes) AS INTEGER) as max_bytes,
         CAST(AVG(output_lines) AS INTEGER) as avg_lines
         FROM observations
         WHERE project = '$p_esc'
         AND tool_name = 'Bash'
-        AND output_bytes > 1000
-        GROUP BY tool_input_summary
-        HAVING count >= 3
+        AND output_bytes > 2000
+        GROUP BY base_cmd
+        HAVING count >= 2
         ORDER BY avg_bytes DESC
         LIMIT 15;")
 
     if [ -n "$noisy_commands" ]; then
-        cmd_prompt="Analyze these frequently-run commands and their output sizes for project '$project'. Suggest compression rules for commands that produce consistently large output.
+        cmd_prompt="Analyze these frequently-run command patterns and their output sizes for project '$project'. Suggest compression rules for commands that produce consistently large output (>2KB average).
 
-COMMAND STATS (command | times_run | avg_output_bytes | avg_output_lines):
+COMMAND PATTERNS (base_command | times_run | avg_bytes | max_bytes | avg_lines):
 $noisy_commands
 
 For each command that deserves a compression rule, output EXACTLY:
