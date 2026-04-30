@@ -8,12 +8,14 @@ eagle_mem_statusline() {
     local em_db="$HOME/.eagle-mem/memory.db"
     [ -f "$em_db" ] || return
 
+    local SCRIPT_DIR; SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    . "$SCRIPT_DIR/../lib/common.sh"
+
     local proj
-    proj=$(basename "$project_dir")
+    proj=$(eagle_project_from_cwd "$project_dir")
     [ -z "$proj" ] && return
 
-    # Escape single quotes for safe SQL interpolation
-    proj=$(printf '%s' "$proj" | sed "s/'/''/g")
+    proj=$(eagle_sql_escape "$proj")
 
     local cnt mem
     cnt=$(echo ".headers off

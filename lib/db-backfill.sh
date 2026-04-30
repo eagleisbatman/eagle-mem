@@ -104,6 +104,8 @@ SQL
 BEGIN;
 UPDATE OR IGNORE overviews SET project = '$new_sql' WHERE project = '$old_sql';
 DELETE FROM overviews WHERE project = '$old_sql';
+DELETE FROM code_chunks WHERE project = '$old_sql'
+  AND EXISTS (SELECT 1 FROM code_chunks WHERE project = '$new_sql' LIMIT 1);
 UPDATE code_chunks SET project = '$new_sql' WHERE project = '$old_sql';
 UPDATE OR IGNORE features SET project = '$new_sql' WHERE project = '$old_sql';
 DELETE FROM features WHERE project = '$old_sql';

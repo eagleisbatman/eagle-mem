@@ -92,7 +92,7 @@ fi
 
 if [ "${total_summaries:-0}" -gt 0 ]; then
     if [ "$enrich_pct" -ge 50 ]; then
-        eagle_ok "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) have decisions/gotchas/key_files"
+        eagle_ok "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) have decisions/gotchas"
         score=$((score + 25))
     elif [ "$enrich_pct" -ge 20 ]; then
         eagle_warn "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%) — LLM extraction may need tuning"
@@ -103,7 +103,7 @@ if [ "${total_summaries:-0}" -gt 0 ]; then
         score=$((score + 5))
         issues+=("${enrich_pct}% enrichment. Decisions/gotchas/key_files mostly missing.")
     else
-        eagle_fail "Enriched: 0/${total_summaries} — no summaries have decisions/gotchas/key_files"
+        eagle_fail "Enriched: 0/${total_summaries} — no summaries have decisions/gotchas"
         issues+=("Zero enrichment. Check provider config: eagle-mem config")
     fi
 else
