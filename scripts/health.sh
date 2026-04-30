@@ -101,7 +101,7 @@ if [ "${total_summaries:-0}" -gt 0 ]; then
     elif [ "${enriched_summaries:-0}" -gt 0 ]; then
         eagle_fail "Enriched: ${enriched_summaries}/${total_summaries} (${enrich_pct}%)"
         score=$((score + 5))
-        issues+=("${enrich_pct}% enrichment. Decisions/gotchas/key_files mostly missing.")
+        issues+=("${enrich_pct}% enrichment. Decisions/gotchas mostly missing.")
     else
         eagle_fail "Enriched: 0/${total_summaries} — no summaries have decisions/gotchas"
         issues+=("Zero enrichment. Check provider config: eagle-mem config")
