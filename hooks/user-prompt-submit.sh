@@ -81,7 +81,7 @@ fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:low
 results=$(eagle_search_summaries "$fts_query" "$project" 3)
 
 if [ -n "$results" ]; then
-    context+="=== EAGLE MEM — Relevant Memory ===
+    context+="=== Eagle Mem — Relevant Memory ===
 "
     while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
@@ -106,7 +106,7 @@ if [ "${has_chunks:-0}" -gt 0 ]; then
     code_results=$(eagle_search_code_chunks "$fts_query" "$project" 5)
 
     if [ -n "$code_results" ]; then
-        context+="=== EAGLE MEM — Relevant Code ===
+        context+="=== Eagle Mem — Relevant Code ===
 "
         while IFS='|' read -r fpath sline eline lang; do
             [ -z "$fpath" ] && continue
@@ -123,7 +123,7 @@ fi
 context+="
 IMPORTANT: When Eagle Mem finds relevant memories or code for the user's prompt, briefly mention it at the start of your response: \"Eagle Mem recalled N relevant sessions\" or \"Eagle Mem found related code in [files]\". One line max — then proceed with the answer.
 
-— Eagle Mem (persistent memory across sessions)
+=== Eagle Mem (persistent memory across sessions) ===
 "
 
 echo "$context"

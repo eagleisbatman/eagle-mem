@@ -75,7 +75,9 @@ eagle_posttool_stale_hint() {
                                 local stale_hit
                                 stale_hit=$(eagle_search_stale_memories "$project" "$fts_query")
                                 if [ -n "$stale_hit" ]; then
-                                    local stale_msg="Eagle Mem: Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, update the memory."
+                                    local stale_msg="=== Eagle Mem ===
+Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, update the memory.
+================"
                                     jq -nc --arg ctx "$stale_msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
                                 fi
                             fi
@@ -106,7 +108,10 @@ eagle_posttool_decision_surface() {
                                 local decision_hit
                                 decision_hit=$(eagle_search_decisions_for_file "$project" "$fts_query")
                                 if [ -n "$decision_hit" ]; then
-                                    read_context+="Eagle Mem decision history for '${fname}': ${decision_hit} — Do not revert without explicit user request. "
+                                    read_context+="=== Eagle Mem ===
+Decision history for '${fname}': ${decision_hit} — Do not revert without explicit user request.
+================
+"
                                 fi
                             fi
                         fi
@@ -116,14 +121,17 @@ eagle_posttool_decision_surface() {
                         if [ -n "$feature_hit" ]; then
                             while IFS='|' read -r feat_name feat_desc feat_verified _role feat_deps feat_other_files feat_smoke; do
                                 [ -z "$feat_name" ] && continue
-                                read_context+="Eagle Mem: '${fname}' is part of feature '${feat_name}'"
+                                read_context+="=== Eagle Mem ===
+'${fname}' is part of feature '${feat_name}'"
                                 [ -n "$feat_desc" ] && read_context+=" ($feat_desc)"
                                 read_context+="."
                                 [ -n "$feat_verified" ] && read_context+=" Last verified: ${feat_verified}."
                                 [ -n "$feat_deps" ] && read_context+=" Dependencies: ${feat_deps}."
                                 [ -n "$feat_other_files" ] && read_context+=" Other files in pipeline: ${feat_other_files}."
                                 [ -n "$feat_smoke" ] && read_context+=" Smoke tests: ${feat_smoke}."
-                                read_context+=" Changes require re-testing after deploy. "
+                                read_context+=" Changes require re-testing after deploy.
+================
+"
                             done <<< "$feature_hit"
                         fi
 

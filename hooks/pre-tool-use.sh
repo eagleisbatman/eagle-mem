@@ -80,8 +80,9 @@ Bash)
                     done <<< "$changed_files"
 
                     if [ -n "$context" ]; then
-                        context="Eagle Mem: This push affects the following features. After deploy, verify each works and run 'eagle-mem feature verify <name>'.
-${context}"
+                        context="=== Eagle Mem ===
+This push affects the following features. After deploy, verify each works and run 'eagle-mem feature verify <name>'.
+${context}================"
                     fi
                 fi
             fi
@@ -146,12 +147,12 @@ Edit|Write)
                     while IFS= read -r ctx_line; do
                         case "$ctx_line" in
                             GR:*)  gr_block+="  - ${ctx_line#GR:}"$'\n' ;;
-                            DEC:*) context+="Eagle Mem decisions for '${fname}': ${ctx_line#DEC:} — Do not revert without asking. " ;;
-                            GOT:*) context+="Eagle Mem gotchas for '${fname}': ${ctx_line#GOT:} " ;;
+                            DEC:*) context+="=== Eagle Mem ==="$'\n'"Decisions for '${fname}': ${ctx_line#DEC:} — Do not revert without asking."$'\n'"================"$'\n' ;;
+                            GOT:*) context+="=== Eagle Mem ==="$'\n'"Gotchas for '${fname}': ${ctx_line#GOT:}"$'\n'"================"$'\n' ;;
                         esac
                     done <<< "$edit_ctx"
                     if [ -n "$gr_block" ]; then
-                        context+="Eagle Mem guardrails for '${fname}':"$'\n'"${gr_block}"
+                        context+="=== Eagle Mem ==="$'\n'"Guardrails for '${fname}':"$'\n'"${gr_block}================"$'\n'
                     fi
                 fi
                 ;;
