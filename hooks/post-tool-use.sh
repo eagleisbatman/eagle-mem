@@ -40,8 +40,8 @@ case "$hook_event" in
             local_status="pending"
             [ "$hook_event" = "TaskCompleted" ] && local_status="completed"
 
-            # Synthetic file_path keyed on task_id — file_path is the UNIQUE column
-            synthetic_fp="event://${task_id}"
+            # Synthetic file_path keyed on session+task — file_path is the UNIQUE column
+            synthetic_fp="event://${session_id}/${task_id}"
 
             tid_sql=$(eagle_sql_escape "$task_id")
             fp_sql=$(eagle_sql_escape "$synthetic_fp")

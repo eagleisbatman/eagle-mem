@@ -244,6 +244,16 @@ if [ -z "$completed" ] && [ -n "$files_modified" ] && [ "$files_modified" != "[]
     if [ "${mod_count:-0}" -gt 0 ]; then
         completed="Modified ${mod_count} files: ${mod_names}"
     fi
+elif [ -z "$completed" ] && [ -n "$files_read" ] && [ "$files_read" != "[]" ]; then
+    read_count=$(echo "$files_read" | jq -r '.[]?' 2>/dev/null | wc -l | tr -d ' ')
+    read_names=$(echo "$files_read" | jq -r '.[]?' 2>/dev/null | while read -r f; do basename "$f"; done | sort -u | head -5 | paste -sd ', ' -)
+    if [ "${read_count:-0}" -gt 0 ]; then
+        completed="Reviewed ${read_count} files: ${read_names}"
+    fi
+fi
+
+if [ -z "$key_files" ] && [ -n "$files_read" ] && [ "$files_read" != "[]" ]; then
+    key_files=$(echo "$files_read" | jq -r '.[]?' 2>/dev/null | while read -r f; do basename "$f"; done | sort -u | head -10 | paste -sd ', ' -)
 fi
 
 # ─── Test reminder for guardrailed files ─────────────────

@@ -105,7 +105,7 @@ ${context}"
                         *"| head"*|*"| tail"*|*"| wc"*|*"| grep"*|*">"*|*">>"*)
                             ;;
                         *)
-                            updated_input=$(jq -nc --arg cmd "${cmd} | head -${max_lines}" '{"command":$cmd}')
+                            updated_input=$(echo "$input" | jq --arg cmd "${cmd} | head -${max_lines}" '.tool_input + {"command":$cmd}')
                             context+="Eagle Mem: '${base_cmd}' output is typically long (${reason}). Piped through head -${max_lines}."
                             ;;
                     esac

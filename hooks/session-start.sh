@@ -322,9 +322,15 @@ Memory active for '$project'. Scan, index, prune, and self-learning run automati
 
 Before your final response, emit:
 <eagle-summary>
-request: [what user asked] | completed: [what shipped] | learned: [non-obvious discoveries]
-next_steps: [concrete actions] | decisions: [choice — why] | gotchas: [what surprised]
-key_files: [path — role] | files_read: [...] | files_modified: [...]
+request: [what user asked]
+completed: [what shipped]
+learned: [non-obvious discoveries]
+decisions: [choice — why]
+gotchas: [what surprised]
+next_steps: [concrete actions]
+key_files: [path — role]
+files_read: [path, ...]
+files_modified: [path, ...]
 </eagle-summary>
 "
 fi

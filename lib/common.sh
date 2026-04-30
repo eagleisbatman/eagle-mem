@@ -158,17 +158,8 @@ eagle_collect_files() {
     fi
 }
 
-eagle_patch_claude_md() {
-    local claude_md="$HOME/.claude/CLAUDE.md"
-    local marker="## Eagle Mem — Persistent Memory"
-
-    if [ -f "$claude_md" ] && grep -qF "$marker" "$claude_md" 2>/dev/null; then
-        return 1
-    fi
-
-    mkdir -p "$HOME/.claude"
-
-    cat >> "$claude_md" << 'EAGLE_MD'
+_eagle_claude_md_section() {
+    cat << 'EAGLE_MD'
 
 ---
 
@@ -180,9 +171,15 @@ Eagle Mem hooks are active in every project. SessionStart injects context (overv
 
 ```
 <eagle-summary>
-request: [what user asked] | completed: [what shipped] | learned: [non-obvious discoveries]
-next_steps: [concrete actions] | decisions: [choice — why] | gotchas: [what surprised]
-key_files: [path — role] | files_read: [...] | files_modified: [...]
+request: [what user asked]
+completed: [what shipped]
+learned: [non-obvious discoveries]
+decisions: [choice — why]
+gotchas: [what surprised]
+next_steps: [concrete actions]
+key_files: [path — role]
+files_read: [path, ...]
+files_modified: [path, ...]
 </eagle-summary>
 ```
 
@@ -195,4 +192,35 @@ key_files: [path — role] | files_read: [...] | files_modified: [...]
 - Never put raw secrets in the summary — Eagle Mem redacts but defense in depth
 - If you contradict a loaded memory, update the memory file
 EAGLE_MD
+}
+
+eagle_patch_claude_md() {
+    local claude_md="$HOME/.claude/CLAUDE.md"
+    local marker="## Eagle Mem — Persistent Memory"
+
+    mkdir -p "$HOME/.claude"
+
+    if [ -f "$claude_md" ] && grep -qF "$marker" "$claude_md" 2>/dev/null; then
+        # Check if section has outdated pipe-separated format
+        if grep -qF 'request: \[what user asked\] | completed:' "$claude_md" 2>/dev/null; then
+            # Replace the outdated section: remove old, append new
+            local tmp_md
+            tmp_md=$(mktemp)
+            awk -v marker="$marker" '
+                $0 ~ marker { skip=1; next }
+                skip && /^---$/ && !seen_end { seen_end=1; next }
+                skip && /^## / { skip=0 }
+                !skip { print }
+            ' "$claude_md" > "$tmp_md"
+            # Remove trailing blank lines left by section removal
+            sed -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }' "$tmp_md" > "${tmp_md}.clean"
+            mv "${tmp_md}.clean" "$claude_md"
+            rm -f "$tmp_md"
+            _eagle_claude_md_section >> "$claude_md"
+            return 0
+        fi
+        return 1
+    fi
+
+    _eagle_claude_md_section >> "$claude_md"
 }
