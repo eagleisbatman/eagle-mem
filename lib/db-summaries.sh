@@ -142,6 +142,20 @@ eagle_last_session_enriched() {
         ORDER BY created_at DESC LIMIT 1;"
 }
 
+eagle_search_gotchas_for_file() {
+    local project; project=$(eagle_sql_escape "$1")
+    local fts_query; fts_query=$(eagle_sql_escape "$2")
+    eagle_db "SELECT s.gotchas
+        FROM summaries s
+        JOIN summaries_fts f ON f.rowid = s.id
+        WHERE summaries_fts MATCH '$fts_query'
+        AND s.project = '$project'
+        AND s.gotchas IS NOT NULL
+        AND s.gotchas != ''
+        ORDER BY s.created_at DESC
+        LIMIT 2;"
+}
+
 eagle_search_stale_memories() {
     local project; project=$(eagle_sql_escape "$1")
     local fts_query; fts_query=$(eagle_sql_escape "$2")

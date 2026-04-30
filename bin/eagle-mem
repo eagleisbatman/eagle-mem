@@ -22,6 +22,7 @@ case "$command" in
     search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
     health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
+    guard)      bash "$SCRIPTS_DIR/guard.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)

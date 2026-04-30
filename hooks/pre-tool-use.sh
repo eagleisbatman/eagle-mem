@@ -121,6 +121,42 @@ ${context}"
 Edit|Write)
     fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
     if [ -n "$fp" ]; then
+        # ─── Guardrail + decision/gotcha surfacing ────────
+        fname=$(basename "$fp")
+        fname_stem="${fname%.*}"
+        case "$fp" in
+            "$HOME/.claude/"*) ;;
+            *)
+                # Guardrails use GLOB on full filename — no stem length minimum needed.
+                # FTS decision/gotcha lookups need a meaningful stem (>= 3 chars).
+                if [ ${#fname_stem} -ge 3 ]; then
+                    fts_query=$(eagle_fts_sanitize "$fname_stem")
+                    fts_query=${fts_query:-"$fname_stem"}
+                    edit_ctx=$(eagle_get_edit_context "$project" "$fname" "$fts_query" 2>/dev/null)
+                else
+                    # Short stem (e.g. db.sh) — only fetch guardrails, skip FTS queries
+                    edit_ctx=$(eagle_get_guardrails_for_file "$project" "$fname" 2>/dev/null)
+                    if [ -n "$edit_ctx" ]; then
+                        # Prefix with GR: to match batched output format; strip empty lines
+                        edit_ctx=$(echo "$edit_ctx" | grep -v '^$' | sed 's/^/GR:/')
+                    fi
+                fi
+                if [ -n "$edit_ctx" ]; then
+                    gr_block=""
+                    while IFS= read -r ctx_line; do
+                        case "$ctx_line" in
+                            GR:*)  gr_block+="  - ${ctx_line#GR:}"$'\n' ;;
+                            DEC:*) context+="Eagle Mem decisions for '${fname}': ${ctx_line#DEC:} — Do not revert without asking. " ;;
+                            GOT:*) context+="Eagle Mem gotchas for '${fname}': ${ctx_line#GOT:} " ;;
+                        esac
+                    done <<< "$edit_ctx"
+                    if [ -n "$gr_block" ]; then
+                        context+="Eagle Mem guardrails for '${fname}':"$'\n'"${gr_block}"
+                    fi
+                fi
+                ;;
+        esac
+
         # ─── Stuck loop detection ─────────────────────────
         if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
             edit_tracker="$EAGLE_MEM_DIR/edit-tracker/${session_id}"

@@ -89,7 +89,8 @@ If none qualify, output: NONE"
                     if [ "$DRY_RUN" -eq 1 ]; then
                         eagle_info "  Would promote: $gotcha_text"
                     else
-                        eagle_log "INFO" "Curator: promoting gotcha: $gotcha_text"
+                        eagle_add_guardrail "$project" "$gotcha_text" "" "promoted"
+                        eagle_log "INFO" "Curator: promoted gotcha to guardrail: $gotcha_text"
                     fi
                     promoted=$((promoted + 1))
                     ;;

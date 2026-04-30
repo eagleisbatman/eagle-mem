@@ -46,6 +46,7 @@ request=$(jq -r 'select(.type == "user") | .message.content | if type == "string
     | grep -v '<local-command-caveat>' \
     | grep -v '<system-reminder>' \
     | grep -v '<command-name>' \
+    | grep -v '<command-message>' \
     | grep -v '^\[{' \
     | head -1 | cut -c1-500)
 
@@ -176,13 +177,16 @@ LEARNED:
 Non-obvious discoveries or insights from the session.
 
 DECISIONS:
-- <decision> — why: <reason>
+- Used WAL mode for SQLite — why: prevents write contention under concurrent hooks
+- Switched from Mistral to Gemma — why: better instruction following for extraction
 
 GOTCHAS:
-- <gotcha>
+- PRAGMA ordering matters — busy_timeout must come before synchronous
+- Template placeholders in prompts get treated as literal text by small models
 
 KEY_FILES:
-- <filepath>
+- hooks/stop.sh
+- lib/db-core.sh
 
 SESSION TEXT:
 $excerpt"
@@ -225,6 +229,35 @@ $excerpt"
     fi
 else
     eagle_log "INFO" "Stop: LLM enrichment skipped — rich data already present"
+fi
+
+# ─── Test reminder for guardrailed files ─────────────────
+
+if [ -n "$files_modified" ] && [ "$files_modified" != "[]" ]; then
+    # Short-circuit: skip per-file loop if project has no guardrails at all
+    has_gr=$(eagle_has_any_guardrails "$project" 2>/dev/null)
+    if [ -n "$has_gr" ]; then
+        guardrailed_files=""
+        while IFS= read -r mod_file; do
+            [ -z "$mod_file" ] && continue
+            mod_basename=$(basename "$mod_file")
+            gr_check=$(eagle_get_guardrails_for_file "$project" "$mod_basename" 2>/dev/null)
+            if [ -n "$gr_check" ]; then
+                guardrailed_files+="${mod_basename}, "
+            fi
+        done < <(echo "$files_modified" | jq -r '.[]?' 2>/dev/null)
+
+        if [ -n "$guardrailed_files" ]; then
+            guardrailed_files=${guardrailed_files%, }
+            test_reminder="Run affected tests for guardrailed files: ${guardrailed_files}"
+            if [ -n "$next_steps" ]; then
+                next_steps="${next_steps}; ${test_reminder}"
+            else
+                next_steps="$test_reminder"
+            fi
+            eagle_log "INFO" "Stop: added test reminder for guardrailed files: $guardrailed_files"
+        fi
+    fi
 fi
 
 # ─── Redact secrets from all text fields before storage ────
