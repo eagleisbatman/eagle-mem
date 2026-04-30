@@ -57,7 +57,7 @@ Six hooks fire automatically at different points in Claude Code's lifecycle:
 | **SessionStart** | startup, resume, clear, compact | Injects overview, summaries, memories, tasks, core files, working set. Auto-provisions new projects (scan, index). |
 | **PreToolUse** | before Bash, Read, Edit, Write | Surfaces guardrails and decisions before edits. Rewrites noisy commands (learned rules). Detects redundant reads, nudges co-edit partners, detects stuck loops. |
 | **UserPromptSubmit** | user sends a message | FTS5 search across past sessions and indexed code for relevant context |
-| **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, surfaces decision history on reads |
+| **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, surfaces decision history and feature impacts on reads, stale memory warnings on edits |
 | **Stop** | Claude's turn ends | Extracts `<eagle-summary>` blocks for rich session summaries |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
 
@@ -91,6 +91,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 - **Guardrails** — file-level rules (manual or curator-discovered) that fire before every Edit/Write
 - **Feature verification** — tracks features with smoke tests and dependencies; reminds you to verify on `git push`
 - **Gotcha surfacing** — past surprises and gotchas are surfaced when editing related files
+- **Stale memory detection** — warns when edits may contradict stored memories
 
 ## Commands
 
@@ -148,7 +149,10 @@ Single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text sea
 | `command_rules` | Curator-learned command output rules |
 | `file_hints` | Curator-learned file access patterns (co-edit pairs, hot files) |
 | `guardrails` | File-level regression rules (manual or curator-discovered) |
-| `features` | Feature tracking with smoke tests and dependencies |
+| `features` | Feature tracking with names and descriptions |
+| `feature_files` | Files belonging to each feature |
+| `feature_dependencies` | Inter-feature dependency relationships |
+| `feature_smoke_tests` | Smoke test definitions for feature verification |
 | `eagle_meta` | Internal metadata (last scan, last curate, etc.) |
 | `claude_memories` | Mirror of Claude Code auto-memories |
 | `claude_plans` | Mirror of Claude Code plans |
