@@ -54,7 +54,7 @@ max_score=$((max_score + 25))
 
 total_sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p_esc';")
 total_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc';")
-heuristic_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc' AND completed = '(auto-captured)';")
+heuristic_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc' AND (decisions IS NULL OR decisions = '') AND (gotchas IS NULL OR gotchas = '') AND (key_files IS NULL OR key_files = '');")
 enriched_summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p_esc' AND (decisions IS NOT NULL AND decisions != '' OR gotchas IS NOT NULL AND gotchas != '' OR key_files IS NOT NULL AND key_files != '');")
 
 if [ "${total_sessions:-0}" -eq 0 ]; then

@@ -54,12 +54,12 @@ eagle_project_from_cwd() {
         echo ""; return
     fi
 
-    local parent_dir
-    parent_dir=$(dirname "$target_dir")
-    if [ "$parent_dir" = "$HOME" ] || [ "$parent_dir" = "/" ] || [ "$parent_dir" = "." ]; then
+    if [[ "$target_dir" == "$HOME/"* ]]; then
+        echo "${target_dir#$HOME/}"
+    elif [ "$target_dir" = "$HOME" ]; then
         echo "$name"
     else
-        echo "$(basename "$parent_dir")/$name"
+        echo "${target_dir#/}"
     fi
 }
 
@@ -75,7 +75,7 @@ eagle_sql_int() {
 }
 
 eagle_fts_sanitize() {
-    printf '%s' "$1" | sed 's|[*"(){}^~:+./-]|  |g' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | sed 's/[^A-Za-z0-9_]/ /g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 # Escape SQL LIKE wildcards (% and _) so literal filenames match exactly.
