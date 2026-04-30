@@ -105,11 +105,16 @@ BEGIN;
 DELETE FROM overviews WHERE project = '$new_sql';
 UPDATE overviews SET project = '$new_sql' WHERE project = '$old_sql';
 UPDATE code_chunks SET project = '$new_sql' WHERE project = '$old_sql';
-UPDATE features SET project = '$new_sql' WHERE project = '$old_sql';
-UPDATE command_rules SET project = '$new_sql' WHERE project = '$old_sql';
-UPDATE eagle_meta SET project = '$new_sql' WHERE project = '$old_sql';
-UPDATE file_hints SET project = '$new_sql' WHERE project = '$old_sql';
-UPDATE guardrails SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE OR IGNORE features SET project = '$new_sql' WHERE project = '$old_sql';
+DELETE FROM features WHERE project = '$old_sql';
+UPDATE OR IGNORE command_rules SET project = '$new_sql' WHERE project = '$old_sql';
+DELETE FROM command_rules WHERE project = '$old_sql';
+UPDATE OR IGNORE eagle_meta SET project = '$new_sql' WHERE project = '$old_sql';
+DELETE FROM eagle_meta WHERE project = '$old_sql';
+UPDATE OR IGNORE file_hints SET project = '$new_sql' WHERE project = '$old_sql';
+DELETE FROM file_hints WHERE project = '$old_sql';
+UPDATE OR IGNORE guardrails SET project = '$new_sql' WHERE project = '$old_sql';
+DELETE FROM guardrails WHERE project = '$old_sql';
 COMMIT;
 SQL
         done <<< "$uniq_map"
