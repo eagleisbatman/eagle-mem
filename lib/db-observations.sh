@@ -46,12 +46,13 @@ eagle_prune_observations() {
 
 eagle_get_command_rule() {
     local project; project=$(eagle_sql_escape "$1")
-    local cmd; cmd=$(eagle_sql_escape "$2")
+    local base_cmd; base_cmd=$(eagle_sql_escape "$2")
+    local full_cmd; full_cmd=$(eagle_sql_escape "${3:-$2}")
     eagle_db "SELECT strategy, max_lines, reason
         FROM command_rules
         WHERE enabled = 1
         AND (project = '$project' OR project = '')
-        AND ('$cmd' LIKE pattern OR '$cmd' = pattern)
+        AND ('$base_cmd' = pattern OR '$full_cmd' = pattern OR '$full_cmd' LIKE pattern || ' %')
         ORDER BY CASE WHEN project != '' THEN 0 ELSE 1 END,
             LENGTH(pattern) DESC
         LIMIT 1;"

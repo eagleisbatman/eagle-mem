@@ -10,14 +10,16 @@ _state_dir="$EAGLE_MEM_DIR/state"
 
 _eagle_state_fresh() {
     local key="$1" project="$2" max_age_days="${3:-1}"
-    local state_file="$_state_dir/${key}-${project}"
+    local safe_project="${project//\//-}"
+    local state_file="$_state_dir/${key}-${safe_project}"
     [ -f "$state_file" ] && [ -z "$(find "$state_file" -mtime +${max_age_days} 2>/dev/null)" ]
 }
 
 _eagle_state_touch() {
     local key="$1" project="$2"
+    local safe_project="${project//\//-}"
     mkdir -p "$_state_dir" 2>/dev/null
-    touch "$_state_dir/${key}-${project}"
+    touch "$_state_dir/${key}-${safe_project}"
 }
 
 eagle_sessionstart_auto_provision() {

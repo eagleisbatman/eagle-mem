@@ -91,7 +91,7 @@ ${context}"
     # ─── Command output filtering (learned rules) ─────────────
 
     base_cmd=$(echo "$cmd" | awk '{print $1}' | sed 's|.*/||')
-    rule=$(eagle_get_command_rule "$project" "$base_cmd")
+    rule=$(eagle_get_command_rule "$project" "$base_cmd" "$cmd")
 
     if [ -n "$rule" ]; then
         IFS='|' read -r strategy max_lines reason <<< "$rule"

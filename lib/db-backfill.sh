@@ -39,16 +39,28 @@ eagle_backfill_projects() {
     map=$(eagle_build_session_project_map)
     [ -z "$map" ] && echo "0" && return 0
 
+    # Phase 1: Build old→new project mapping BEFORE mutating any rows.
+    # Collect from sessions table so non-session tables can be migrated.
+    local rename_map_file
+    rename_map_file=$(mktemp)
+    while IFS='|' read -r sid project; do
+        [ -z "$sid" ] || [ -z "$project" ] && continue
+        local sid_sql
+        sid_sql=$(eagle_sql_escape "$sid")
+        local old_project
+        old_project=$(eagle_db "SELECT project FROM sessions WHERE id = '$sid_sql';")
+        if [ -n "$old_project" ] && [ "$old_project" != "$project" ]; then
+            echo "$old_project|$project" >> "$rename_map_file"
+        fi
+    done <<< "$map"
+
+    # Phase 2: Update session-linked tables
     while IFS='|' read -r sid project; do
         [ -z "$sid" ] || [ -z "$project" ] && continue
         local sid_sql proj_sql
         sid_sql=$(eagle_sql_escape "$sid")
         proj_sql=$(eagle_sql_escape "$project")
 
-        # All six tables updated atomically per session to prevent
-        # partial backfill if the process is interrupted.
-        # Note: total_changes() includes FTS trigger changes, so the
-        # reported count may be higher than actual rows updated.
         local ch
         ch=$(eagle_db_pipe <<SQL
 BEGIN;
@@ -64,6 +76,45 @@ SQL
 )
         [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
     done <<< "$map"
+
+    # Phase 3: Update non-session tables using the old→new mapping.
+    # Skip ambiguous mappings (one old name → multiple new names).
+    if [ -s "$rename_map_file" ]; then
+        local uniq_map
+        uniq_map=$(sort -u "$rename_map_file")
+        local prev_old=""
+        local ambiguous=""
+        while IFS='|' read -r old_proj new_proj; do
+            [ -z "$old_proj" ] && continue
+            if [ "$old_proj" = "$prev_old" ]; then
+                ambiguous+="$old_proj|"
+            fi
+            prev_old="$old_proj"
+        done <<< "$(echo "$uniq_map" | sort -t'|' -k1,1)"
+
+        while IFS='|' read -r old_proj new_proj; do
+            [ -z "$old_proj" ] || [ -z "$new_proj" ] && continue
+            case "$ambiguous" in *"$old_proj|"*) continue ;; esac
+
+            local old_sql new_sql
+            old_sql=$(eagle_sql_escape "$old_proj")
+            new_sql=$(eagle_sql_escape "$new_proj")
+
+            eagle_db_pipe <<SQL 2>/dev/null
+BEGIN;
+DELETE FROM overviews WHERE project = '$new_sql';
+UPDATE overviews SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE code_chunks SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE features SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE command_rules SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE eagle_meta SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE file_hints SET project = '$new_sql' WHERE project = '$old_sql';
+UPDATE guardrails SET project = '$new_sql' WHERE project = '$old_sql';
+COMMIT;
+SQL
+        done <<< "$uniq_map"
+    fi
+    rm -f "$rename_map_file"
 
     echo "$updated"
 }

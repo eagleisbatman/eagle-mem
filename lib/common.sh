@@ -39,18 +39,27 @@ eagle_project_from_cwd() {
         "$HOME/Desktop"|"$HOME/Desktop/"*) echo ""; return ;;
     esac
 
+    local target_dir
     local git_root
     git_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
     if [ -n "$git_root" ]; then
-        basename "$git_root"
+        target_dir="$git_root"
     else
-        local name
-        name=$(basename "$cwd")
-        # Reject single-character project names (likely temp dir fragments)
-        if [ ${#name} -le 1 ]; then
-            echo ""; return
-        fi
-        basename "$cwd"
+        target_dir="$cwd"
+    fi
+
+    local name
+    name=$(basename "$target_dir")
+    if [ ${#name} -le 1 ]; then
+        echo ""; return
+    fi
+
+    local parent_dir
+    parent_dir=$(dirname "$target_dir")
+    if [ "$parent_dir" = "$HOME" ] || [ "$parent_dir" = "/" ] || [ "$parent_dir" = "." ]; then
+        echo "$name"
+    else
+        echo "$(basename "$parent_dir")/$name"
     fi
 }
 
@@ -66,7 +75,7 @@ eagle_sql_int() {
 }
 
 eagle_fts_sanitize() {
-    printf '%s' "$1" | sed 's/[*"(){}^~:]/  /g' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | sed 's|[*"(){}^~:+./-]|  |g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 # Escape SQL LIKE wildcards (% and _) so literal filenames match exactly.

@@ -16,8 +16,12 @@ eagle_ensure_db
 
 # ─── Parse arguments ──────────────────────────────────────
 
-action="${1:-list}"
-shift 2>/dev/null || true
+action="list"
+case "${1:-}" in
+    -*)  ;; # flags parsed below
+    "")  ;;
+    *)   action="$1"; shift ;;
+esac
 
 project=""
 limit=20
