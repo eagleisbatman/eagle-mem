@@ -24,14 +24,43 @@ hook_event=$(echo "$input" | jq -r '.hook_event_name // empty')
 
 if [ -z "$session_id" ]; then exit 0; fi
 
-# TaskCreated/TaskCompleted dedicated events — mirror tasks and exit
+# TaskCreated/TaskCompleted dedicated events — parse top-level fields and exit
 case "$hook_event" in
     TaskCreated|TaskCompleted)
         [ ! -f "$EAGLE_MEM_DB" ] && exit 0
         project=$(eagle_project_from_cwd "$cwd")
         [ -z "$project" ] && exit 0
         eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
-        eagle_posttool_mirror_tasks "TaskCreate" "$session_id" "$project" "$input"
+
+        task_id=$(echo "$input" | jq -r '.task_id // empty')
+        task_subject=$(echo "$input" | jq -r '.task_subject // empty')
+        task_desc=$(echo "$input" | jq -r '.task_description // empty')
+
+        if [ -n "$task_id" ] && [ -n "$task_subject" ]; then
+            local_status="pending"
+            [ "$hook_event" = "TaskCompleted" ] && local_status="completed"
+
+            # Synthetic file_path keyed on task_id — file_path is the UNIQUE column
+            synthetic_fp="event://${task_id}"
+
+            tid_sql=$(eagle_sql_escape "$task_id")
+            fp_sql=$(eagle_sql_escape "$synthetic_fp")
+            proj_sql=$(eagle_sql_escape "$project")
+            sid_sql=$(eagle_sql_escape "$session_id")
+            subj_sql=$(eagle_sql_escape "$task_subject")
+            desc_sql=$(eagle_sql_escape "$task_desc")
+            stat_sql=$(eagle_sql_escape "$local_status")
+
+            eagle_db_pipe <<SQL
+INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, status)
+VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$stat_sql')
+ON CONFLICT(file_path) DO UPDATE SET
+    subject     = excluded.subject,
+    description = excluded.description,
+    status      = excluded.status,
+    updated_at  = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
+SQL
+        fi
         exit 0
         ;;
 esac

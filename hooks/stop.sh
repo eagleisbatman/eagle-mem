@@ -231,6 +231,21 @@ else
     eagle_log "INFO" "Stop: LLM enrichment skipped — rich data already present"
 fi
 
+# ─── Heuristic fallback: derive fields from tool activity when no LLM ──
+# Fills key_files and completed from files_modified when both are empty
+
+if [ -z "$key_files" ] && [ -n "$files_modified" ] && [ "$files_modified" != "[]" ]; then
+    key_files=$(echo "$files_modified" | jq -r '.[]?' 2>/dev/null | while read -r f; do basename "$f"; done | sort -u | head -10 | paste -sd ', ' -)
+fi
+
+if [ -z "$completed" ] && [ -n "$files_modified" ] && [ "$files_modified" != "[]" ]; then
+    mod_count=$(echo "$files_modified" | jq -r '.[]?' 2>/dev/null | wc -l | tr -d ' ')
+    mod_names=$(echo "$files_modified" | jq -r '.[]?' 2>/dev/null | while read -r f; do basename "$f"; done | sort -u | head -5 | paste -sd ', ' -)
+    if [ "${mod_count:-0}" -gt 0 ]; then
+        completed="Modified ${mod_count} files: ${mod_names}"
+    fi
+fi
+
 # ─── Test reminder for guardrailed files ─────────────────
 
 if [ -n "$files_modified" ] && [ "$files_modified" != "[]" ]; then

@@ -55,6 +55,10 @@ SQL
 
 eagle_search_claude_memories() {
     local query; query=$(eagle_fts_sanitize "$1")
+    if [ -z "$query" ]; then
+        echo "Search query is empty after sanitization. Try a different search term." >&2
+        return 1
+    fi
     query=$(eagle_sql_escape "$query")
     local project="${2:-}"
     local limit; limit=$(eagle_sql_int "${3:-10}")
@@ -131,6 +135,10 @@ SQL
 
 eagle_search_claude_plans() {
     local query; query=$(eagle_fts_sanitize "$1")
+    if [ -z "$query" ]; then
+        echo "Search query is empty after sanitization. Try a different search term." >&2
+        return 1
+    fi
     query=$(eagle_sql_escape "$query")
     local project="${2:-}"
     local limit; limit=$(eagle_sql_int "${3:-10}")
@@ -242,6 +250,10 @@ eagle_list_claude_tasks() {
 
 eagle_search_claude_tasks() {
     local query; query=$(eagle_fts_sanitize "$1")
+    if [ -z "$query" ]; then
+        echo "Search query is empty after sanitization. Try a different search term." >&2
+        return 1
+    fi
     query=$(eagle_sql_escape "$query")
     local project="${2:-}"
     local limit; limit=$(eagle_sql_int "${3:-10}")
