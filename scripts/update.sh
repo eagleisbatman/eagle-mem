@@ -73,6 +73,8 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     eagle_patch_hook "$SETTINGS" "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
     eagle_patch_hook "$SETTINGS" "Stop" "" "$EAGLE_MEM_DIR/hooks/stop.sh"
     eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    eagle_patch_hook "$SETTINGS" "TaskCreated" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    eagle_patch_hook "$SETTINGS" "TaskCompleted" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     eagle_patch_hook "$SETTINGS" "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh"
     eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
     eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"

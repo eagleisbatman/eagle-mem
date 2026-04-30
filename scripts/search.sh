@@ -334,7 +334,13 @@ search_memories() {
     fi
 
     if [ -n "$query" ]; then
-        local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
+        local sanitized_mq
+        sanitized_mq=$(eagle_fts_sanitize "$query")
+        if [ -z "$sanitized_mq" ]; then
+            eagle_err "Search query contains no valid search terms"
+            exit 1
+        fi
+        local q; q=$(eagle_sql_escape "$sanitized_mq")
         local where_match="WHERE claude_memories_fts MATCH '$q'"
         if [ "$cross_project" = false ]; then
             where_match="$where_match AND m.project = '$p'"
@@ -415,7 +421,13 @@ search_tasks() {
     fi
 
     if [ -n "$query" ]; then
-        local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
+        local sanitized_tq
+        sanitized_tq=$(eagle_fts_sanitize "$query")
+        if [ -z "$sanitized_tq" ]; then
+            eagle_err "Search query contains no valid search terms"
+            exit 1
+        fi
+        local q; q=$(eagle_sql_escape "$sanitized_tq")
 
         if [ "$json_output" = true ]; then
             eagle_db_json "SELECT t.subject, t.status, t.project, t.updated_at

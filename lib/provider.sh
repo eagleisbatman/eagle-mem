@@ -68,7 +68,13 @@ eagle_config_set() {
         local tmp_cfg="${EAGLE_CONFIG_FILE}.tmp.$$"
         awk -v sect="[${section}]" -v k="$key" -v v="$safe_value" '
             BEGIN { in_sect=0; replaced=0 }
-            /^\[/ { in_sect=($0 == sect) }
+            /^\[/ {
+                if (in_sect && !replaced) {
+                    print k" = \""v"\""
+                    replaced=1
+                }
+                in_sect=($0 == sect)
+            }
             in_sect && !replaced && $0 ~ "^[[:space:]]*"k"[[:space:]]*=" {
                 print k" = \""v"\""; replaced=1; next
             }

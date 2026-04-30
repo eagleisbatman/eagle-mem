@@ -20,7 +20,23 @@ session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
 
-if [ -z "$session_id" ] || [ -z "$tool_name" ]; then exit 0; fi
+hook_event=$(echo "$input" | jq -r '.hook_event_name // empty')
+
+if [ -z "$session_id" ]; then exit 0; fi
+
+# TaskCreated/TaskCompleted dedicated events — mirror tasks and exit
+case "$hook_event" in
+    TaskCreated|TaskCompleted)
+        [ ! -f "$EAGLE_MEM_DB" ] && exit 0
+        project=$(eagle_project_from_cwd "$cwd")
+        [ -z "$project" ] && exit 0
+        eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
+        eagle_posttool_mirror_tasks "TaskCreate" "$session_id" "$project" "$input"
+        exit 0
+        ;;
+esac
+
+[ -z "$tool_name" ] && exit 0
 
 # Only track relevant tools
 case "$tool_name" in

@@ -176,6 +176,14 @@ eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|Task
     "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
     "PostToolUse hook"
 
+eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
+    "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+    "TaskCreated hook"
+
+eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
+    "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+    "TaskCompleted hook"
+
 eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
     "$EAGLE_MEM_DIR/hooks/session-end.sh" \
     "SessionEnd hook"
