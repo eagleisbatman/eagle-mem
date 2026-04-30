@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Eagle Mem</title>
+    <title>Eagle Mem — Persistent Memory for Claude Code</title>
     <meta
       name="description"
-      content="Persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat."
+      content="Persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat. Session summaries, code indexing, task tracking, and contextual memory injection."
     />
     <style>
       :root {
@@ -129,12 +129,41 @@
         border-color: transparent;
       }
 
-      /* ─── Getting started ────────────────────── */
+      /* ─── Problem / Solution ─────────────────── */
 
-      .getting-started {
+      .problem-solution {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 20px;
+        padding: 48px 0 0;
+      }
+
+      .ps-card {
+        padding: 32px 28px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .ps-card h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        color: var(--accent);
+      }
+
+      .ps-card p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .ps-card p:last-child { margin-bottom: 0; }
+
+      /* ─── Getting started ────────────────────── */
+
+      .getting-started {
         padding: 48px 0 0;
       }
 
@@ -280,6 +309,146 @@
         border: 1px solid var(--line);
       }
 
+      /* ─── Tables ─────────────────────────────── */
+
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-top: 16px;
+      }
+
+      .data-table th {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 2px solid var(--line);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .data-table td {
+        padding: 8px 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .data-table td:first-child {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+
+      .data-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .table-wrap {
+        margin-top: 20px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 20px;
+        overflow-x: auto;
+      }
+
+      /* ─── Hook table ─────────────────────────── */
+
+      .hook-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .hook-table th {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 2px solid var(--line);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .hook-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.4;
+        vertical-align: top;
+      }
+
+      .hook-table td:first-child {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--ink);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .hook-table td:nth-child(2) {
+        font-family: var(--mono);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .hook-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      /* ─── Command grid ───────────────────────── */
+
+      .cmd-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        padding: 20px 0 0;
+      }
+
+      .cmd-group {
+        padding: 24px 20px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .cmd-group h3 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .cmd-group ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .cmd-group li {
+        padding: 4px 0;
+        font-family: var(--sans);
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .cmd-group li code {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--ink);
+      }
+
       /* ─── Section titles ─────────────────────── */
 
       .section-title {
@@ -291,6 +460,26 @@
         text-transform: uppercase;
         letter-spacing: 2px;
       }
+
+      /* ─── Banner preview ─────────────────────── */
+
+      .banner-preview {
+        display: block;
+        margin: 28px auto 0;
+        padding: 20px 28px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre;
+        overflow-x: auto;
+        max-width: 520px;
+        text-align: left;
+        color: var(--ink);
+      }
+
+      .banner-preview .dim { color: var(--muted); }
 
       footer {
         margin-top: 56px;
@@ -307,11 +496,14 @@
         .ascii-banner { font-size: clamp(5px, 2.8vw, 10px); }
         .highlights { grid-template-columns: 1fr 1fr; }
         section.details { grid-template-columns: 1fr 1fr; }
-        .getting-started { grid-template-columns: 1fr; }
+        .problem-solution { grid-template-columns: 1fr; }
+        .cmd-grid { grid-template-columns: 1fr 1fr; }
       }
 
       @media (max-width: 500px) {
         .highlights { grid-template-columns: 1fr; }
+        section.details { grid-template-columns: 1fr; }
+        .cmd-grid { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -331,7 +523,7 @@
           SQLite + FTS5. No daemon, no vector DB, no bloat.
         </p>
         <div class="install-block">
-          <span class="prefix">$ </span>npm install -g eagle-mem && eagle-mem install
+          <span class="prefix">$ </span>npm install -g eagle-mem &amp;&amp; eagle-mem install
         </div>
         <div class="actions">
           <a class="button primary" href="https://github.com/eagleisbatman/eagle-mem">GitHub</a>
@@ -339,58 +531,274 @@
         </div>
       </header>
 
+      <!-- ─── Problem / Solution ─────────────────── -->
+
+      <div class="problem-solution">
+        <div class="ps-card">
+          <h2>The Problem</h2>
+          <p>
+            Claude Code starts every session with amnesia. It doesn&rsquo;t remember what you built yesterday,
+            what decisions you made, what files matter, or what broke last time.
+          </p>
+          <p>
+            Every <code>/compact</code> wipes context. Every new session is a cold start. You waste tokens
+            re-explaining your project, re-reading files, and watching Claude repeat mistakes you already corrected.
+          </p>
+        </div>
+        <div class="ps-card">
+          <h2>The Solution</h2>
+          <p>
+            Eagle Mem gives Claude Code persistent memory. Every session starts with context from previous
+            sessions &mdash; summaries, decisions, memories, tasks, project overviews, and relevant code &mdash;
+            injected automatically via hooks.
+          </p>
+          <p>
+            <strong>Zero per-instance overhead.</strong> No daemon, no vector DB, no MCP server. Just bash scripts,
+            sqlite3 (WAL mode, FTS5 full-text search), and jq.
+          </p>
+        </div>
+      </div>
+
+      <div class="banner-preview"><span class="dim">======================================</span>
+       Eagle Mem Loaded
+<span class="dim">======================================</span>
+ Project      | my-app
+ Sessions     | 42 (18 with summaries)
+ Memories     | 7 stored
+ Tasks        | 1 in progress, 3 pending
+ Code Index   | 156 chunks
+ Last Work    | Added auth middleware with JWT validation
+<span class="dim">======================================</span></div>
+
+      <!-- ─── Highlights ─────────────────────────── -->
+
+      <div class="highlights">
+        <div class="highlight">
+          <h3>Hooks</h3>
+          <span class="num">6</span>
+          <p>Automatic lifecycle hooks &mdash; session start, tool use, stop, and end</p>
+        </div>
+        <div class="highlight">
+          <h3>Commands</h3>
+          <span class="num">15</span>
+          <p>CLI commands for search, health, config, guard, curate, and more</p>
+        </div>
+        <div class="highlight">
+          <h3>Tables</h3>
+          <span class="num">16</span>
+          <p>SQLite tables with FTS5 full-text search indexing</p>
+        </div>
+        <div class="highlight">
+          <h3>Skills</h3>
+          <span class="num">4</span>
+          <p>In-session slash commands for search, overview, memories, and tasks</p>
+        </div>
+      </div>
+
       <!-- ─── Getting Started ────────────────────── -->
 
-      <div class="getting-started" style="grid-template-columns: 1fr;">
+      <p class="section-title">Getting Started</p>
+
+      <div class="getting-started">
         <div class="path">
-          <h2>Getting started</h2>
-          <p class="subtitle">Install once. Open Claude Code. That&rsquo;s it.</p>
+          <h2>Install once. Open Claude Code. That&rsquo;s it.</h2>
+          <p class="subtitle">Everything is automatic from here.</p>
           <ol>
             <li>
               <strong>Install</strong><br>
-              <code>npm install -g eagle-mem && eagle-mem install</code><br>
+              <code>npm install -g eagle-mem &amp;&amp; eagle-mem install</code><br>
               <span style="color: var(--muted); font-size: 13px;">One-time setup. Registers hooks in Claude Code, creates the database, installs skills.</span>
             </li>
             <li>
               <strong>Open Claude Code in any project directory</strong><br>
-              <span style="color: var(--muted); font-size: 13px;">Eagle Mem activates and shows what it loaded. On your first message, Claude builds a project overview. From here, everything is automatic &mdash; summaries captured, memories mirrored, context survives <code>/compact</code>.</span>
+              <span style="color: var(--muted); font-size: 13px;">Eagle Mem activates and shows what it loaded. Everything is automatic &mdash; summaries captured, memories mirrored, context survives <code>/compact</code>.</span>
             </li>
           </ol>
+          <div class="note">
+            <strong>Prerequisites:</strong> sqlite3 with FTS5 (ships with macOS), jq,
+            and <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> installed.
+            The installer offers to install missing dependencies.
+          </div>
         </div>
       </div>
+
+      <!-- ─── How It Works: Hooks ────────────────── -->
+
+      <p class="section-title">How It Works</p>
+
+      <div class="table-wrap">
+        <table class="hook-table">
+          <thead>
+            <tr>
+              <th>Hook</th>
+              <th>Fires When</th>
+              <th>What It Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>SessionStart</td>
+              <td>startup, resume, clear, compact</td>
+              <td>Injects overview, summaries, memories, tasks, core files, working set. Auto-provisions new projects (scan, index).</td>
+            </tr>
+            <tr>
+              <td>PreToolUse</td>
+              <td>before Bash, Read, Edit, Write</td>
+              <td>Surfaces guardrails and decisions before edits. Rewrites noisy commands (learned rules). Detects redundant reads, nudges co-edit partners, detects stuck loops.</td>
+            </tr>
+            <tr>
+              <td>UserPromptSubmit</td>
+              <td>user sends a message</td>
+              <td>FTS5 search across past sessions and indexed code for relevant context.</td>
+            </tr>
+            <tr>
+              <td>PostToolUse</td>
+              <td>after tool calls</td>
+              <td>Records file touches, mirrors memory/plan/task writes, surfaces decision history and feature impacts on reads, stale memory warnings on edits.</td>
+            </tr>
+            <tr>
+              <td>Stop</td>
+              <td>Claude&rsquo;s turn ends</td>
+              <td>Extracts <code>&lt;eagle-summary&gt;</code> blocks for rich session summaries.</td>
+            </tr>
+            <tr>
+              <td>SessionEnd</td>
+              <td>session closes</td>
+              <td>Re-syncs tasks, marks session completed.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ─── Background Automation + Token Savings + Anti-Regression ── -->
+
+      <section class="details">
+        <div class="feature">
+          <h3>// background automation</h3>
+          <p>
+            SessionStart triggers autonomous provisioning &mdash; no commands needed.
+            State-file debounce prevents repeated runs.
+          </p>
+          <ul>
+            <li><strong>Auto-scan</strong> &mdash; new project with no overview triggers codebase scan</li>
+            <li><strong>Auto-index</strong> &mdash; new or stale project triggers FTS5 source indexing</li>
+            <li><strong>Auto-prune</strong> &mdash; observations over 10K rows trigger cleanup</li>
+            <li><strong>Auto-curate</strong> &mdash; self-learning curator generates command rules, co-edit patterns, hot file detection, and guardrails</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// token savings</h3>
+          <p>
+            Eagle Mem actively reduces token consumption through learned behavior,
+            not hardcoded rules.
+          </p>
+          <ul>
+            <li><strong>Injection compression</strong> &mdash; zero-value stats elided, compact reloads get 1 recent session instead of 3</li>
+            <li><strong>Command rewriting</strong> &mdash; noisy Bash commands piped through <code>head -N</code> via <code>updatedInput</code></li>
+            <li><strong>Read-after-modify</strong> &mdash; detects reads of just-edited files, nudges that the diff is already in context</li>
+            <li><strong>Read dedup</strong> &mdash; files read 3+ times get a soft nudge</li>
+            <li><strong>Co-edit nudges</strong> &mdash; learned from observations: editing X reminds you to also touch Y</li>
+            <li><strong>Hot file awareness</strong> &mdash; files read in 50%+ of sessions flagged as &ldquo;likely in context&rdquo;</li>
+            <li><strong>Working set recovery</strong> &mdash; on compact, injects the files you were actively editing</li>
+            <li><strong>Stuck loop detection</strong> &mdash; same file edited 5+ times triggers a rethink nudge</li>
+          </ul>
+        </div>
+        <div class="feature">
+          <h3>// anti-regression</h3>
+          <p>
+            Eagle Mem prevents Claude from repeating past mistakes.
+          </p>
+          <ul>
+            <li><strong>Decision surfacing</strong> &mdash; past decisions from <code>&lt;eagle-summary&gt;</code> blocks fire before edits</li>
+            <li><strong>Guardrails</strong> &mdash; file-level rules (manual or curator-discovered) fire before every Edit/Write</li>
+            <li><strong>Feature verification</strong> &mdash; tracks features with smoke tests and dependencies</li>
+            <li><strong>Gotcha surfacing</strong> &mdash; past surprises surfaced when editing related files</li>
+            <li><strong>Stale memory detection</strong> &mdash; warns when edits may contradict stored memories</li>
+          </ul>
+        </div>
+      </section>
 
       <!-- ─── Commands ───────────────────────────── -->
 
       <p class="section-title">Commands</p>
 
-      <section class="details" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="feature">
-          <h3>// lifecycle</h3>
+      <div class="cmd-grid">
+        <div class="cmd-group">
+          <h3>Lifecycle</h3>
           <ul>
-            <li><strong><code>eagle-mem install</code></strong> &mdash; first-time setup: hooks, database, skills</li>
-            <li><strong><code>eagle-mem update</code></strong> &mdash; re-deploy hooks and run migrations after <code>npm update</code></li>
-            <li><strong><code>eagle-mem uninstall</code></strong> &mdash; remove hooks and optionally delete data</li>
+            <li><code>eagle-mem install</code> &mdash; first-time setup</li>
+            <li><code>eagle-mem update</code> &mdash; re-deploy hooks + migrations</li>
+            <li><code>eagle-mem uninstall</code> &mdash; remove hooks + data</li>
           </ul>
         </div>
-        <div class="feature">
-          <h3>// search &amp; diagnose</h3>
-          <p>
-            <code>eagle-mem search "auth middleware"</code><br><br>
-            Search across session summaries, Claude memories, and indexed code using FTS5.
-          </p>
-          <p style="margin-top: 12px;">
-            <code>eagle-mem health</code><br><br>
-            Diagnose pipeline health and background automation status.
-          </p>
+        <div class="cmd-group">
+          <h3>Search &amp; Diagnose</h3>
+          <ul>
+            <li><code>eagle-mem search</code> &mdash; search sessions, memories, code</li>
+            <li><code>eagle-mem health</code> &mdash; pipeline health check</li>
+            <li><code>eagle-mem overview</code> &mdash; build or view overview</li>
+            <li><code>eagle-mem memories</code> &mdash; view/sync memories</li>
+            <li><code>eagle-mem tasks</code> &mdash; view mirrored tasks</li>
+          </ul>
         </div>
-        <div class="feature">
-          <h3>// configure</h3>
-          <p>
-            <code>eagle-mem config</code><br><br>
-            View or change LLM provider settings. Supports Ollama (local, free), Anthropic, and OpenAI for the self-learning curator.
-          </p>
+        <div class="cmd-group">
+          <h3>Configure</h3>
+          <ul>
+            <li><code>eagle-mem config</code> &mdash; LLM provider settings</li>
+            <li><code>eagle-mem guard</code> &mdash; manage guardrails</li>
+            <li><code>eagle-mem feature</code> &mdash; track features</li>
+          </ul>
         </div>
-      </section>
+        <div class="cmd-group">
+          <h3>Maintain</h3>
+          <ul>
+            <li><code>eagle-mem curate</code> &mdash; run curator</li>
+            <li><code>eagle-mem prune</code> &mdash; clean stale data</li>
+            <li><code>eagle-mem scan</code> &mdash; scan codebase</li>
+            <li><code>eagle-mem index</code> &mdash; index source files</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 14px; color: var(--accent);">Search Modes</h3>
+        <table class="data-table">
+          <tbody>
+            <tr>
+              <td>eagle-mem search "query"</td>
+              <td>Keyword search across summaries</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --timeline</td>
+              <td>Recent sessions in chronological order</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --overview</td>
+              <td>Project overview</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --memories</td>
+              <td>Mirrored Claude Code memories</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --tasks</td>
+              <td>In-flight tasks (pending/in-progress)</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --files</td>
+              <td>Most frequently modified files</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --stats</td>
+              <td>Project statistics</td>
+            </tr>
+            <tr>
+              <td>eagle-mem search --session &lt;id&gt;</td>
+              <td>Full observation trail for one session</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <!-- ─── Skills ─────────────────────────────── -->
 
@@ -400,76 +808,34 @@
         <div class="feature">
           <h3>// /eagle-mem-search</h3>
           <p>
-            Search past sessions from within Claude Code. Claude interprets results and connects them to your current work &mdash; better than raw terminal search when you need context, not just a match.
+            Search past sessions from within Claude Code. Claude interprets results and connects them to your current work.
           </p>
         </div>
         <div class="feature">
           <h3>// /eagle-mem-overview</h3>
           <p>
-            Build a rich project briefing. Claude reads your README, entry points, and git history to write a multi-paragraph overview. Injected at every session start.
+            Build a rich project briefing from README, entry points, and git history. Injected at every session start.
           </p>
         </div>
         <div class="feature">
           <h3>// /eagle-mem-memories</h3>
           <p>
-            View and search Claude Code&rsquo;s auto-memories, plans, and tasks mirrored into Eagle Mem&rsquo;s FTS5 index. Cross-project search included.
+            View and search Claude Code&rsquo;s auto-memories, plans, and tasks mirrored into FTS5. Cross-project search included.
           </p>
         </div>
         <div class="feature">
           <h3>// /eagle-mem-tasks</h3>
           <p>
-            Break complex work into tasks that survive <code>/compact</code>. Uses Claude Code&rsquo;s native TaskCreate/TaskUpdate. Eagle Mem re-injects task state after compaction.
+            TaskAware Compact Loop &mdash; break complex work into tasks that survive <code>/compact</code>.
           </p>
         </div>
       </section>
 
-      <!-- ─── How it works ───────────────────────── -->
+      <!-- ─── How it works: deeper ───────────────── -->
 
-      <p class="section-title">How it works</p>
+      <p class="section-title">Architecture</p>
 
       <section class="details">
-        <div class="feature">
-          <h3>// automatic memory</h3>
-          <p>
-            Six lifecycle hooks fire on every session event. You never run a
-            &ldquo;save&rdquo; command &mdash; Eagle Mem captures context
-            automatically.
-          </p>
-          <ul>
-            <li><strong>SessionStart</strong> &mdash; injects overview, summaries, memories, plans, and in-progress tasks</li>
-            <li><strong>PreToolUse</strong> &mdash; rewrites noisy commands (learned rules), detects redundant reads</li>
-            <li><strong>UserPromptSubmit</strong> &mdash; FTS5 search for relevant past memories</li>
-            <li><strong>PostToolUse</strong> &mdash; records file touches, mirrors memories/plans/tasks, tracks modifications</li>
-            <li><strong>Stop</strong> &mdash; extracts <code>&lt;eagle-summary&gt;</code>, strips <code>&lt;private&gt;</code> tags</li>
-            <li><strong>SessionEnd</strong> &mdash; re-syncs task statuses, marks session completed</li>
-          </ul>
-        </div>
-        <div class="feature">
-          <h3>// background automation</h3>
-          <p>
-            SessionStart triggers autonomous provisioning &mdash; no commands needed.
-            State-file debounce prevents thundering herd on compaction.
-          </p>
-          <ul>
-            <li><strong>Auto-scan</strong> &mdash; new project with no overview triggers codebase scan</li>
-            <li><strong>Auto-index</strong> &mdash; new or stale project triggers FTS5 source indexing</li>
-            <li><strong>Auto-prune</strong> &mdash; observations over 10K rows trigger cleanup</li>
-            <li><strong>Auto-curate</strong> &mdash; self-learning curator generates project-specific command rules</li>
-          </ul>
-        </div>
-        <div class="feature">
-          <h3>// taskaware compact loop</h3>
-          <p>
-            Break complex multi-step work into tasks using Claude Code&rsquo;s native
-            <code>TaskCreate</code>/<code>TaskUpdate</code> with dependency support.
-          </p>
-          <ul>
-            <li><strong>Plan</strong> &mdash; create tasks with <code>TaskCreate</code> + <code>addBlockedBy</code></li>
-            <li><strong>Execute</strong> &mdash; work on one task at a time</li>
-            <li><strong>Compact</strong> &mdash; run <code>/compact</code> when context fills up</li>
-            <li><strong>Resume</strong> &mdash; Eagle Mem re-injects mirrored task state + memory</li>
-          </ul>
-        </div>
         <div class="feature">
           <h3>// claude code mirror</h3>
           <p>
@@ -480,7 +846,7 @@
             <li><strong>Memories</strong> &mdash; intercepts writes to <code>~/.claude/projects/*/memory/</code></li>
             <li><strong>Plans</strong> &mdash; captures plan files from <code>~/.claude/plans/</code></li>
             <li><strong>Tasks</strong> &mdash; mirrors TaskCreate/TaskUpdate + re-syncs at session end</li>
-            <li><strong><code>eagle-mem memories sync</code></strong> &mdash; backfill everything in one command</li>
+            <li><code>eagle-mem memories sync</code> &mdash; backfill everything in one command</li>
           </ul>
         </div>
         <div class="feature">
@@ -490,42 +856,79 @@
             external services.
           </p>
           <ul>
-            <li><strong><code>&lt;private&gt;</code> tags</strong> &mdash; stripped before any data reaches the database</li>
-            <li><strong>WAL mode</strong> &mdash; concurrent session safety across 4-5 instances</li>
+            <li><strong>WAL mode</strong> &mdash; concurrent session safety across multiple instances</li>
             <li><strong>Secret redaction</strong> &mdash; API keys and tokens scrubbed from observations</li>
             <li><strong>Per-project isolation</strong> &mdash; each project gets its own memory bucket</li>
+            <li><strong>HOME-relative identity</strong> &mdash; projects identified by full path, not basename</li>
           </ul>
         </div>
         <div class="feature">
-          <h3>// token savings</h3>
+          <h3>// self-learning curator</h3>
           <p>
-            Eagle Mem actively reduces token consumption through learned behavior,
-            not hardcoded rules.
+            The curator analyzes observation data to discover patterns and generate
+            project-specific intelligence.
           </p>
           <ul>
-            <li><strong>Command rewriting</strong> &mdash; PreToolUse rewrites noisy Bash commands to pipe through <code>head -N</code> via <code>updatedInput</code>. Rules are learned by the curator from real usage.</li>
-            <li><strong>Read-after-modify</strong> &mdash; detects when you read a file that was just edited or written, nudges that the diff is already in context</li>
-            <li><strong>Read dedup</strong> &mdash; files read 3+ times in a session get a soft nudge that contents are likely already in context</li>
-            <li><strong>Self-learning</strong> &mdash; the curator analyzes observation data to discover which commands are noisy and generates project-specific rules</li>
-          </ul>
-        </div>
-        <div class="feature">
-          <h3>// compact-safe reload</h3>
-          <p>
-            When Claude Code compacts your conversation, Eagle Mem detects it and
-            re-injects the full context &mdash; overview, memories, tasks, and
-            recent session history.
-          </p>
-          <ul>
-            <li><strong>Trigger-aware</strong> &mdash; shows startup vs compact vs clear vs resume</li>
-            <li><strong>Stale filtering</strong> &mdash; skips tasks older than 7 days and noisy auto-captured summaries</li>
-            <li><strong>Smart project ID</strong> &mdash; resolves via git root, handles monorepos correctly</li>
+            <li><strong>Command rules</strong> &mdash; learns which Bash commands produce noisy output</li>
+            <li><strong>Co-edit pairs</strong> &mdash; discovers files frequently edited together</li>
+            <li><strong>Hot files</strong> &mdash; identifies files read in most sessions</li>
+            <li><strong>Guardrails</strong> &mdash; auto-promotes observed gotchas to file-level rules</li>
           </ul>
         </div>
       </section>
 
+      <!-- ─── Data ───────────────────────────────── -->
+
+      <p class="section-title">Data</p>
+
+      <div class="table-wrap">
+        <p style="margin: 0 0 16px; color: var(--muted); font-family: var(--sans); font-size: 14px;">
+          Single SQLite database at <code>~/.eagle-mem/memory.db</code> (WAL mode, FTS5 full-text search):
+        </p>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Table</th>
+              <th>What It Stores</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>sessions</td><td>Active/completed sessions per project</td></tr>
+            <tr><td>summaries</td><td>Per-session summaries with decisions, gotchas, key files (FTS5-indexed)</td></tr>
+            <tr><td>observations</td><td>Per-tool-use file touch records</td></tr>
+            <tr><td>overviews</td><td>One overview per project (auto-scan or manual)</td></tr>
+            <tr><td>code_chunks</td><td>FTS5-indexed source file chunks</td></tr>
+            <tr><td>command_rules</td><td>Curator-learned command output rules</td></tr>
+            <tr><td>file_hints</td><td>Curator-learned file access patterns (co-edit pairs, hot files)</td></tr>
+            <tr><td>guardrails</td><td>File-level regression rules (manual or curator-discovered)</td></tr>
+            <tr><td>features</td><td>Feature tracking with names and descriptions</td></tr>
+            <tr><td>feature_files</td><td>Files belonging to each feature</td></tr>
+            <tr><td>feature_dependencies</td><td>Inter-feature dependency relationships</td></tr>
+            <tr><td>feature_smoke_tests</td><td>Smoke test definitions for feature verification</td></tr>
+            <tr><td>eagle_meta</td><td>Internal metadata (last scan, last curate, etc.)</td></tr>
+            <tr><td>claude_memories</td><td>Mirror of Claude Code auto-memories</td></tr>
+            <tr><td>claude_plans</td><td>Mirror of Claude Code plans</td></tr>
+            <tr><td>claude_tasks</td><td>Mirror of Claude Code tasks</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ─── LLM Provider ───────────────────────── -->
+
+      <p class="section-title">LLM Provider (Optional)</p>
+
+      <div class="path">
+        <p class="subtitle" style="margin-bottom: 12px;">
+          Some features (curator auto-enrichment, overview generation) can use an LLM for richer output.
+          Eagle Mem works fully without a provider &mdash; LLM features gracefully degrade to heuristic fallbacks.
+        </p>
+        <p style="color: var(--muted); font-family: var(--sans); font-size: 14px; margin: 0;">
+          <code>eagle-mem config</code> &mdash; Supported providers: Ollama (auto-detected), Anthropic, OpenAI.
+        </p>
+      </div>
+
       <footer>
-        v4.0.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a>
+        v4.6.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
       </footer>
     </main>
   </body>
