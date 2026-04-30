@@ -78,7 +78,13 @@ limit=$(eagle_sql_int "$limit")
 # ─── Keyword search ──────────────────────────────────────
 
 search_keyword() {
-    local q; q=$(eagle_sql_escape "$(eagle_fts_sanitize "$query")")
+    local sanitized_q
+    sanitized_q=$(eagle_fts_sanitize "$query")
+    if [ -z "$sanitized_q" ]; then
+        eagle_err "Search query contains no valid search terms"
+        exit 1
+    fi
+    local q; q=$(eagle_sql_escape "$sanitized_q")
     local p; p=$(eagle_sql_escape "$project")
 
     local where_project=""

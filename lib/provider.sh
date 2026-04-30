@@ -65,12 +65,13 @@ eagle_config_set() {
     safe_value=$(printf '%s' "$value" | sed 's/[|&/\]/\\&/g')
 
     if grep -q "^\[${section}\]" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
+        local tmp_cfg="${EAGLE_CONFIG_FILE}.tmp.$$"
         if grep -q "^[[:space:]]*${key}[[:space:]]*=" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
-            sed -i '' "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${safe_value}\"|" "$EAGLE_CONFIG_FILE"
+            sed "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${safe_value}\"|" "$EAGLE_CONFIG_FILE" > "$tmp_cfg" && mv "$tmp_cfg" "$EAGLE_CONFIG_FILE"
         else
-            sed -i '' "/^\[${section}\]/a\\
+            sed "/^\[${section}\]/a\\
 ${key} = \"${safe_value}\"
-" "$EAGLE_CONFIG_FILE"
+" "$EAGLE_CONFIG_FILE" > "$tmp_cfg" && mv "$tmp_cfg" "$EAGLE_CONFIG_FILE"
         fi
     else
         # printf is safe — no sed interpolation needed for append
