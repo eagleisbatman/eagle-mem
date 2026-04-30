@@ -29,6 +29,8 @@ case "$command" in
     curate)     bash "$SCRIPTS_DIR/curate.sh" "$@" ;;
     feature)    bash "$SCRIPTS_DIR/feature.sh" "$@" ;;
     prune)      bash "$SCRIPTS_DIR/prune.sh" "$@" ;;
+    scan)       bash "$SCRIPTS_DIR/scan.sh" "$@" ;;
+    index)      bash "$SCRIPTS_DIR/index.sh" "$@" ;;
     help|--help|-h)
                 bash "$SCRIPTS_DIR/help.sh" ;;
     version|--version|-v|-V)

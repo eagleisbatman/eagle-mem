@@ -16,8 +16,12 @@ eagle_ensure_db
 
 # ─── Parse arguments ──────────────────────────────────────
 
-action="${1:-show}"
-shift 2>/dev/null || true
+action="show"
+case "${1:-}" in
+    -*)  ;; # flags parsed below
+    "")  ;;
+    *)   action="$1"; shift ;;
+esac
 
 project=""
 json_output=false
@@ -36,7 +40,7 @@ show_help() {
     echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
     echo -e "    ${CYAN}-j, --json${RESET}              Output as JSON"
     echo ""
-    echo -e "  ${BOLD}Tip:${RESET} Use ${CYAN}eagle-mem scan${RESET} to auto-generate an overview from code."
+    echo -e "  ${BOLD}Tip:${RESET} Overviews are auto-generated during ${CYAN}eagle-mem install${RESET} and background scans."
     echo ""
     exit 0
 }
@@ -66,7 +70,7 @@ overview_show() {
 
     if [ -z "$content" ]; then
         eagle_dim "No overview for project '$project'"
-        eagle_dim "Run 'eagle-mem scan' or 'eagle-mem overview set <text>' to create one"
+        eagle_dim "Use 'eagle-mem overview set <text>' to create one, or run install/update to auto-generate"
         return
     fi
 

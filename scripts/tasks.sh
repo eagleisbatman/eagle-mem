@@ -17,8 +17,12 @@ eagle_ensure_db
 
 # ─── Parse arguments ──────────────────────────────────────
 
-action="${1:-pending}"
-shift 2>/dev/null || true
+action="pending"
+case "${1:-}" in
+    -*)  ;; # flags parsed below
+    "")  ;;
+    *)   action="$1"; shift ;;
+esac
 
 project=""
 json_output=false
