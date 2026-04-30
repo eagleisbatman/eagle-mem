@@ -165,7 +165,9 @@ if [ "$needs_enrichment" -eq 1 ]; then
     if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 3000)
 
-        enrich_prompt="Extract from this Claude Code session. Respond with EXACTLY these sections (omit empty ones):
+        enrich_prompt="Extract facts from this Claude Code session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
+
+Respond with EXACTLY these sections (omit sections with no evidence):
 
 REQUEST:
 One-line summary of what the user asked for. No system tags or XML.
@@ -177,21 +179,19 @@ LEARNED:
 Non-obvious discoveries or insights from the session.
 
 DECISIONS:
-- Used WAL mode for SQLite — why: prevents write contention under concurrent hooks
-- Switched from Mistral to Gemma — why: better instruction following for extraction
+Each as: <what was decided> — why: <reason>
 
 GOTCHAS:
-- PRAGMA ordering matters — busy_timeout must come before synchronous
-- Template placeholders in prompts get treated as literal text by small models
+Each as: <surprising finding or pitfall>
 
 KEY_FILES:
-- hooks/stop.sh
-- lib/db-core.sh
+Each as: <filepath>
 
 SESSION TEXT:
 $excerpt"
 
-        enrich_result=$(eagle_llm_call "$enrich_prompt" "Extract structured facts from development sessions. Be concise. Only include items with clear evidence." 768 2>/dev/null)
+        enrich_system="You extract structured facts from development sessions. Output format for decisions: '- Did X — why: Y'. Output format for gotchas: '- Gotcha description'. Be concise. Only include items with clear evidence in the session text. Never fabricate content."
+        enrich_result=$(eagle_llm_call "$enrich_prompt" "$enrich_system" 768 2>/dev/null)
         llm_rc=$?
 
         if [ $llm_rc -ne 0 ] || [ -z "$enrich_result" ]; then

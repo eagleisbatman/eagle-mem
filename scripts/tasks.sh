@@ -127,9 +127,15 @@ tasks_search() {
         exit 1
     fi
 
+    local sanitized_query
+    sanitized_query=$(eagle_fts_sanitize "$query")
+    if [ -z "$sanitized_query" ]; then
+        eagle_err "Search query contains no valid search terms"
+        exit 1
+    fi
+
     if [ "$json_output" = true ]; then
-        local query_sql; query_sql=$(eagle_fts_sanitize "$query")
-        query_sql=$(eagle_sql_escape "$query_sql")
+        local query_sql; query_sql=$(eagle_sql_escape "$sanitized_query")
         eagle_db_json "SELECT t.source_task_id, t.subject, t.status, t.description, t.updated_at
                        FROM claude_tasks t
                        JOIN claude_tasks_fts f ON f.rowid = t.id
@@ -141,8 +147,7 @@ tasks_search() {
     fi
 
     local results
-    local query_sql; query_sql=$(eagle_fts_sanitize "$query")
-    query_sql=$(eagle_sql_escape "$query_sql")
+    local query_sql; query_sql=$(eagle_sql_escape "$sanitized_query")
     results=$(eagle_db "SELECT t.source_task_id, t.subject, t.status, t.description
                         FROM claude_tasks t
                         JOIN claude_tasks_fts f ON f.rowid = t.id

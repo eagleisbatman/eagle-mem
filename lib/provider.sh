@@ -66,13 +66,15 @@ eagle_config_set() {
 
     if grep -q "^\[${section}\]" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
         local tmp_cfg="${EAGLE_CONFIG_FILE}.tmp.$$"
-        if grep -q "^[[:space:]]*${key}[[:space:]]*=" "$EAGLE_CONFIG_FILE" 2>/dev/null; then
-            sed "s|^[[:space:]]*${key}[[:space:]]*=.*|${key} = \"${safe_value}\"|" "$EAGLE_CONFIG_FILE" > "$tmp_cfg" && mv "$tmp_cfg" "$EAGLE_CONFIG_FILE"
-        else
-            sed "/^\[${section}\]/a\\
-${key} = \"${safe_value}\"
-" "$EAGLE_CONFIG_FILE" > "$tmp_cfg" && mv "$tmp_cfg" "$EAGLE_CONFIG_FILE"
-        fi
+        awk -v sect="[${section}]" -v k="$key" -v v="$safe_value" '
+            BEGIN { in_sect=0; replaced=0 }
+            /^\[/ { in_sect=($0 == sect) }
+            in_sect && !replaced && $0 ~ "^[[:space:]]*"k"[[:space:]]*=" {
+                print k" = \""v"\""; replaced=1; next
+            }
+            { print }
+            END { if (in_sect && !replaced) print k" = \""v"\"" }
+        ' "$EAGLE_CONFIG_FILE" > "$tmp_cfg" && mv "$tmp_cfg" "$EAGLE_CONFIG_FILE"
     else
         # printf is safe — no sed interpolation needed for append
         printf '\n[%s]\n%s = "%s"\n' "$section" "$key" "$value" >> "$EAGLE_CONFIG_FILE"
