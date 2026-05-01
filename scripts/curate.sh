@@ -398,46 +398,56 @@ if [ -n "$co_edit_data" ]; then
         eagle_info "  Co-edit pairs found:"
     fi
 
-    co_edit_count=0
-    declare -A co_map
-
-    while IFS='|' read -r f1 f2 co_sessions; do
-        [ -z "$f1" ] || [ -z "$f2" ] && continue
-
-        # Build comma-separated partner list per file (both directions)
-        if [ -n "${co_map[$f1]+x}" ]; then
-            co_map[$f1]="${co_map[$f1]},$f2"
-        else
-            co_map[$f1]="$f2"
-        fi
-        if [ -n "${co_map[$f2]+x}" ]; then
-            co_map[$f2]="${co_map[$f2]},$f1"
-        else
-            co_map[$f2]="$f1"
-        fi
-        co_edit_count=$((co_edit_count + 1))
-    done <<< "$co_edit_data"
+    # Use awk for associative map (Bash 3.2 compatible)
+    co_map_output=$(printf '%s\n' "$co_edit_data" | awk -F'|' '
+        $1 && $2 {
+            m[$1] = (m[$1] ? m[$1] "," : "") $2
+            m[$2] = (m[$2] ? m[$2] "," : "") $1
+            n++
+        }
+        END {
+            for (f in m) print f "|" m[f]
+            print "__co_edit_count__|" n "|" length(m) > "/dev/stderr"
+        }
+    ' 2>&1 1>/dev/null)
+    # stderr has the count line, stdout has the map lines — reverse:
+    co_map_output=$(printf '%s\n' "$co_edit_data" | awk -F'|' '
+        $1 && $2 {
+            m[$1] = (m[$1] ? m[$1] "," : "") $2
+            m[$2] = (m[$2] ? m[$2] "," : "") $1
+            n++
+        }
+        END {
+            for (f in m) print f "|" m[f]
+            printf "%s\n", "__META__|" n "|" length(m) > "/dev/stderr"
+        }
+    ' 2>/tmp/eagle_co_edit_meta)
+    co_edit_count=$(awk -F'|' '{print $2}' /tmp/eagle_co_edit_meta)
+    co_map_file_count=$(awk -F'|' '{print $3}' /tmp/eagle_co_edit_meta)
+    rm -f /tmp/eagle_co_edit_meta
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        for f in "${!co_map[@]}"; do
-            eagle_info "    $(basename "$f") → ${co_map[$f]}"
+        printf '%s\n' "$co_map_output" | while IFS='|' read -r f partners; do
+            [ -z "$f" ] && continue
+            eagle_info "    $(basename "$f") → $partners"
         done
     else
         {
             echo "BEGIN;"
             echo "DELETE FROM file_hints WHERE project = '$(eagle_sql_escape "$project")' AND hint_type = 'co_edit';"
-            for f in "${!co_map[@]}"; do
+            printf '%s\n' "$co_map_output" | while IFS='|' read -r f partners; do
+                [ -z "$f" ] && continue
                 local_f=$(eagle_sql_escape "$f")
-                local_v=$(eagle_sql_escape "${co_map[$f]}")
+                local_v=$(eagle_sql_escape "$partners")
                 echo "INSERT INTO file_hints (project, hint_type, file_path, hint_value) VALUES ('$(eagle_sql_escape "$project")', 'co_edit', '$local_f', '$local_v') ON CONFLICT(project, hint_type, file_path) DO UPDATE SET hint_value = excluded.hint_value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
             done
             echo "COMMIT;"
         } | eagle_db_pipe
         _proj_hash=$(printf '%s' "$project" | shasum | cut -c1-8)
         touch "$EAGLE_MEM_DIR/.co-edit-active.${_proj_hash}"
-        eagle_log "INFO" "Curator: stored ${#co_map[@]} co-edit hints from $co_edit_count pairs"
+        eagle_log "INFO" "Curator: stored $co_map_file_count co-edit hints from $co_edit_count pairs"
     fi
-    eagle_ok "$co_edit_count co-edit pairs found (${#co_map[@]} files)"
+    eagle_ok "$co_edit_count co-edit pairs found ($co_map_file_count files)"
 else
     if [ "$DRY_RUN" -eq 0 ]; then
         eagle_delete_file_hints "$project" "co_edit"
