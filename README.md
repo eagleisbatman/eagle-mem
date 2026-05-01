@@ -1,10 +1,13 @@
 ```
 ======================================
        Eagle Mem
+  context that survives /compact
 ======================================
 ```
 
 # Eagle Mem
+
+**Context that survives `/compact`.**
 
 ## The Problem
 
@@ -14,13 +17,13 @@ The longer you work with Claude Code, the worse this gets. Projects accumulate h
 
 ## The Solution
 
-Eagle Mem gives Claude Code persistent memory. Every session starts with context from previous sessions — summaries, decisions, memories, tasks, project overviews, and relevant code — injected automatically via hooks. No commands to run, no prompts to write. It just works.
+Eagle Mem is a recall layer for Claude Code. Every session starts with context from previous sessions — summaries, decisions, memories, tasks, project overviews, and relevant code — injected automatically via hooks. No commands to run, no prompts to write. It just works.
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash scripts, sqlite3 (WAL mode, FTS5 full-text search), and jq.
 
 ```
 ======================================
-       Eagle Mem Loaded
+       Eagle Mem Recall Ready
 ======================================
  Project      | my-app
  Sessions     | 42 (18 with summaries)

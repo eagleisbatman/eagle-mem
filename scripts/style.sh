@@ -17,11 +17,13 @@ TICK="${GREEN}✓${RESET}"
 CROSS="${RED}✗${RESET}"
 ARROW="${CYAN}→${RESET}"
 DOT="${DIM}·${RESET}"
+EAGLE_RULE="======================================"
+EAGLE_TAGLINE="context that survives /compact"
 
 eagle_header() {
     echo ""
-    echo -e "  ${BOLD}Eagle Mem${RESET}  ${DIM}$1${RESET}"
-    echo -e "  ${DIM}─────────────────────────────────────${RESET}"
+    echo -e "  ${CYAN}${BOLD}Eagle Mem${RESET}  ${DIM}$1${RESET}"
+    echo -e "  ${CYAN}${EAGLE_RULE}${RESET}"
     echo ""
 }
 
@@ -43,9 +45,10 @@ eagle_footer() {
 }
 
 eagle_banner() {
-    echo -e "  ${CYAN}======================================${RESET}"
+    echo -e "  ${CYAN}${EAGLE_RULE}${RESET}"
     echo -e "  ${CYAN}${BOLD}       Eagle Mem${RESET}"
-    echo -e "  ${CYAN}======================================${RESET}"
+    echo -e "  ${DIM}       ${EAGLE_TAGLINE}${RESET}"
+    echo -e "  ${CYAN}${EAGLE_RULE}${RESET}"
     echo ""
 }
 

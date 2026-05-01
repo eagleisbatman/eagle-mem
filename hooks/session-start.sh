@@ -129,7 +129,7 @@ stat_last_display="${stat_last_summary:0:60}"
 [ ${#stat_last_summary} -gt 60 ] && stat_last_display+="..."
 
 eagle_banner="======================================
-       Eagle Mem Loaded
+       Eagle Mem Recall Ready
 ======================================
  Project      | $project
  Sessions     | $stat_sessions ($stat_with_summaries with summaries)"
@@ -151,7 +151,8 @@ context="$eagle_banner
 
 if [ -n "$update_notice" ]; then
     context+="
-=== $update_notice ===
+=== Eagle Mem: Update Available ===
+$update_notice
 "
 fi
 
@@ -163,12 +164,12 @@ if [ -n "$overview" ]; then
         overview="${overview:0:497}..."
     fi
     context+="
-=== Overview ===
+=== Eagle Mem: Project Overview ===
 $overview
 "
 else
     context+="
-=== New Project ===
+=== Eagle Mem: New Project ===
 No overview yet — auto-scan is running. Run /eagle-mem-overview for a richer briefing.
 "
 fi
@@ -185,7 +186,7 @@ recent=$(eagle_get_recent_summaries "$project" "$_summary_limit")
 
 if [ -n "$recent" ]; then
     context+="
-=== Recent Sessions ===
+=== Eagle Mem: Recent Recall ===
 "
     while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files; do
         [ -z "$request" ] && [ -z "$completed" ] && continue
@@ -220,7 +221,7 @@ memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, up
     LIMIT 5;")
 if [ -n "$memories" ]; then
     context+="
-=== Memories ===
+=== Eagle Mem: Stored Memories ===
 "
     while IFS='|' read -r mname mtype mdesc _fpath _updated days_ago; do
         [ -z "$mname" ] && continue
@@ -244,7 +245,7 @@ fi
 plans=$(eagle_list_claude_plans "$project" 3)
 if [ -n "$plans" ]; then
     context+="
-=== Plans ===
+=== Eagle Mem: Plans ===
 "
     while IFS='|' read -r ptitle _pproj _fpath _updated; do
         [ -z "$ptitle" ] && continue
@@ -265,7 +266,7 @@ synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
     LIMIT 10;")
 if [ -n "$synced_tasks" ]; then
     context+="
-=== Tasks ===
+=== Eagle Mem: Tasks ===
 "
     while IFS='|' read -r tsubject tstatus tblocked; do
         [ -z "$tsubject" ] && continue
@@ -283,7 +284,8 @@ fi
 hot_files=$(eagle_get_hot_files "$project")
 if [ -n "$hot_files" ]; then
     context+="
-=== Core Files (frequently read — re-read sparingly if unchanged) ===
+=== Eagle Mem: Core Files ===
+Frequently read — re-read sparingly if unchanged.
 "
     IFS=',' read -ra hf_arr <<< "$hot_files"
     for hf in "${hf_arr[@]}"; do
@@ -298,7 +300,8 @@ if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     working_set=$(eagle_get_working_set "$session_id")
     if [ -n "$working_set" ]; then
         context+="
-=== Working Set (files you were modifying before compact) ===
+=== Eagle Mem: Working Set ===
+Files you were modifying before compact.
 "
         while IFS='|' read -r ws_path ws_edits; do
             [ -z "$ws_path" ] && continue
@@ -312,12 +315,12 @@ fi
 
 if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     context+="
-=== Eagle Mem ===
+=== Eagle Mem: Active ===
 Memory active. Attribute recalled context to Eagle Mem. Do not revert PostToolUse-surfaced decisions without asking. Emit <eagle-summary> before final response.
 "
 else
     context+="
-=== Eagle Mem ===
+=== Eagle Mem: Active ===
 Memory active for '$project'. Scan, index, prune, and self-learning run automatically — never ask the user to run these. Attribute recalled context: \"Eagle Mem recalls:\" Do not revert PostToolUse-surfaced decisions without user request. No raw secrets in summaries. If you contradict a loaded memory, update the memory file.
 
 Before your final response, emit:

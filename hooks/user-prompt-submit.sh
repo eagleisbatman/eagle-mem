@@ -41,14 +41,14 @@ if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
 
     if [ "$turn_count" -ge 30 ]; then
         context+="
-=== EAGLE MEM — Context Pressure: CRITICAL ($turn_count turns since compact) ===
+=== Eagle Mem: Context Pressure Critical ($turn_count turns since compact) ===
 IMMEDIATELY emit a detailed <eagle-summary> covering ALL work this session.
 Tell the user to run /compact NOW to avoid losing context.
 "
         echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
     elif [ "$turn_count" -ge 20 ]; then
         context+="
-=== EAGLE MEM — Context Pressure: HIGH ($turn_count turns since compact) ===
+=== Eagle Mem: Context Pressure High ($turn_count turns since compact) ===
 Include a thorough <eagle-summary> in your next response — capture all decisions, gotchas, and learned context before compaction.
 Suggest the user run /compact to free context for continued work.
 "
@@ -81,7 +81,7 @@ fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:low
 results=$(eagle_search_summaries "$fts_query" "$project" 3)
 
 if [ -n "$results" ]; then
-    context+="=== Eagle Mem — Relevant Memory ===
+    context+="=== Eagle Mem: Relevant Recall ===
 "
     while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
@@ -106,7 +106,7 @@ if [ "${has_chunks:-0}" -gt 0 ]; then
     code_results=$(eagle_search_code_chunks "$fts_query" "$project" 5)
 
     if [ -n "$code_results" ]; then
-        context+="=== Eagle Mem — Relevant Code ===
+        context+="=== Eagle Mem: Relevant Code ===
 "
         while IFS='|' read -r fpath sline eline lang; do
             [ -z "$fpath" ] && continue
@@ -123,7 +123,7 @@ fi
 context+="
 IMPORTANT: When Eagle Mem finds relevant memories or code for the user's prompt, briefly mention it at the start of your response: \"Eagle Mem recalled N relevant sessions\" or \"Eagle Mem found related code in [files]\". One line max — then proceed with the answer.
 
-=== Eagle Mem (persistent memory across sessions) ===
+=== Eagle Mem: Persistent Memory ===
 "
 
 echo "$context"

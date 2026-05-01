@@ -80,7 +80,7 @@ Bash)
                     done <<< "$changed_files"
 
                     if [ -n "$context" ]; then
-                        context="=== Eagle Mem ===
+                        context="=== Eagle Mem: Feature Guardrail ===
 This push affects the following features. After deploy, verify each works and run 'eagle-mem feature verify <name>'.
 ${context}================"
                     fi
@@ -101,19 +101,19 @@ ${context}================"
                 if [ -n "$max_lines" ] && [ "$max_lines" -gt 0 ] 2>/dev/null; then
                     case "$cmd" in
                         *"&&"*|*"||"*|*";"*)
-                            context+="Eagle Mem: '${base_cmd}' produces long output (${reason}). Consider: | head -${max_lines}"
+                            context+="Eagle Mem command rule: '${base_cmd}' produces long output (${reason}). Consider: | head -${max_lines}"
                             ;;
                         *"| head"*|*"| tail"*|*"| wc"*|*"| grep"*|*">"*|*">>"*)
                             ;;
                         *)
                             updated_input=$(echo "$input" | jq --arg cmd "${cmd} | head -${max_lines}" '.tool_input + {"command":$cmd}')
-                            context+="Eagle Mem: '${base_cmd}' output is typically long (${reason}). Piped through head -${max_lines}."
+                            context+="Eagle Mem command rule: '${base_cmd}' output is typically long (${reason}). Piped through head -${max_lines}."
                             ;;
                     esac
                 fi
                 ;;
             summary)
-                context+="Eagle Mem: '${base_cmd}' is typically noisy (${reason}). Consider piping through tail or checking exit code only."
+                context+="Eagle Mem command rule: '${base_cmd}' is typically noisy (${reason}). Consider piping through tail or checking exit code only."
                 ;;
         esac
     fi
@@ -147,12 +147,12 @@ Edit|Write)
                     while IFS= read -r ctx_line; do
                         case "$ctx_line" in
                             GR:*)  gr_block+="  - ${ctx_line#GR:}"$'\n' ;;
-                            DEC:*) context+="=== Eagle Mem ==="$'\n'"Decisions for '${fname}': ${ctx_line#DEC:} — Do not revert without asking."$'\n'"================"$'\n' ;;
-                            GOT:*) context+="=== Eagle Mem ==="$'\n'"Gotchas for '${fname}': ${ctx_line#GOT:}"$'\n'"================"$'\n' ;;
+                            DEC:*) context+="=== Eagle Mem: Decision Recall ==="$'\n'"${fname}: ${ctx_line#DEC:} — Do not revert without asking."$'\n'"================"$'\n' ;;
+                            GOT:*) context+="=== Eagle Mem: Gotcha Recall ==="$'\n'"${fname}: ${ctx_line#GOT:}"$'\n'"================"$'\n' ;;
                         esac
                     done <<< "$edit_ctx"
                     if [ -n "$gr_block" ]; then
-                        context+="=== Eagle Mem ==="$'\n'"Guardrails for '${fname}':"$'\n'"${gr_block}================"$'\n'
+                        context+="=== Eagle Mem: Guardrail ==="$'\n'"${fname}:"$'\n'"${gr_block}================"$'\n'
                     fi
                 fi
                 ;;
@@ -165,9 +165,9 @@ Edit|Write)
                 edit_count=$(grep -cFx -- "$fp" "$edit_tracker" 2>/dev/null)
                 edit_count=${edit_count:-0}
                 if [ "$edit_count" -ge 8 ]; then
-                    context+="Eagle Mem: '$(basename "$fp")' has been edited ${edit_count} times this session. You may be stuck — consider stepping back to rethink your approach before making more changes. "
+                    context+="Eagle Mem warning: '$(basename "$fp")' has been edited ${edit_count} times this session. You may be stuck — consider stepping back to rethink your approach before making more changes. "
                 elif [ "$edit_count" -ge 5 ]; then
-                    context+="Eagle Mem: '$(basename "$fp")' has been edited ${edit_count} times this session. If the changes aren't converging, consider a different approach. "
+                    context+="Eagle Mem warning: '$(basename "$fp")' has been edited ${edit_count} times this session. If the changes aren't converging, consider a different approach. "
                 fi
             fi
         fi
@@ -186,7 +186,7 @@ Edit|Write)
                 [ -n "$co_file" ] && partners+="$(basename "$co_file"), "
             done
             partners=${partners%, }
-            context+="Eagle Mem: When you change '$(basename "$fp")' you usually also touch: $partners"
+            context+="Eagle Mem recall: when you change '$(basename "$fp")' you usually also touch: $partners"
         fi
     fi
     ;;
@@ -198,7 +198,7 @@ Read)
         # ─── Read-after-modify detection ──────────────────────
         mod_file="$EAGLE_MEM_DIR/mod-tracker/${session_id}"
         if [ -f "$mod_file" ] && grep -qFx -- "$fp" "$mod_file" 2>/dev/null; then
-            context+="Eagle Mem: '$(basename "$fp")' was just edited/written — the diff is already in context from the tool output. "
+            context+="Eagle Mem recall: '$(basename "$fp")' was just edited/written — the diff is already in context from the tool output. "
         fi
 
         # ─── Read dedup tracker (soft nudge) ──────────────────
@@ -209,7 +209,7 @@ Read)
         read_count=$(grep -cFx -- "$fp" "$tracker_file" 2>/dev/null)
         read_count=${read_count:-0}
         if [ "$read_count" -ge 3 ]; then
-            context+="Eagle Mem: '$(basename "$fp")' has been read ${read_count} times this session. Its contents are likely already in context."
+            context+="Eagle Mem recall: '$(basename "$fp")' has been read ${read_count} times this session. Its contents are likely already in context."
         fi
     fi
     ;;

@@ -13,7 +13,7 @@ version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknow
 eagle_banner
 
 echo -e "  ${BOLD}Eagle Mem${RESET} ${DIM}v${version}${RESET}"
-echo -e "  ${DIM}Persistent memory for Claude Code${RESET}"
+echo -e "  ${DIM}Context that survives /compact for Claude Code${RESET}"
 echo ""
 echo -e "  ${BOLD}Commands:${RESET}"
 echo -e "    ${CYAN}install${RESET}     First-time setup: hooks, database, skills"

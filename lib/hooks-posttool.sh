@@ -75,7 +75,7 @@ eagle_posttool_stale_hint() {
                                 local stale_hit
                                 stale_hit=$(eagle_search_stale_memories "$project" "$fts_query")
                                 if [ -n "$stale_hit" ]; then
-                                    local stale_msg="=== Eagle Mem ===
+                                    local stale_msg="=== Eagle Mem: Memory Check ===
 Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, update the memory.
 ================"
                                     jq -nc --arg ctx "$stale_msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
@@ -108,8 +108,8 @@ eagle_posttool_decision_surface() {
                                 local decision_hit
                                 decision_hit=$(eagle_search_decisions_for_file "$project" "$fts_query")
                                 if [ -n "$decision_hit" ]; then
-                                    read_context+="=== Eagle Mem ===
-Decision history for '${fname}': ${decision_hit} — Do not revert without explicit user request.
+                                    read_context+="=== Eagle Mem: Decision Recall ===
+${fname}: ${decision_hit} — Do not revert without explicit user request.
 ================
 "
                                 fi
@@ -121,7 +121,7 @@ Decision history for '${fname}': ${decision_hit} — Do not revert without expli
                         if [ -n "$feature_hit" ]; then
                             while IFS='|' read -r feat_name feat_desc feat_verified _role feat_deps feat_other_files feat_smoke; do
                                 [ -z "$feat_name" ] && continue
-                                read_context+="=== Eagle Mem ===
+                                read_context+="=== Eagle Mem: Feature Guardrail ===
 '${fname}' is part of feature '${feat_name}'"
                                 [ -n "$feat_desc" ] && read_context+=" ($feat_desc)"
                                 read_context+="."
