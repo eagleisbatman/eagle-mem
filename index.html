@@ -592,7 +592,7 @@
         <div class="highlight">
           <h3>Skills</h3>
           <span class="num">4</span>
-          <p>In-session slash commands for search, overview, memories, and tasks</p>
+          <p>In-session skills for search, overview, memories, and tasks in Claude Code and Codex</p>
         </div>
       </div>
 
@@ -608,7 +608,7 @@
             <li>
               <strong>Install</strong><br>
               <code>npm install -g eagle-mem &amp;&amp; eagle-mem install</code><br>
-              <span style="color: var(--muted); font-size: 13px;">One-time setup. Registers Claude Code and Codex hooks, creates the database, installs skills.</span>
+              <span style="color: var(--muted); font-size: 13px;">One-time setup. Registers Claude Code and Codex hooks, creates the database, installs skills for both agents.</span>
             </li>
             <li>
               <strong>Open Claude Code or Codex in any project directory</strong><br>
@@ -780,7 +780,7 @@
             </tr>
             <tr>
               <td>eagle-mem search --memories</td>
-              <td>Mirrored Claude Code memories</td>
+              <td>Mirrored agent memories</td>
             </tr>
             <tr>
               <td>eagle-mem search --tasks</td>
@@ -804,13 +804,13 @@
 
       <!-- ─── Skills ─────────────────────────────── -->
 
-      <p class="section-title">Skills (inside Claude Code)</p>
+      <p class="section-title">Skills (inside Claude Code and Codex)</p>
 
       <section class="details" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
         <div class="feature">
           <h3>// /eagle-mem-search</h3>
           <p>
-            Search past sessions from within Claude Code. Claude interprets results and connects them to your current work.
+            Search past sessions from within Claude Code or Codex. The agent interprets results and connects them to your current work.
           </p>
         </div>
         <div class="feature">
@@ -822,7 +822,7 @@
         <div class="feature">
           <h3>// /eagle-mem-memories</h3>
           <p>
-            View and search Claude Code&rsquo;s auto-memories, plans, and tasks mirrored into FTS5. Cross-project search included.
+            View and search agent memories, plans, and tasks mirrored into FTS5. Cross-project search included.
           </p>
         </div>
         <div class="feature">
@@ -846,8 +846,8 @@
           </p>
           <ul>
             <li><strong>Source labels</strong> &mdash; sessions and summaries record <code>Claude Code</code> or <code>Codex</code></li>
-            <li><strong>Codex hooks</strong> &mdash; installer enables <code>codex_hooks</code> and registers hooks in <code>~/.codex/hooks.json</code></li>
-            <li><strong>Claude mirror</strong> &mdash; memories, plans, and tasks are mirrored from Claude Code locations</li>
+            <li><strong>Codex hooks</strong> &mdash; installer enables <code>codex_hooks</code>, registers hooks in <code>~/.codex/hooks.json</code>, and symlinks Eagle Mem skills into <code>~/.codex/skills</code></li>
+            <li><strong>Agent mirror</strong> &mdash; memories, plans, and tasks are mirrored with source attribution</li>
             <li><strong>Shared recall</strong> &mdash; SessionStart injects the same project history into either agent</li>
           </ul>
         </div>
@@ -909,9 +909,9 @@
             <tr><td>feature_smoke_tests</td><td>Smoke test definitions for feature verification</td></tr>
             <tr><td>pending_feature_verifications</td><td>Release blockers created when files tied to features change</td></tr>
             <tr><td>eagle_meta</td><td>Internal metadata (last scan, last curate, etc.)</td></tr>
-            <tr><td>claude_memories</td><td>Mirror of Claude Code auto-memories</td></tr>
-            <tr><td>claude_plans</td><td>Mirror of Claude Code plans</td></tr>
-            <tr><td>claude_tasks</td><td>Mirror of Claude Code tasks</td></tr>
+            <tr><td>agent_memories</td><td>Mirror of agent memory files, with source attribution</td></tr>
+            <tr><td>agent_plans</td><td>Mirror of agent plan files, with source attribution</td></tr>
+            <tr><td>agent_tasks</td><td>Mirror of agent task records, with source attribution</td></tr>
           </tbody>
         </table>
       </div>
@@ -926,12 +926,12 @@
           Eagle Mem works fully without a provider &mdash; LLM features gracefully degrade to heuristic fallbacks.
         </p>
         <p style="color: var(--muted); font-family: var(--sans); font-size: 14px; margin: 0;">
-          <code>eagle-mem config</code> &mdash; Supported providers: Ollama (auto-detected), Anthropic, OpenAI.
+          <code>eagle-mem config</code> &mdash; Provider preference is local-first: Ollama, installed Codex/Claude CLI via <code>agent_cli</code>, then Anthropic/OpenAI API providers.
         </p>
       </div>
 
       <footer>
-        v4.7.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
+        v4.7.1 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
       </footer>
     </main>
   </body>
