@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Eagle Mem — Persistent Memory for Claude Code</title>
+    <title>Eagle Mem — Shared Memory for Claude Code and Codex</title>
     <meta
       name="description"
-      content="Persistent memory for Claude Code — SQLite + FTS5, no daemon, no bloat. Session summaries, code indexing, task tracking, and contextual memory injection."
+      content="Shared persistent memory and regression control for Claude Code and Codex — SQLite + FTS5, no daemon, no vector DB. Session summaries, code indexing, feature verification, and hook-based recall."
     />
     <style>
       :root {
@@ -518,8 +518,9 @@
 ███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
 ╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝</pre>
         <p class="tagline">
-          Persistent memory for
-          <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>.
+          Shared persistent memory for
+          <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>
+          and Codex.
           SQLite + FTS5. No daemon, no vector DB, no bloat.
         </p>
         <div class="install-block">
@@ -537,18 +538,18 @@
         <div class="ps-card">
           <h2>The Problem</h2>
           <p>
-            Claude Code starts every session with amnesia. It doesn&rsquo;t remember what you built yesterday,
+            Claude Code and Codex start every session with amnesia. They don&rsquo;t remember what you built yesterday,
             what decisions you made, what files matter, or what broke last time.
           </p>
           <p>
             Every <code>/compact</code> wipes context. Every new session is a cold start. You waste tokens
-            re-explaining your project, re-reading files, and watching Claude repeat mistakes you already corrected.
+            re-explaining your project, re-reading files, and watching agents repeat mistakes you already corrected.
           </p>
         </div>
         <div class="ps-card">
           <h2>The Solution</h2>
           <p>
-            Eagle Mem gives Claude Code persistent memory. Every session starts with context from previous
+            Eagle Mem gives Claude Code and Codex shared persistent memory. Every session starts with context from previous
             sessions &mdash; summaries, decisions, memories, tasks, project overviews, and relevant code &mdash;
             injected automatically via hooks.
           </p>
@@ -576,7 +577,7 @@
         <div class="highlight">
           <h3>Hooks</h3>
           <span class="num">6</span>
-          <p>Automatic lifecycle hooks &mdash; session start, tool use, stop, and end</p>
+          <p>Lifecycle hooks for Claude Code and Codex &mdash; session start, tool use, stop, and end</p>
         </div>
         <div class="highlight">
           <h3>Commands</h3>
@@ -584,9 +585,9 @@
           <p>CLI commands for search, health, config, guard, curate, and more</p>
         </div>
         <div class="highlight">
-          <h3>Tables</h3>
-          <span class="num">16</span>
-          <p>SQLite tables with FTS5 full-text search indexing</p>
+          <h3>Agents</h3>
+          <span class="num">2</span>
+          <p>Claude Code and Codex share one local memory database with source attribution</p>
         </div>
         <div class="highlight">
           <h3>Skills</h3>
@@ -601,22 +602,22 @@
 
       <div class="getting-started">
         <div class="path">
-          <h2>Install once. Open Claude Code. That&rsquo;s it.</h2>
+          <h2>Install once. Open Claude Code or Codex. That&rsquo;s it.</h2>
           <p class="subtitle">Everything is automatic from here.</p>
           <ol>
             <li>
               <strong>Install</strong><br>
               <code>npm install -g eagle-mem &amp;&amp; eagle-mem install</code><br>
-              <span style="color: var(--muted); font-size: 13px;">One-time setup. Registers hooks in Claude Code, creates the database, installs skills.</span>
+              <span style="color: var(--muted); font-size: 13px;">One-time setup. Registers Claude Code and Codex hooks, creates the database, installs skills.</span>
             </li>
             <li>
-              <strong>Open Claude Code in any project directory</strong><br>
-              <span style="color: var(--muted); font-size: 13px;">Eagle Mem activates and shows what it loaded. Everything is automatic &mdash; summaries captured, memories mirrored, context survives <code>/compact</code>.</span>
+              <strong>Open Claude Code or Codex in any project directory</strong><br>
+              <span style="color: var(--muted); font-size: 13px;">Eagle Mem activates and shows what it loaded. Everything is automatic &mdash; summaries captured, sources attributed, context survives compaction.</span>
             </li>
           </ol>
           <div class="note">
             <strong>Prerequisites:</strong> sqlite3 with FTS5 (ships with macOS), jq,
-            and <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> installed.
+            and Claude Code, Codex, or both installed.
             The installer offers to install missing dependencies.
           </div>
         </div>
@@ -643,8 +644,8 @@
             </tr>
             <tr>
               <td>PreToolUse</td>
-              <td>before Bash, Read, Edit, Write</td>
-              <td>Surfaces guardrails and decisions before edits. Rewrites noisy commands (learned rules). Detects redundant reads, nudges co-edit partners, detects stuck loops.</td>
+              <td>before Bash/shell, Read, Edit, Write, apply_patch</td>
+              <td>Surfaces guardrails and decisions before edits. Blocks release-boundary commands while feature verification is pending. Rewrites noisy commands through RTK when available. Detects redundant reads, nudges co-edit partners, detects stuck loops.</td>
             </tr>
             <tr>
               <td>UserPromptSubmit</td>
@@ -658,8 +659,8 @@
             </tr>
             <tr>
               <td>Stop</td>
-              <td>Claude&rsquo;s turn ends</td>
-              <td>Extracts <code>&lt;eagle-summary&gt;</code> blocks for rich session summaries.</td>
+              <td>agent turn ends</td>
+              <td>Extracts <code>&lt;eagle-summary&gt;</code> blocks from Claude Code and Codex transcripts for rich session summaries.</td>
             </tr>
             <tr>
               <td>SessionEnd</td>
@@ -706,14 +707,15 @@
         <div class="feature">
           <h3>// anti-regression</h3>
           <p>
-            Eagle Mem prevents Claude from repeating past mistakes.
+            Eagle Mem prevents agents from repeating past mistakes and blocks releases until affected feature checks are resolved.
           </p>
           <ul>
             <li><strong>Decision surfacing</strong> &mdash; past decisions from <code>&lt;eagle-summary&gt;</code> blocks fire before edits</li>
             <li><strong>Guardrails</strong> &mdash; file-level rules (manual or curator-discovered) fire before every Edit/Write</li>
-            <li><strong>Feature verification</strong> &mdash; tracks features with smoke tests and dependencies</li>
+            <li><strong>Feature verification</strong> &mdash; fingerprinted git diffs create pending checks; <code>git push</code>, <code>gh pr create</code>, and package publish are blocked until verified or waived</li>
             <li><strong>Gotcha surfacing</strong> &mdash; past surprises surfaced when editing related files</li>
             <li><strong>Stale memory detection</strong> &mdash; warns when edits may contradict stored memories</li>
+            <li><strong>Dry-run aware</strong> &mdash; validation commands stay unblocked; real publish forms such as <code>--dry-run=false</code> still enforce checks</li>
           </ul>
         </div>
       </section>
@@ -746,7 +748,7 @@
           <ul>
             <li><code>eagle-mem config</code> &mdash; LLM provider settings</li>
             <li><code>eagle-mem guard</code> &mdash; manage guardrails</li>
-            <li><code>eagle-mem feature</code> &mdash; track features</li>
+            <li><code>eagle-mem feature</code> &mdash; track, verify, and waive affected features</li>
           </ul>
         </div>
         <div class="cmd-group">
@@ -837,16 +839,16 @@
 
       <section class="details">
         <div class="feature">
-          <h3>// claude code mirror</h3>
+          <h3>// shared agent memory</h3>
           <p>
-            Automatically mirrors Claude Code&rsquo;s built-in memories, plans, and tasks
-            into Eagle Mem&rsquo;s SQLite + FTS5 &mdash; searchable and injected at session start.
+            Claude Code and Codex share the same Eagle Mem SQLite + FTS5 database.
+            Captured rows keep their origin so recall is shared without losing source attribution.
           </p>
           <ul>
-            <li><strong>Memories</strong> &mdash; intercepts writes to <code>~/.claude/projects/*/memory/</code></li>
-            <li><strong>Plans</strong> &mdash; captures plan files from <code>~/.claude/plans/</code></li>
-            <li><strong>Tasks</strong> &mdash; mirrors TaskCreate/TaskUpdate + re-syncs at session end</li>
-            <li><code>eagle-mem memories sync</code> &mdash; backfill everything in one command</li>
+            <li><strong>Source labels</strong> &mdash; sessions and summaries record <code>Claude Code</code> or <code>Codex</code></li>
+            <li><strong>Codex hooks</strong> &mdash; installer enables <code>codex_hooks</code> and registers hooks in <code>~/.codex/hooks.json</code></li>
+            <li><strong>Claude mirror</strong> &mdash; memories, plans, and tasks are mirrored from Claude Code locations</li>
+            <li><strong>Shared recall</strong> &mdash; SessionStart injects the same project history into either agent</li>
           </ul>
         </div>
         <div class="feature">
@@ -905,6 +907,7 @@
             <tr><td>feature_files</td><td>Files belonging to each feature</td></tr>
             <tr><td>feature_dependencies</td><td>Inter-feature dependency relationships</td></tr>
             <tr><td>feature_smoke_tests</td><td>Smoke test definitions for feature verification</td></tr>
+            <tr><td>pending_feature_verifications</td><td>Release blockers created when files tied to features change</td></tr>
             <tr><td>eagle_meta</td><td>Internal metadata (last scan, last curate, etc.)</td></tr>
             <tr><td>claude_memories</td><td>Mirror of Claude Code auto-memories</td></tr>
             <tr><td>claude_plans</td><td>Mirror of Claude Code plans</td></tr>
@@ -928,7 +931,7 @@
       </div>
 
       <footer>
-        v4.6.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
+        v4.7.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
       </footer>
     </main>
   </body>
