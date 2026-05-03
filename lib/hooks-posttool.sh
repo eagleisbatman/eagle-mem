@@ -19,12 +19,12 @@ eagle_posttool_mirror_writes() {
                         local mem_base
                         mem_base=$(basename "$fp")
                         if [ "$mem_base" != "MEMORY.md" ] && [ -f "$fp" ]; then
-                            eagle_capture_claude_memory "$fp" "$session_id" "$project" "$agent"
+                            eagle_capture_agent_memory "$fp" "$session_id" "$project" "$agent"
                         fi
                         ;;
                     "$EAGLE_CLAUDE_PLANS_DIR/"*.md)
                         if [ -f "$fp" ]; then
-                            eagle_capture_claude_plan "$fp" "$session_id" "$project" "$agent"
+                            eagle_capture_agent_plan "$fp" "$session_id" "$project" "$agent"
                         fi
                         ;;
                 esac
@@ -47,10 +47,10 @@ eagle_posttool_mirror_tasks() {
                     if [ -z "$task_id" ]; then
                         local newest
                         newest=$(ls -t "$task_dir"/*.json 2>/dev/null | head -1)
-                        [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_claude_task "$newest" "$session_id" "$project" "$agent"
+                        [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_agent_task "$newest" "$session_id" "$project" "$agent"
                     elif eagle_validate_session_id "$task_id"; then
                         local task_json="$task_dir/$task_id.json"
-                        [ -f "$task_json" ] && eagle_capture_claude_task "$task_json" "$session_id" "$project" "$agent"
+                        [ -f "$task_json" ] && eagle_capture_agent_task "$task_json" "$session_id" "$project" "$agent"
                     fi
                 fi
             fi

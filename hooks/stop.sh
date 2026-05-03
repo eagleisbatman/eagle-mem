@@ -7,6 +7,7 @@
 # LLM enrichment fills in decisions/gotchas/key_files
 # ═══════════════════════════════════════════════════════════
 set +e
+[ "${EAGLE_MEM_DISABLE_HOOKS:-}" = "1" ] && exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"

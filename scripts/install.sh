@@ -251,6 +251,18 @@ if [ "$claude_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
     done
 fi
 
+if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    mkdir -p "$EAGLE_CODEX_SKILLS_DIR"
+    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+        [ ! -d "$skill_dir" ] && continue
+        skill_name=$(basename "$skill_dir")
+        dst="$EAGLE_CODEX_SKILLS_DIR/$skill_name"
+        [ -L "$dst" ] && rm "$dst"
+        ln -sf "$skill_dir" "$dst"
+        eagle_ok "Codex skill: $skill_name"
+    done
+fi
+
 # ─── Statusline integration ───────────────────────────────
 
 if [ "$claude_found" = true ]; then

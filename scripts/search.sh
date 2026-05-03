@@ -26,7 +26,7 @@ show_help() {
     echo -e "    eagle-mem search ${CYAN}--files${RESET}                  ${DIM}# frequently modified files${RESET}"
     echo -e "    eagle-mem search ${CYAN}--stats${RESET}                  ${DIM}# project statistics${RESET}"
     echo -e "    eagle-mem search ${CYAN}--overview${RESET}                ${DIM}# project overview${RESET}"
-    echo -e "    eagle-mem search ${CYAN}--memories${RESET}               ${DIM}# mirrored Claude memories${RESET}"
+    echo -e "    eagle-mem search ${CYAN}--memories${RESET}               ${DIM}# mirrored agent memories${RESET}"
     echo -e "    eagle-mem search ${CYAN}--tasks${RESET}                  ${DIM}# in-flight tasks${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
@@ -269,7 +269,7 @@ search_stats() {
     sessions_codex=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p' AND agent = 'codex';")
     summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p';")
     observations=$(eagle_db "SELECT COUNT(*) FROM observations o JOIN sessions s ON s.id = o.session_id WHERE s.project = '$p';")
-    tasks=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p';")
+    tasks=$(eagle_db "SELECT COUNT(*) FROM agent_tasks WHERE project = '$p';")
     local chunks
     chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$p';")
 
@@ -349,15 +349,15 @@ search_memories() {
             exit 1
         fi
         local q; q=$(eagle_sql_escape "$sanitized_mq")
-        local where_match="WHERE claude_memories_fts MATCH '$q'"
+        local where_match="WHERE agent_memories_fts MATCH '$q'"
         if [ "$cross_project" = false ]; then
             where_match="$where_match AND m.project = '$p'"
         fi
 
         if [ "$json_output" = true ]; then
             eagle_db_json "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at, m.origin_agent
-                           FROM claude_memories m
-                           JOIN claude_memories_fts f ON f.rowid = m.id
+                           FROM agent_memories m
+                           JOIN agent_memories_fts f ON f.rowid = m.id
                            $where_match
                            ORDER BY rank
                            LIMIT $limit;"
@@ -366,8 +366,8 @@ search_memories() {
 
         local results
         results=$(eagle_db "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at, m.origin_agent
-                            FROM claude_memories m
-                            JOIN claude_memories_fts f ON f.rowid = m.id
+                            FROM agent_memories m
+                            JOIN agent_memories_fts f ON f.rowid = m.id
                             $where_match
                             ORDER BY rank
                             LIMIT $limit;")
@@ -390,14 +390,14 @@ search_memories() {
 
     if [ "$json_output" = true ]; then
         eagle_db_json "SELECT memory_name, memory_type, description, project, updated_at, origin_agent
-                       FROM claude_memories $where_project
+                       FROM agent_memories $where_project
                        ORDER BY updated_at DESC LIMIT $limit;"
         return
     fi
 
     local results
     results=$(eagle_db "SELECT memory_name, memory_type, description, updated_at, origin_agent
-                        FROM claude_memories $where_project
+                        FROM agent_memories $where_project
                         ORDER BY updated_at DESC LIMIT $limit;")
 
     if [ -z "$results" ]; then
@@ -424,8 +424,10 @@ search_tasks() {
     local p; p=$(eagle_sql_escape "$project")
 
     local where_project=""
+    local where_task_project=""
     if [ "$cross_project" = false ]; then
         where_project="AND project = '$p'"
+        where_task_project="AND t.project = '$p'"
     fi
 
     if [ -n "$query" ]; then
@@ -439,10 +441,10 @@ search_tasks() {
 
         if [ "$json_output" = true ]; then
             eagle_db_json "SELECT t.subject, t.status, t.project, t.updated_at, t.origin_agent
-                           FROM claude_tasks t
-                           JOIN claude_tasks_fts f ON f.rowid = t.id
-                           WHERE claude_tasks_fts MATCH '$q'
-                           ${where_project/AND/AND t.}
+                           FROM agent_tasks t
+                           JOIN agent_tasks_fts f ON f.rowid = t.id
+                           WHERE agent_tasks_fts MATCH '$q'
+                           $where_task_project
                            ORDER BY rank
                            LIMIT $limit;"
             return
@@ -450,10 +452,10 @@ search_tasks() {
 
         local results
         results=$(eagle_db "SELECT t.subject, t.status, t.project, t.updated_at, t.origin_agent
-                            FROM claude_tasks t
-                            JOIN claude_tasks_fts f ON f.rowid = t.id
-                            WHERE claude_tasks_fts MATCH '$q'
-                            ${where_project/AND/AND t.}
+                            FROM agent_tasks t
+                            JOIN agent_tasks_fts f ON f.rowid = t.id
+                            WHERE agent_tasks_fts MATCH '$q'
+                            $where_task_project
                             ORDER BY rank
                             LIMIT $limit;")
 
@@ -479,7 +481,7 @@ search_tasks() {
 
     if [ "$json_output" = true ]; then
         eagle_db_json "SELECT subject, status, project, updated_at, origin_agent
-                       FROM claude_tasks
+                       FROM agent_tasks
                        WHERE status IN ('in_progress', 'pending')
                        $where_project
                        ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC
@@ -489,7 +491,7 @@ search_tasks() {
 
     local results
     results=$(eagle_db "SELECT subject, status, updated_at, origin_agent
-                        FROM claude_tasks
+                        FROM agent_tasks
                         WHERE status IN ('in_progress', 'pending')
                         $where_project
                         ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC

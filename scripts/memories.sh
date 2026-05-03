@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
-# Eagle Mem — Claude Code Memory Mirror CLI
-# List, show, search, and sync Claude Code auto-memories
+# Eagle Mem — Agent Memory Mirror CLI
+# List, show, search, and sync mirrored memories/plans/tasks
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -28,7 +28,7 @@ limit=20
 query=""
 
 show_help() {
-    echo -e "  ${BOLD}eagle-mem memories${RESET} — Claude Code memory, plan & task mirror"
+    echo -e "  ${BOLD}eagle-mem memories${RESET} — Agent memory, plan & task mirror"
     echo ""
     echo -e "  ${BOLD}Usage:${RESET}"
     echo -e "    eagle-mem memories                          ${DIM}# list all mirrored memories${RESET}"
@@ -48,7 +48,7 @@ show_help() {
     echo -e "    ${CYAN}-l, --limit${RESET} <N>       Max results (default: 20)"
     echo ""
     echo -e "  ${BOLD}How it works:${RESET}"
-    echo -e "    ${DOT} Eagle Mem intercepts Claude Code's auto-memory, plan, and task writes"
+    echo -e "    ${DOT} Eagle Mem mirrors agent memory, plan, and task writes"
     echo -e "    ${DOT} All are mirrored into Eagle Mem's SQLite + FTS5"
     echo -e "    ${DOT} Use ${CYAN}sync${RESET} to backfill items written before mirroring was enabled"
     echo ""
@@ -92,12 +92,12 @@ memories_list() {
     eagle_header "Memories"
 
     local result
-    result=$(eagle_list_claude_memories "$project" "$limit")
+    result=$(eagle_list_agent_memories "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No mirrored memories found."
         echo ""
-        eagle_dim "Memories are captured automatically when Claude Code writes to its auto-memory."
+        eagle_dim "Memories are captured automatically when supported agents write memory files."
         eagle_dim "Run 'eagle-mem memories sync' to backfill existing memories."
         echo ""
         return
@@ -137,7 +137,7 @@ memories_search() {
     echo ""
 
     local result
-    result=$(eagle_search_claude_memories "$query" "$project" "$limit")
+    result=$(eagle_search_agent_memories "$query" "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No memories matching '$query'"
@@ -179,7 +179,7 @@ memories_show() {
 
     local meta
     meta=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_session_id, origin_agent
-                     FROM claude_memories WHERE file_path = '$(eagle_sql_escape "$query")';")
+                     FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
         eagle_err "Memory not found: $query"
@@ -216,12 +216,12 @@ plans_list() {
     eagle_header "Plans"
 
     local result
-    result=$(eagle_list_claude_plans "$project" "$limit")
+    result=$(eagle_list_agent_plans "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No captured plans found."
         echo ""
-        eagle_dim "Plans are captured when Claude Code writes to ~/.claude/plans/"
+        eagle_dim "Plans are captured when supported agents write plan files."
         eagle_dim "Run 'eagle-mem memories sync' to backfill existing plans."
         echo ""
         return
@@ -255,7 +255,7 @@ plans_search() {
     echo ""
 
     local result
-    result=$(eagle_search_claude_plans "$query" "$project" "$limit")
+    result=$(eagle_search_agent_plans "$query" "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No plans matching '$query'"
@@ -289,7 +289,7 @@ plans_show() {
 
     local meta
     meta=$(eagle_db "SELECT title, project, file_path, updated_at, origin_session_id, origin_agent
-                     FROM claude_plans WHERE file_path = '$(eagle_sql_escape "$query")';")
+                     FROM agent_plans WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
         eagle_err "Plan not found: $query"
@@ -320,15 +320,15 @@ plans_show() {
 }
 
 tasks_list() {
-    eagle_header "Claude Code Tasks"
+    eagle_header "Agent Tasks"
 
     local result
-    result=$(eagle_list_claude_tasks "$project" "$limit")
+    result=$(eagle_list_agent_tasks "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No captured tasks found."
         echo ""
-        eagle_dim "Tasks are captured when Claude Code uses TaskCreate/TaskUpdate."
+        eagle_dim "Tasks are captured when supported agents use task lifecycle tools."
         eagle_dim "Run 'eagle-mem memories sync' to backfill existing tasks."
         echo ""
         return
@@ -366,7 +366,7 @@ tasks_search() {
     echo ""
 
     local result
-    result=$(eagle_search_claude_tasks "$query" "$project" "$limit")
+    result=$(eagle_search_agent_tasks "$query" "$project" "$limit")
 
     if [ -z "$result" ]; then
         eagle_dim "No tasks matching '$query'"
@@ -404,7 +404,7 @@ tasks_show() {
 
     local meta
     meta=$(eagle_db "SELECT subject, status, description, active_form, source_session_id, source_task_id, file_path, updated_at, origin_agent
-                     FROM claude_tasks WHERE file_path = '$(eagle_sql_escape "$query")';")
+                     FROM agent_tasks WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
         eagle_err "Task not found: $query"
@@ -442,7 +442,7 @@ memories_sync() {
     eagle_header "Memory, Plan & Task Sync"
 
     # ─── Sync memories ───────────────────────────────────
-    eagle_info "Scanning for Claude Code auto-memory files..."
+    eagle_info "Scanning for agent memory files..."
     echo ""
 
     local claude_mem_root="$EAGLE_CLAUDE_PROJECTS_DIR"
@@ -456,7 +456,7 @@ memories_sync() {
             [ "$base" = "MEMORY.md" ] && continue
 
             local existing_hash
-            existing_hash=$(eagle_db "SELECT content_hash FROM claude_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            existing_hash=$(eagle_db "SELECT content_hash FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
             local new_hash
             new_hash=$(shasum -a 256 "$memfile" | awk '{print $1}')
 
@@ -465,17 +465,40 @@ memories_sync() {
                 continue
             fi
 
-            eagle_capture_claude_memory "$memfile" "" ""
+            eagle_capture_agent_memory "$memfile" "" ""
             mem_synced=$((mem_synced + 1))
             eagle_ok "Memory: $base"
         done < <(find "$claude_mem_root" -path "*/memory/*.md" -print0 2>/dev/null)
+    fi
+
+    local codex_mem_root="$EAGLE_CODEX_MEMORIES_DIR"
+    if [ -d "$codex_mem_root" ]; then
+        local codex_project="$project"
+        [ -z "$codex_project" ] && codex_project=$(eagle_project_from_cwd "$(pwd)")
+        for memfile in "$codex_mem_root/MEMORY.md" "$codex_mem_root/memory_summary.md"; do
+            [ ! -f "$memfile" ] && continue
+
+            local existing_hash
+            existing_hash=$(eagle_db "SELECT content_hash FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            local new_hash
+            new_hash=$(shasum -a 256 "$memfile" | awk '{print $1}')
+
+            if [ "$existing_hash" = "$new_hash" ]; then
+                mem_skipped=$((mem_skipped + 1))
+                continue
+            fi
+
+            eagle_capture_agent_memory "$memfile" "" "$codex_project" "codex"
+            mem_synced=$((mem_synced + 1))
+            eagle_ok "Codex memory: $(basename "$memfile")"
+        done
     fi
 
     eagle_kv "Memories:" "$mem_synced synced, $mem_skipped unchanged"
     echo ""
 
     # ─── Sync plans ──────────────────────────────────────
-    eagle_info "Scanning for Claude Code plan files..."
+    eagle_info "Scanning for agent plan files..."
     echo ""
 
     local plans_dir="$EAGLE_CLAUDE_PLANS_DIR"
@@ -487,7 +510,7 @@ memories_sync() {
             [ ! -f "$planfile" ] && continue
 
             local existing_hash
-            existing_hash=$(eagle_db "SELECT content_hash FROM claude_plans WHERE file_path = '$(eagle_sql_escape "$planfile")';")
+            existing_hash=$(eagle_db "SELECT content_hash FROM agent_plans WHERE file_path = '$(eagle_sql_escape "$planfile")';")
             local new_hash
             new_hash=$(shasum -a 256 "$planfile" | awk '{print $1}')
 
@@ -496,7 +519,7 @@ memories_sync() {
                 continue
             fi
 
-            eagle_capture_claude_plan "$planfile" "" ""
+            eagle_capture_agent_plan "$planfile" "" ""
             plan_synced=$((plan_synced + 1))
             local ptitle
             ptitle=$(awk '/^# /{print; exit}' "$planfile" | sed 's/^# //')
@@ -508,7 +531,7 @@ memories_sync() {
     echo ""
 
     # ─── Sync tasks ──────────────────────────────────────
-    eagle_info "Scanning for Claude Code task files..."
+    eagle_info "Scanning for agent task files..."
     echo ""
 
     local tasks_dir="$EAGLE_CLAUDE_TASKS_DIR"
@@ -528,7 +551,7 @@ memories_sync() {
                 [ ! -f "$taskfile" ] && continue
 
                 local existing_hash
-                existing_hash=$(eagle_db "SELECT content_hash FROM claude_tasks WHERE file_path = '$(eagle_sql_escape "$taskfile")';")
+                existing_hash=$(eagle_db "SELECT content_hash FROM agent_tasks WHERE file_path = '$(eagle_sql_escape "$taskfile")';")
                 local new_hash
                 new_hash=$(shasum -a 256 "$taskfile" | awk '{print $1}')
 
@@ -537,7 +560,7 @@ memories_sync() {
                     continue
                 fi
 
-                eagle_capture_claude_task "$taskfile" "$sid" "$task_project"
+                eagle_capture_agent_task "$taskfile" "$sid" "$task_project"
                 task_synced=$((task_synced + 1))
             done
         done
@@ -547,7 +570,7 @@ memories_sync() {
     echo ""
 
     # ─── Backfill project names ──────────────────────────
-    eagle_info "Resolving project names from Claude Code transcripts..."
+    eagle_info "Resolving project names from agent transcripts..."
 
     local backfilled
     backfilled=$(eagle_backfill_projects)

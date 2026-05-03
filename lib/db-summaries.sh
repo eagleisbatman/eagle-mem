@@ -163,9 +163,9 @@ eagle_search_stale_memories() {
     local project; project=$(eagle_sql_escape "$1")
     local fts_query; fts_query=$(eagle_sql_escape "$2")
     eagle_db "SELECT m.memory_name
-        FROM claude_memories m
-        JOIN claude_memories_fts f ON f.rowid = m.id
-        WHERE claude_memories_fts MATCH '$fts_query'
+        FROM agent_memories m
+        JOIN agent_memories_fts f ON f.rowid = m.id
+        WHERE agent_memories_fts MATCH '$fts_query'
         AND m.project = '$project'
         LIMIT 1;"
 }

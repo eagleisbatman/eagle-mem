@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
 # Eagle Mem — LLM Provider Abstraction
-# Config parsing + unified eagle_llm_call for Ollama/Anthropic/OpenAI
+# Config parsing + unified eagle_llm_call for Ollama/agent CLI/API providers
 # ═══════════════════════════════════════════════════════════
 
 EAGLE_CONFIG_FILE="${EAGLE_MEM_DIR}/config.toml"
@@ -121,12 +121,17 @@ eagle_config_init() {
     local ollama_url="$EAGLE_DEFAULT_OLLAMA_URL"
     local provider="none"
     local model=""
+    local ollama_model="mistral"
 
     local ollama_response
     ollama_response=$(eagle_detect_ollama "$ollama_url")
     if [ -n "$ollama_response" ]; then
         provider="ollama"
         model=$(eagle_ollama_best_model "$ollama_url")
+        ollama_model="$model"
+    elif command -v codex &>/dev/null || command -v claude &>/dev/null; then
+        provider="agent_cli"
+        model="native"
     elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
         provider="anthropic"
         model="claude-haiku-4-5-20251001"
@@ -144,12 +149,20 @@ eagle_config_init() {
 
 [provider]
 # Which LLM provider to use for the curator and analysis features
-# Options: "ollama" (free, local), "anthropic", "openai"
+# Options: "ollama" (free, local), "agent_cli" (Codex/Claude CLI auth), "anthropic", "openai"
 type = "$provider"
 
 [ollama]
 url = "$ollama_url"
-model = "${model:-mistral}"
+model = "$ollama_model"
+
+[agent_cli]
+# Uses the already-installed Codex/Claude CLI instead of direct API keys.
+# preferred = "current" uses EAGLE_AGENT_SOURCE when hooks invoke Eagle Mem.
+# If run manually with no agent source, it prefers Codex when available.
+preferred = "current"
+codex_model = ""
+claude_model = ""
 
 [anthropic]
 # Uses ANTHROPIC_API_KEY env var for authentication
@@ -184,6 +197,7 @@ eagle_llm_call() {
 
     case "$provider" in
         ollama)   _eagle_call_ollama "$prompt" "$system_prompt" "$max_tokens" ;;
+        agent_cli) _eagle_call_agent_cli "$prompt" "$system_prompt" "$max_tokens" ;;
         anthropic) _eagle_call_anthropic "$prompt" "$system_prompt" "$max_tokens" ;;
         openai)   _eagle_call_openai "$prompt" "$system_prompt" "$max_tokens" ;;
         none)
@@ -233,6 +247,170 @@ _eagle_call_ollama() {
     fi
 
     echo "$response" | jq -r '.message.content // empty'
+}
+
+_eagle_agent_cli_target() {
+    local preferred
+    preferred=$(eagle_config_get "agent_cli" "preferred" "current")
+
+    case "$preferred" in
+        codex|openai-codex) echo "codex"; return 0 ;;
+        claude|claude-code|cloud-code) echo "claude-code"; return 0 ;;
+        auto)
+            if [ -n "${EAGLE_AGENT_SOURCE:-${EAGLE_AGENT:-}}" ]; then
+                eagle_agent_source
+            elif command -v codex &>/dev/null; then
+                echo "codex"
+            elif command -v claude &>/dev/null; then
+                echo "claude-code"
+            else
+                echo "none"
+            fi
+            ;;
+        current|*)
+            if [ -n "${EAGLE_AGENT_SOURCE:-${EAGLE_AGENT:-}}" ]; then
+                eagle_agent_source
+            elif command -v codex &>/dev/null; then
+                echo "codex"
+            elif command -v claude &>/dev/null; then
+                echo "claude-code"
+            else
+                echo "none"
+            fi
+            ;;
+    esac
+}
+
+_eagle_agent_cli_prompt_file() {
+    local prompt="$1" system="$2" max_tokens="$3" file="$4"
+    {
+        printf 'System instruction:\n%s\n\n' "$system"
+        printf 'Task:\n%s\n\n' "$prompt"
+        printf 'Output contract:\n'
+        printf -- '- Return only the requested curator text.\n'
+        printf -- '- Do not use markdown fences unless the task explicitly asks for them.\n'
+        printf -- '- Do not edit files, run project commands, or inspect the repository; all needed data is in this prompt.\n'
+        printf -- '- Keep the response within roughly %s tokens.\n' "$max_tokens"
+    } > "$file"
+}
+
+_eagle_call_agent_cli() {
+    local prompt="$1" system="$2" max_tokens="$3"
+    local target
+    target=$(_eagle_agent_cli_target)
+
+    case "$target" in
+        codex) _eagle_call_codex_cli "$prompt" "$system" "$max_tokens" ;;
+        claude-code) _eagle_call_claude_cli "$prompt" "$system" "$max_tokens" ;;
+        *)
+            eagle_log "ERROR" "agent_cli provider unavailable: no Codex or Claude CLI found"
+            return 1
+            ;;
+    esac
+}
+
+_eagle_call_codex_cli() {
+    local prompt="$1" system="$2" max_tokens="$3"
+    command -v codex &>/dev/null || {
+        eagle_log "ERROR" "agent_cli provider selected Codex, but codex command was not found"
+        return 1
+    }
+
+    mkdir -p "$EAGLE_MEM_DIR/tmp"
+    local prompt_file out_file
+    prompt_file=$(mktemp "$EAGLE_MEM_DIR/tmp/codex-provider-prompt.XXXXXX")
+    out_file=$(mktemp "$EAGLE_MEM_DIR/tmp/codex-provider-output.XXXXXX")
+    _eagle_agent_cli_prompt_file "$prompt" "$system" "$max_tokens" "$prompt_file"
+
+    local model
+    model=$(eagle_config_get "agent_cli" "codex_model" "")
+
+    local rc _had_errexit=0
+    case "$-" in *e*) _had_errexit=1; set +e ;; esac
+    if [ -n "$model" ]; then
+        EAGLE_MEM_DISABLE_HOOKS=1 codex exec \
+            --ephemeral \
+            --skip-git-repo-check \
+            --ignore-rules \
+            -c features.codex_hooks=false \
+            --sandbox read-only \
+            --cd "${EAGLE_AGENT_CWD:-$(pwd)}" \
+            --model "$model" \
+            --output-last-message "$out_file" \
+            - < "$prompt_file" >> "$EAGLE_MEM_LOG" 2>&1
+        rc=$?
+    else
+        EAGLE_MEM_DISABLE_HOOKS=1 codex exec \
+            --ephemeral \
+            --skip-git-repo-check \
+            --ignore-rules \
+            -c features.codex_hooks=false \
+            --sandbox read-only \
+            --cd "${EAGLE_AGENT_CWD:-$(pwd)}" \
+            --output-last-message "$out_file" \
+            - < "$prompt_file" >> "$EAGLE_MEM_LOG" 2>&1
+        rc=$?
+    fi
+    [ "$_had_errexit" -eq 1 ] && set -e
+
+    rm -f "$prompt_file"
+    if [ "$rc" -ne 0 ] || [ ! -s "$out_file" ]; then
+        rm -f "$out_file"
+        eagle_log "ERROR" "Codex agent_cli provider call failed"
+        return 1
+    fi
+
+    cat "$out_file"
+    rm -f "$out_file"
+}
+
+_eagle_call_claude_cli() {
+    local prompt="$1" system="$2" max_tokens="$3"
+    command -v claude &>/dev/null || {
+        eagle_log "ERROR" "agent_cli provider selected Claude Code, but claude command was not found"
+        return 1
+    }
+
+    mkdir -p "$EAGLE_MEM_DIR/tmp"
+    local prompt_file out_file model rc
+    prompt_file=$(mktemp "$EAGLE_MEM_DIR/tmp/claude-provider-prompt.XXXXXX")
+    out_file=$(mktemp "$EAGLE_MEM_DIR/tmp/claude-provider-output.XXXXXX")
+    _eagle_agent_cli_prompt_file "$prompt" "$system" "$max_tokens" "$prompt_file"
+    model=$(eagle_config_get "agent_cli" "claude_model" "")
+
+    local _had_errexit=0
+    case "$-" in *e*) _had_errexit=1; set +e ;; esac
+    if [ -n "$model" ]; then
+        EAGLE_MEM_DISABLE_HOOKS=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 claude -p \
+            --no-session-persistence \
+            --disable-slash-commands \
+            --permission-mode dontAsk \
+            --tools "" \
+            --output-format text \
+            --model "$model" \
+            "$(cat "$prompt_file")" > "$out_file" 2>> "$EAGLE_MEM_LOG"
+        rc=$?
+    else
+        EAGLE_MEM_DISABLE_HOOKS=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 claude -p \
+            --no-session-persistence \
+            --disable-slash-commands \
+            --permission-mode dontAsk \
+            --tools "" \
+            --output-format text \
+            "$(cat "$prompt_file")" > "$out_file" 2>> "$EAGLE_MEM_LOG"
+        rc=$?
+    fi
+    [ "$_had_errexit" -eq 1 ] && set -e
+
+    rm -f "$prompt_file"
+    if [ "$rc" -ne 0 ] || [ ! -s "$out_file" ]; then
+        rm -f "$out_file"
+        eagle_log "ERROR" "Claude agent_cli provider call failed"
+        return 1
+    fi
+
+    cat "$out_file"
+    rm -f "$out_file"
 }
 
 _eagle_call_anthropic() {
@@ -332,7 +510,11 @@ eagle_show_config() {
 
     local provider model
     provider=$(eagle_config_get "provider" "type" "none")
-    model=$(eagle_config_get "$provider" "model" "unknown")
+    if [ "$provider" = "agent_cli" ]; then
+        model=$(_eagle_agent_cli_target)
+    else
+        model=$(eagle_config_get "$provider" "model" "unknown")
+    fi
 
     echo "Provider: $provider"
     echo "Model:    $model"
@@ -349,6 +531,10 @@ eagle_show_config() {
         else
             echo "Status:   not running"
         fi
+    elif [ "$provider" = "agent_cli" ]; then
+        echo "Preferred: $(eagle_config_get "agent_cli" "preferred" "current")"
+        echo "Codex:     $(command -v codex 2>/dev/null || echo "not found")"
+        echo "Claude:    $(command -v claude 2>/dev/null || echo "not found")"
     fi
 
     echo ""

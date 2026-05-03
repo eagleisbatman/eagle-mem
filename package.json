@@ -1,6 +1,6 @@
 {
   "name": "eagle-mem",
-  "version": "4.7.0",
+  "version": "4.7.1",
   "description": "Context that survives /compact for Claude Code and Codex — SQLite + FTS5, no daemon, no bloat",
   "bin": {
     "eagle-mem": "bin/eagle-mem"

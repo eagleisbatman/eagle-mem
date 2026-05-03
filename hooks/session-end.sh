@@ -5,6 +5,7 @@
 # Marks the session as completed
 # ═══════════════════════════════════════════════════════════
 set +e
+[ "${EAGLE_MEM_DISABLE_HOOKS:-}" = "1" ] && exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
@@ -31,7 +32,7 @@ if eagle_validate_session_id "$session_id"; then
     if [ -d "$task_dir" ]; then
         for task_file in "$task_dir"/*.json; do
             [ ! -f "$task_file" ] && continue
-            eagle_capture_claude_task "$task_file" "$session_id" "$project" "$agent"
+            eagle_capture_agent_task "$task_file" "$session_id" "$project" "$agent"
         done
         eagle_log "INFO" "SessionEnd: re-synced tasks from $task_dir"
     fi

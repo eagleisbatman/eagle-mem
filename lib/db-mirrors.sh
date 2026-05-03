@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
-# Eagle Mem — Claude Code memory/plan/task mirror helpers
+# Eagle Mem — Agent memory/plan/task mirror helpers
 # ═══════════════════════════════════════════════════════════
 [ -n "${_EAGLE_DB_MIRRORS_LOADED:-}" ] && return 0
 _EAGLE_DB_MIRRORS_LOADED=1
 
-eagle_capture_claude_memory() {
+eagle_capture_agent_memory() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
@@ -19,6 +19,9 @@ eagle_capture_claude_memory() {
     local fm body
     fm=$(awk '/^---$/{c++; next} c==1' "$file_path")
     body=$(awk '/^---$/{c++; next} c>=2' "$file_path")
+    if [ -z "$body" ] && [ -z "$fm" ]; then
+        body=$(cat "$file_path")
+    fi
 
     _fm_field() { printf '%s\n' "$fm" | awk -F': *' -v k="$1" '$1==k{sub(/^[^:]+: */,""); gsub(/^"|"$/,""); print; exit}'; }
 
@@ -28,6 +31,18 @@ eagle_capture_claude_memory() {
     mtype=$(_fm_field "type")
     morigin=$(_fm_field "originSessionId")
     [ -z "$morigin" ] && morigin="$session_id"
+
+    if [ -z "$mname" ]; then
+        case "$(basename "$file_path")" in
+            MEMORY.md) mname="Codex Memory Registry" ;;
+            memory_summary.md) mname="Codex Memory Summary" ;;
+            *) mname=$(basename "$file_path" .md) ;;
+        esac
+    fi
+    [ -z "$mtype" ] && mtype="$agent"
+    if [ -z "$mdesc" ]; then
+        mdesc=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/d' | head -1 | cut -c1-200)
+    fi
 
     local fp_sql proj_sql name_sql desc_sql type_sql content_sql hash_sql origin_sql agent_sql
     fp_sql=$(eagle_sql_escape "$file_path")
@@ -41,7 +56,7 @@ eagle_capture_claude_memory() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id, origin_agent)
+INSERT INTO agent_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id, origin_agent)
 VALUES ('$proj_sql', '$fp_sql', '$name_sql', '$desc_sql', '$type_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     memory_name     = excluded.memory_name,
@@ -52,11 +67,11 @@ ON CONFLICT(file_path) DO UPDATE SET
     origin_session_id = excluded.origin_session_id,
     origin_agent    = excluded.origin_agent,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE claude_memories.content_hash != excluded.content_hash;
+WHERE agent_memories.content_hash != excluded.content_hash;
 SQL
 }
 
-eagle_search_claude_memories() {
+eagle_search_agent_memories() {
     local query; query=$(eagle_fts_sanitize "$1")
     if [ -z "$query" ]; then
         echo "Search query is empty after sanitization. Try a different search term." >&2
@@ -75,15 +90,15 @@ eagle_search_claude_memories() {
     eagle_db "SELECT m.memory_name, m.memory_type, m.description,
                      replace(substr(m.content, 1, 200), char(10), ' '),
                      m.file_path, m.updated_at, m.origin_agent
-              FROM claude_memories m
-              JOIN claude_memories_fts f ON f.rowid = m.id
-              WHERE claude_memories_fts MATCH '$query'
+              FROM agent_memories m
+              JOIN agent_memories_fts f ON f.rowid = m.id
+              WHERE agent_memories_fts MATCH '$query'
               $where_clause
               ORDER BY rank
               LIMIT $limit;"
 }
 
-eagle_list_claude_memories() {
+eagle_list_agent_memories() {
     local project="${1:-}"
     local limit; limit=$(eagle_sql_int "${2:-20}")
 
@@ -94,13 +109,13 @@ eagle_list_claude_memories() {
     fi
 
     eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent
-              FROM claude_memories
+              FROM agent_memories
               $where_clause
               ORDER BY updated_at DESC
               LIMIT $limit;"
 }
 
-eagle_capture_claude_plan() {
+eagle_capture_agent_plan() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
@@ -125,21 +140,21 @@ eagle_capture_claude_plan() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_plans (project, file_path, title, content, content_hash, origin_session_id, origin_agent)
+INSERT INTO agent_plans (project, file_path, title, content, content_hash, origin_session_id, origin_agent)
 VALUES ('$proj_sql', '$fp_sql', '$title_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     title           = excluded.title,
     content         = excluded.content,
     content_hash    = excluded.content_hash,
-    origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), claude_plans.origin_session_id),
-    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), claude_plans.origin_agent),
-    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE claude_plans.project END,
+    origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), agent_plans.origin_session_id),
+    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), agent_plans.origin_agent),
+    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_plans.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE claude_plans.content_hash != excluded.content_hash;
+WHERE agent_plans.content_hash != excluded.content_hash;
 SQL
 }
 
-eagle_search_claude_plans() {
+eagle_search_agent_plans() {
     local query; query=$(eagle_fts_sanitize "$1")
     if [ -z "$query" ]; then
         echo "Search query is empty after sanitization. Try a different search term." >&2
@@ -158,15 +173,15 @@ eagle_search_claude_plans() {
     eagle_db "SELECT p.title, p.project,
                      replace(substr(p.content, 1, 200), char(10), ' '),
                      p.file_path, p.updated_at, p.origin_agent
-              FROM claude_plans p
-              JOIN claude_plans_fts f ON f.rowid = p.id
-              WHERE claude_plans_fts MATCH '$query'
+              FROM agent_plans p
+              JOIN agent_plans_fts f ON f.rowid = p.id
+              WHERE agent_plans_fts MATCH '$query'
               $where_clause
               ORDER BY rank
               LIMIT $limit;"
 }
 
-eagle_list_claude_plans() {
+eagle_list_agent_plans() {
     local project="${1:-}"
     local limit; limit=$(eagle_sql_int "${2:-20}")
 
@@ -177,13 +192,13 @@ eagle_list_claude_plans() {
     fi
 
     eagle_db "SELECT title, project, file_path, updated_at, origin_agent
-              FROM claude_plans
+              FROM agent_plans
               $where_clause
               ORDER BY updated_at DESC
               LIMIT $limit;"
 }
 
-eagle_capture_claude_task() {
+eagle_capture_agent_task() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
@@ -223,7 +238,7 @@ eagle_capture_claude_task() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash, origin_agent)
+INSERT INTO agent_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash, origin_agent)
 VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$af_sql', '$status_sql', '$blocks_sql', '$bb_sql', '$hash_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     subject         = excluded.subject,
@@ -234,13 +249,13 @@ ON CONFLICT(file_path) DO UPDATE SET
     blocked_by      = excluded.blocked_by,
     content_hash    = excluded.content_hash,
     origin_agent    = excluded.origin_agent,
-    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE claude_tasks.project END,
+    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_tasks.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE claude_tasks.content_hash != excluded.content_hash;
+WHERE agent_tasks.content_hash != excluded.content_hash;
 SQL
 }
 
-eagle_list_claude_tasks() {
+eagle_list_agent_tasks() {
     local project="${1:-}"
     local limit; limit=$(eagle_sql_int "${2:-20}")
 
@@ -251,13 +266,13 @@ eagle_list_claude_tasks() {
     fi
 
     eagle_db "SELECT subject, status, source_session_id, source_task_id, updated_at, origin_agent
-              FROM claude_tasks
+              FROM agent_tasks
               $where_clause
               ORDER BY updated_at DESC
               LIMIT $limit;"
 }
 
-eagle_search_claude_tasks() {
+eagle_search_agent_tasks() {
     local query; query=$(eagle_fts_sanitize "$1")
     if [ -z "$query" ]; then
         echo "Search query is empty after sanitization. Try a different search term." >&2
@@ -276,10 +291,22 @@ eagle_search_claude_tasks() {
     eagle_db "SELECT t.subject, t.status,
                      replace(substr(t.description, 1, 200), char(10), ' '),
                      t.source_session_id, t.source_task_id, t.updated_at, t.origin_agent
-              FROM claude_tasks t
-              JOIN claude_tasks_fts f ON f.rowid = t.id
-              WHERE claude_tasks_fts MATCH '$query'
+              FROM agent_tasks t
+              JOIN agent_tasks_fts f ON f.rowid = t.id
+              WHERE agent_tasks_fts MATCH '$query'
               $where_clause
               ORDER BY rank
               LIMIT $limit;"
 }
+
+# Backward-compatible helper names for older installed hooks/scripts that source
+# this library during an update window. Runtime code should use agent_* helpers.
+eagle_capture_claude_memory() { eagle_capture_agent_memory "$@"; }
+eagle_search_claude_memories() { eagle_search_agent_memories "$@"; }
+eagle_list_claude_memories() { eagle_list_agent_memories "$@"; }
+eagle_capture_claude_plan() { eagle_capture_agent_plan "$@"; }
+eagle_search_claude_plans() { eagle_search_agent_plans "$@"; }
+eagle_list_claude_plans() { eagle_list_agent_plans "$@"; }
+eagle_capture_claude_task() { eagle_capture_agent_task "$@"; }
+eagle_list_claude_tasks() { eagle_list_agent_tasks "$@"; }
+eagle_search_claude_tasks() { eagle_search_agent_tasks "$@"; }

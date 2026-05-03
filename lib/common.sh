@@ -16,6 +16,8 @@ EAGLE_CODEX_DIR="${EAGLE_CODEX_DIR:-$HOME/.codex}"
 EAGLE_CODEX_CONFIG="${EAGLE_CODEX_CONFIG:-$EAGLE_CODEX_DIR/config.toml}"
 EAGLE_CODEX_HOOKS="${EAGLE_CODEX_HOOKS:-$EAGLE_CODEX_DIR/hooks.json}"
 EAGLE_CODEX_AGENTS_MD="${EAGLE_CODEX_AGENTS_MD:-$EAGLE_CODEX_DIR/AGENTS.md}"
+EAGLE_CODEX_SKILLS_DIR="${EAGLE_CODEX_SKILLS_DIR:-$EAGLE_CODEX_DIR/skills}"
+EAGLE_CODEX_MEMORIES_DIR="${EAGLE_CODEX_MEMORIES_DIR:-$EAGLE_CODEX_DIR/memories}"
 EAGLE_RAW_BASH_UNLOCK="${EAGLE_RAW_BASH_UNLOCK:-/tmp/eagle-mem-raw-bash-unlock}"
 
 eagle_log() {
@@ -556,6 +558,8 @@ regression_risks: [risk, ...]
 
 **How to apply:**
 - Attribute recalled context as "Eagle Mem recalls:" when it is injected
+- Use the Eagle Mem skills when relevant: `eagle-mem-search`, `eagle-mem-overview`, `eagle-mem-memories`, and `eagle-mem-tasks`
+- For important decisions, preferences, gotchas, or durable project facts, explicitly include them in the `<eagle-summary>` block so Codex-originated memories become available to future Claude Code and Codex sessions
 - Do not revert Eagle Mem-surfaced decisions without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
 - Never put raw secrets in summaries

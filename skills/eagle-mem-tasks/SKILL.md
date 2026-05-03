@@ -10,9 +10,9 @@ description: >
 
 ## Purpose
 
-**For the user:** Multi-step work doesn't get lost when Claude Code compacts. A 6-task implementation plan survives intact across compactions — no re-explaining what was decided, no drift from the original direction.
+**For the user:** Multi-step work doesn't get lost when Claude Code or Codex compacts. A 6-task implementation plan survives intact across compactions — no re-explaining what was decided, no drift from the original direction.
 
-**For you (Claude Code):** Each task description is a message to a future context window with ZERO memory of what happened before. After compaction, SessionStart re-injects pending/in-progress tasks from Eagle Mem's `claude_tasks` table. That re-injected text is all the next context window gets. If the description says "implement auth middleware," the next window has nothing to work with. If it says "implement auth middleware — JWT with RS256, sessions in Redis, errors use RFC 7807 format (decided in task 1)," the next window can execute immediately.
+**For you:** Each task description is a message to a future context window with ZERO memory of what happened before. After compaction, SessionStart re-injects pending/in-progress tasks from Eagle Mem's `agent_tasks` table. That re-injected text is all the next context window gets. If the description says "implement auth middleware," the next window has nothing to work with. If it says "implement auth middleware — JWT with RS256, sessions in Redis, errors use RFC 7807 format (decided in task 1)," the next window can execute immediately.
 
 ## Judgment
 
@@ -42,12 +42,12 @@ Break the request into tasks that are each completable in one context window. Th
 
 ### 2. Create — write self-contained descriptions
 
-Use `TaskCreate` for each task. The description is the most important field — it must carry forward every decision from the planning conversation.
+Use the agent-native task mechanism when available. In Claude Code, use `TaskCreate`. In Codex, use `update_plan` for the live UI and `eagle-mem tasks add --agent codex` for durable cross-session task records. The description is the most important field — it must carry forward every decision from the planning conversation.
 
 **Context transfer pattern:** For each task, ask: "If I read only this description with zero prior context, can I execute it?" If not, add what's missing.
 
 ```
-TaskCreate:
+TaskCreate / eagle-mem tasks add:
   subject: "Add JWT auth middleware"
   description: "Add Express middleware that validates JWT tokens on protected
     routes. Decisions: RS256 algorithm, public key from env JWT_PUBLIC_KEY,
@@ -60,15 +60,15 @@ TaskCreate:
 
 ### 3. Execute — one task at a time
 
-`TaskUpdate(in_progress)` on the current task. Do the work. Stay focused on that task — don't drift into adjacent tasks.
+Mark the current task in progress (`TaskUpdate(in_progress)` in Claude Code, or `eagle-mem tasks start <id> --agent codex` in Codex). Do the work. Stay focused on that task — don't drift into adjacent tasks.
 
 ### 4. Complete — record what happened
 
-`TaskUpdate(completed)`. Emit `<eagle-summary>` so Eagle Mem captures what was accomplished.
+Mark the task completed (`TaskUpdate(completed)` in Claude Code, or `eagle-mem tasks complete <id> --agent codex` in Codex). Emit `<eagle-summary>` so Eagle Mem captures what was accomplished.
 
 If the task produced decisions that downstream tasks need, update those task descriptions now:
 ```
-TaskUpdate:
+TaskUpdate / update durable task description:
   taskId: "3"
   description: "...original description... Note from task 2: the user table
     uses UUID primary keys, not auto-increment. Auth tokens table FKs to
@@ -90,7 +90,7 @@ After compaction, SessionStart re-injects all pending/in-progress tasks. Pick th
 **A task fails or produces unexpected results:** Update the task description with what was learned and what went wrong. Don't just retry blindly — the description should carry the failure context so the next attempt (or the next context window) doesn't repeat the same mistake.
 
 ```
-TaskUpdate:
+TaskUpdate / task record update:
   taskId: "4"
   description: "...original description... FAILED ATTEMPT: Prisma migrate
     errored because the users table already has a conflicting unique
@@ -102,11 +102,11 @@ TaskUpdate:
 
 ## The compact cycle — how task state survives
 
-1. You call `TaskCreate`/`TaskUpdate` (Claude Code's native task tools)
-2. Claude Code writes task JSON to `~/.claude/tasks/$session_id/*.json`
-3. Eagle Mem's PostToolUse hook fires, mirrors the task into the `claude_tasks` FTS5 table
-4. SessionEnd hook does a final sweep to catch any status changes missed by hooks
-5. On compaction (or new session), SessionStart queries `claude_tasks` for pending/in-progress tasks from the last 7 days and injects them into context
+1. Claude Code path: you call `TaskCreate`/`TaskUpdate`; Claude Code writes task JSON to `~/.claude/tasks/$session_id/*.json`; Eagle Mem mirrors it.
+2. Codex path: you call `update_plan` for live progress and `eagle-mem tasks add/start/complete --agent codex` for durable records.
+3. Eagle Mem stores both paths in the shared `agent_tasks` FTS5 table with `origin_agent`.
+4. SessionEnd does a final Claude Code task sweep where native task files exist.
+5. On compaction (or new session), SessionStart queries `agent_tasks` for pending/in-progress tasks from the last 7 days and injects them into context.
 
 The task descriptions you write ARE the context that survives. Everything else — your reasoning, the conversation, the files you read — gets compacted away.
 
@@ -126,14 +126,20 @@ The bad version forces the next context window to re-discover every decision. Th
 ## Reference
 
 ```bash
-# Viewing tasks (read-only — Eagle Mem mirrors, doesn't manage)
+# Viewing tasks
 eagle-mem tasks                # pending/in-progress for current project
 eagle-mem tasks list           # all tasks (including completed)
 eagle-mem tasks completed      # completed tasks only
 eagle-mem tasks search <q>     # FTS5 search across task history
 eagle-mem tasks --json         # JSON output for scripting
 
-# Claude Code task tools (these are what you actually use)
+# Codex durable task records
+eagle-mem tasks add "Implement auth middleware" --agent codex --desc "Use RS256, Redis sessions, RFC 7807 errors"
+eagle-mem tasks update <id> --agent codex --desc "New context or failure details"
+eagle-mem tasks start <id> --agent codex
+eagle-mem tasks complete <id> --agent codex
+
+# Claude Code task tools
 TaskCreate                     # create a new task
 TaskUpdate                     # update status, description, dependencies
 ```

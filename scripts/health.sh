@@ -133,7 +133,11 @@ max_score=$((max_score + 15))
 
 provider=$(eagle_config_get "provider" "type" "none")
 if [ "$provider" != "none" ]; then
-    model=$(eagle_config_get "$provider" "model" "default")
+    if [ "$provider" = "agent_cli" ]; then
+        model=$(_eagle_agent_cli_target)
+    else
+        model=$(eagle_config_get "$provider" "model" "default")
+    fi
     eagle_ok "Provider: ${provider} (${model})"
     score=$((score + 15))
 else

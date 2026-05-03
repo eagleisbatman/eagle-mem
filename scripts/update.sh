@@ -119,7 +119,26 @@ if [ "$claude_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
         [ -L "$dst" ] && rm "$dst"
         ln -sf "$skill_dir" "$dst"
     done
-    eagle_ok "Skills updated"
+    eagle_ok "Claude skills updated"
+fi
+
+if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    mkdir -p "$EAGLE_CODEX_SKILLS_DIR"
+    find "$EAGLE_CODEX_SKILLS_DIR" -maxdepth 1 -name "eagle-mem-*" -type l 2>/dev/null | while read -r existing; do
+        skill_name=$(basename "$existing")
+        if [ ! -d "$PACKAGE_DIR/skills/$skill_name" ]; then
+            rm "$existing"
+            eagle_ok "Removed stale Codex skill: $skill_name"
+        fi
+    done
+    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+        [ ! -d "$skill_dir" ] && continue
+        skill_name=$(basename "$skill_dir")
+        dst="$EAGLE_CODEX_SKILLS_DIR/$skill_name"
+        [ -L "$dst" ] && rm "$dst"
+        ln -sf "$skill_dir" "$dst"
+    done
+    eagle_ok "Codex skills updated"
 fi
 
 # ─── Backfill project names ───────────────────────────────

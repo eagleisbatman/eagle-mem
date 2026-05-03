@@ -36,6 +36,8 @@ case "$subcommand" in
             eagle_err "Usage: eagle-mem config set <section.key> <value>"
             eagle_info "Examples:"
             eagle_info "  eagle-mem config set provider.type ollama"
+            eagle_info "  eagle-mem config set provider.type agent_cli"
+            eagle_info "  eagle-mem config set agent_cli.preferred current"
             eagle_info "  eagle-mem config set ollama.model mistral"
             eagle_info "  eagle-mem config set anthropic.model claude-haiku-4-5-20251001"
             exit 1

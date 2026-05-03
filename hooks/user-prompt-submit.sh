@@ -5,6 +5,7 @@
 # Searches memory for relevant context and injects it
 # ═══════════════════════════════════════════════════════════
 set +e
+[ "${EAGLE_MEM_DISABLE_HOOKS:-}" = "1" ] && exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"

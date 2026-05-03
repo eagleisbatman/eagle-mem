@@ -5,6 +5,7 @@
 # Injects project memory + pending tasks into Claude's context
 # ═══════════════════════════════════════════════════════════
 set +e
+[ "${EAGLE_MEM_DISABLE_HOOKS:-}" = "1" ] && exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
@@ -166,6 +167,13 @@ $update_notice
 "
 fi
 
+if [ "$agent" = "codex" ] && [ "${stat_with_summaries:-0}" -eq 0 ] 2>/dev/null; then
+    context+="
+=== Eagle Mem: Codex Capture Warming Up ===
+Codex hooks are active. End important turns with an <eagle-summary> block so future Claude Code and Codex sessions can recall decisions, gotchas, key files, and next steps from this project.
+"
+fi
+
 # ─── Project overview (capped at 500 chars) ──────────────
 
 overview=$(eagle_get_overview "$project")
@@ -228,7 +236,7 @@ fi
 
 memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent,
     CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
-    FROM claude_memories
+    FROM agent_memories
     WHERE project = '$p_esc'
     ORDER BY updated_at DESC
     LIMIT 5;")
@@ -256,7 +264,7 @@ fi
 
 # ─── Plans (skip if none) ────────────────────────────────
 
-plans=$(eagle_list_claude_plans "$project" 3)
+plans=$(eagle_list_agent_plans "$project" 3)
 if [ -n "$plans" ]; then
     context+="
 === Eagle Mem: Plans ===
@@ -271,7 +279,7 @@ fi
 
 # ─── Tasks (skip if none) ────────────────────────────────
 
-synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM claude_tasks
+synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM agent_tasks
     WHERE project = '$p_esc'
     AND status IN ('in_progress', 'pending')
     AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')

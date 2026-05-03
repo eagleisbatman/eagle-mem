@@ -9,7 +9,7 @@
 
 **Context that survives `/compact`.**
 
-**v4.7.0 adds first-class Codex support and enforced anti-regression checks.**
+**v4.7.1 hardens first-class Codex support and enforced anti-regression checks.**
 Claude Code and Codex can now share the same local Eagle Mem database, while every captured row records which agent created it.
 
 ## The Problem
@@ -48,7 +48,7 @@ That's it. Open Claude Code or Codex in any project directory. Eagle Mem activat
 
 Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, and prunes stale data — all in the background via hooks.
 
-For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, and patches `~/.codex/AGENTS.md` with the Eagle Mem summary contract. For Claude Code, it keeps using `~/.claude/settings.json`, `CLAUDE.md`, and the existing Claude memory/task locations.
+For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md` with the Eagle Mem summary contract. For Claude Code, it keeps using `~/.claude/settings.json`, `CLAUDE.md`, `~/.claude/skills`, and the existing Claude memory/task locations.
 
 ### Prerequisites
 
@@ -116,7 +116,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem config` | View or change LLM provider settings |
 | `eagle-mem guard` | Manage regression guardrails for files |
 | `eagle-mem overview` | Build or view project overview |
-| `eagle-mem memories` | View/sync Claude Code memories |
+| `eagle-mem memories` | View/sync agent memories |
 | `eagle-mem tasks` | View mirrored tasks |
 | `eagle-mem curate` | Run curator (co-edits, hot files, guardrails) |
 | `eagle-mem feature` | Track and verify features |
@@ -130,7 +130,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 eagle-mem search "auth bug"        # keyword search across summaries
 eagle-mem search --timeline        # recent sessions in chronological order
 eagle-mem search --overview        # project overview
-eagle-mem search --memories        # mirrored Claude Code memories
+eagle-mem search --memories        # mirrored agent memories
 eagle-mem search --tasks           # in-flight tasks (pending/in-progress)
 eagle-mem search --files           # most frequently modified files
 eagle-mem search --stats           # project statistics
@@ -166,7 +166,7 @@ That means opening the same project in Claude Code and Codex does not create two
 |-------|-------------|
 | `/eagle-mem-search` | Search memory and past sessions — Claude interprets results in context |
 | `/eagle-mem-overview` | Build a rich project briefing from README, entry points, and git history |
-| `/eagle-mem-memories` | View and search mirrored Claude Code memories and plans |
+| `/eagle-mem-memories` | View and search mirrored agent memories and plans |
 | `/eagle-mem-tasks` | TaskAware Compact Loop — break complex work into tasks that survive `/compact` |
 
 ## Data
@@ -189,9 +189,9 @@ Single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text sea
 | `feature_smoke_tests` | Smoke test definitions for feature verification |
 | `pending_feature_verifications` | Release blockers created when files tied to features change |
 | `eagle_meta` | Internal metadata (last scan, last curate, etc.) |
-| `claude_memories` | Mirror of Claude Code auto-memories |
-| `claude_plans` | Mirror of Claude Code plans |
-| `claude_tasks` | Mirror of Claude Code tasks |
+| `agent_memories` | Mirror of agent memory files, with source attribution |
+| `agent_plans` | Mirror of agent plan files, with source attribution |
+| `agent_tasks` | Mirror of agent task records, with source attribution |
 
 ### Project Identity
 
@@ -207,9 +207,11 @@ Some features (curator auto-enrichment, overview generation) can use an LLM for 
 
 ```bash
 eagle-mem config
+eagle-mem config set provider.type agent_cli
+eagle-mem config set agent_cli.preferred current
 ```
 
-Supported providers: Ollama (auto-detected), Anthropic, OpenAI. Eagle Mem works fully without a provider — LLM features gracefully degrade to heuristic fallbacks.
+Provider preference is local-first: Ollama is auto-detected when running, then Eagle Mem can use the installed Codex/Claude CLI via `agent_cli` before falling back to explicit Anthropic/OpenAI API providers. Eagle Mem works fully without a provider — LLM features gracefully degrade to heuristic fallbacks.
 
 ## License
 

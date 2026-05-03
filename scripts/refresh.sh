@@ -54,7 +54,7 @@ run_step "Index" bash "$SCRIPTS_DIR/index.sh" "$TARGET_DIR"
 echo ""
 
 # ─── 3. Memory sync ─────────────────────────────────────
-eagle_info "Step 3/4: Syncing Claude Code memories, plans, and tasks..."
+eagle_info "Step 3/4: Syncing agent memories, plans, and tasks..."
 run_step "Memory sync" bash "$SCRIPTS_DIR/memories.sh" sync
 echo ""
 
@@ -65,8 +65,8 @@ project_sql=$(eagle_sql_escape "$PROJECT")
 sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$project_sql';")
 summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$project_sql';")
 chunks=$(eagle_db "SELECT COUNT(*) FROM code_chunks WHERE project = '$project_sql';")
-memories=$(eagle_db "SELECT COUNT(*) FROM claude_memories WHERE project = '$project_sql';")
-tasks=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$project_sql';")
+memories=$(eagle_db "SELECT COUNT(*) FROM agent_memories WHERE project = '$project_sql';")
+tasks=$(eagle_db "SELECT COUNT(*) FROM agent_tasks WHERE project = '$project_sql';")
 
 echo ""
 eagle_kv "Sessions:" "${sessions:-0}"

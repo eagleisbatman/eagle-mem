@@ -5,6 +5,7 @@
 # Captures observations + dispatches to extracted responsibilities
 # ═══════════════════════════════════════════════════════════
 set +e
+[ "${EAGLE_MEM_DISABLE_HOOKS:-}" = "1" ] && exit 0
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/../lib"
@@ -54,7 +55,7 @@ case "$hook_event" in
             agent_sql=$(eagle_sql_escape "$agent")
 
             eagle_db_pipe <<SQL
-INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, status, origin_agent)
+INSERT INTO agent_tasks (project, source_session_id, source_task_id, file_path, subject, description, status, origin_agent)
 VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$stat_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     subject     = excluded.subject,

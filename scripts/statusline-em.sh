@@ -21,7 +21,7 @@ eagle_mem_statusline() {
     cnt=$(echo ".headers off
 SELECT COUNT(*) FROM sessions WHERE project = '${proj}';" | sqlite3 "$em_db" 2>/dev/null | tr -d '[:space:]')
     mem=$(echo ".headers off
-SELECT COUNT(*) FROM claude_memories WHERE project = '${proj}';" | sqlite3 "$em_db" 2>/dev/null | tr -d '[:space:]')
+SELECT COUNT(*) FROM agent_memories WHERE project = '${proj}';" | sqlite3 "$em_db" 2>/dev/null | tr -d '[:space:]')
     cnt=${cnt:-0}; mem=${mem:-0}
 
     local R='\033[0m' CYAN='\033[96m' WHT='\033[97m' DIM='\033[2m'
