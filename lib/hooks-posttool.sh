@@ -8,9 +8,10 @@ _EAGLE_HOOKS_POSTTOOL_LOADED=1
 
 eagle_posttool_mirror_writes() {
     local tool_name="$1" fp="$2" session_id="$3" project="$4"
+    local agent="${5:-$(eagle_agent_source)}"
 
     case "$tool_name" in
-        Write|Edit)
+        Write|Edit|apply_patch)
             if [ -n "$fp" ]; then
                 case "$fp" in
                     *..*) ;; # path traversal — skip
@@ -18,12 +19,12 @@ eagle_posttool_mirror_writes() {
                         local mem_base
                         mem_base=$(basename "$fp")
                         if [ "$mem_base" != "MEMORY.md" ] && [ -f "$fp" ]; then
-                            eagle_capture_claude_memory "$fp" "$session_id" "$project"
+                            eagle_capture_claude_memory "$fp" "$session_id" "$project" "$agent"
                         fi
                         ;;
                     "$EAGLE_CLAUDE_PLANS_DIR/"*.md)
                         if [ -f "$fp" ]; then
-                            eagle_capture_claude_plan "$fp" "$session_id" "$project"
+                            eagle_capture_claude_plan "$fp" "$session_id" "$project" "$agent"
                         fi
                         ;;
                 esac
@@ -34,6 +35,7 @@ eagle_posttool_mirror_writes() {
 
 eagle_posttool_mirror_tasks() {
     local tool_name="$1" session_id="$2" project="$3" input="$4"
+    local agent="${5:-$(eagle_agent_source)}"
 
     case "$tool_name" in
         TaskCreate|TaskUpdate)
@@ -45,10 +47,10 @@ eagle_posttool_mirror_tasks() {
                     if [ -z "$task_id" ]; then
                         local newest
                         newest=$(ls -t "$task_dir"/*.json 2>/dev/null | head -1)
-                        [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_claude_task "$newest" "$session_id" "$project"
+                        [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_claude_task "$newest" "$session_id" "$project" "$agent"
                     elif eagle_validate_session_id "$task_id"; then
                         local task_json="$task_dir/$task_id.json"
-                        [ -f "$task_json" ] && eagle_capture_claude_task "$task_json" "$session_id" "$project"
+                        [ -f "$task_json" ] && eagle_capture_claude_task "$task_json" "$session_id" "$project" "$agent"
                     fi
                 fi
             fi
@@ -60,7 +62,7 @@ eagle_posttool_stale_hint() {
     local tool_name="$1" fp="$2" project="$3"
 
     case "$tool_name" in
-        Write|Edit)
+        Write|Edit|apply_patch)
             if [ -n "$fp" ]; then
                 local fname fname_stem
                 fname=$(basename "$fp")

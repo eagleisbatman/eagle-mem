@@ -13,8 +13,11 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/hooks.sh"
+. "$LIB_DIR/codex-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
+claude_found=false
+codex_found=false
 
 eagle_header "Update"
 
@@ -28,6 +31,11 @@ fi
 
 if [ ! -f "$EAGLE_MEM_DIR/memory.db" ]; then
     eagle_warn "Database not found — will be created"
+fi
+
+[ -d "$HOME/.claude" ] && claude_found=true
+if [ -d "$EAGLE_CODEX_DIR" ] || command -v codex &>/dev/null; then
+    codex_found=true
 fi
 
 # ─── Update files ──────────────────────────────────────────
@@ -63,7 +71,7 @@ fi
 
 # ─── Re-register hooks (idempotent) ───────────────────────
 
-if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
+if [ "$claude_found" = true ] && [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     # Update PostToolUse matcher if it has the old value (pre-v1.3.0)
     if jq -e '.hooks.PostToolUse[]? | select(.matcher == "Read|Write|Edit|Bash")' "$SETTINGS" &>/dev/null; then
         _tmp=$(mktemp)
@@ -85,9 +93,16 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     eagle_ok "Hooks registered"
 fi
 
+if [ "$codex_found" = true ] && command -v jq &>/dev/null; then
+    eagle_register_codex_hooks
+    eagle_ok "Codex hooks registered"
+elif [ "$codex_found" = false ]; then
+    eagle_info "Codex hooks skipped ${DIM}(Codex not detected)${RESET}"
+fi
+
 # ─── Update skill symlinks ────────────────────────────────
 
-if [ -d "$PACKAGE_DIR/skills" ]; then
+if [ "$claude_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
     mkdir -p "$EAGLE_SKILLS_DIR"
     # Remove stale symlinks for deleted skills (find catches broken symlinks; glob doesn't)
     find "$EAGLE_SKILLS_DIR" -maxdepth 1 -name "eagle-mem-*" -type l 2>/dev/null | while read -r existing; do
@@ -118,10 +133,20 @@ fi
 
 # ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
 
-if eagle_patch_claude_md; then
-    eagle_ok "CLAUDE.md updated ${DIM}(eagle-summary instructions added)${RESET}"
-else
-    eagle_ok "CLAUDE.md up to date"
+if [ "$claude_found" = true ]; then
+    if eagle_patch_claude_md; then
+        eagle_ok "CLAUDE.md updated ${DIM}(eagle-summary instructions added)${RESET}"
+    else
+        eagle_ok "CLAUDE.md up to date"
+    fi
+fi
+
+if [ "$codex_found" = true ]; then
+    if eagle_patch_codex_agents_md; then
+        eagle_ok "AGENTS.md updated ${DIM}(Codex eagle-summary instructions added)${RESET}"
+    else
+        eagle_ok "AGENTS.md up to date"
+    fi
 fi
 
 # ─── Save installed version ───────────────────────────────

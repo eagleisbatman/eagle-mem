@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
 # Eagle Mem — Install
-# Sets up hooks, database, and skills for Claude Code
+# Sets up hooks, database, and skills for Claude Code and Codex
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -12,6 +12,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/hooks.sh"
+. "$LIB_DIR/codex-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -110,15 +111,33 @@ else
     fi
 fi
 
-# Claude Code
+# Claude Code / Codex
+claude_found=false
+codex_found=false
+
 if [ -d "$HOME/.claude" ]; then
     eagle_ok "Claude Code ${DIM}(~/.claude/)${RESET}"
 else
-    eagle_fail "Claude Code not found (~/.claude/ does not exist)"
+    eagle_warn "Claude Code not found ${DIM}(~/.claude/ does not exist)${RESET}"
+fi
+
+if [ -d "$HOME/.claude" ]; then
+    claude_found=true
+fi
+
+if [ -d "$EAGLE_CODEX_DIR" ] || command -v codex &>/dev/null; then
+    codex_found=true
+    eagle_ok "Codex ${DIM}($EAGLE_CODEX_DIR/)${RESET}"
+else
+    eagle_warn "Codex not found ${DIM}(~/.codex/ missing and codex not on PATH)${RESET}"
+fi
+
+if [ "$claude_found" = false ] && [ "$codex_found" = false ]; then
+    eagle_fail "No supported agent install found"
     echo ""
-    eagle_dim "Install Claude Code first:"
+    eagle_dim "Install Claude Code or Codex first, then re-run:"
     eagle_dim "  npm install -g @anthropic-ai/claude-code"
-    eagle_dim "  https://docs.anthropic.com/en/docs/claude-code"
+    eagle_dim "  npm install -g @openai/codex"
     echo ""
     exit 1
 fi
@@ -160,57 +179,67 @@ eagle_ok "Database ready"
 
 # ─── Patch settings.json ───────────────────────────────────
 
-if [ ! -f "$SETTINGS" ]; then
-    echo '{}' > "$SETTINGS"
+if [ "$claude_found" = true ]; then
+    if [ ! -f "$SETTINGS" ]; then
+        echo '{}' > "$SETTINGS"
+    fi
+
+    eagle_patch_hook "$SETTINGS" "SessionStart" "" \
+        "$EAGLE_MEM_DIR/hooks/session-start.sh" \
+        "SessionStart hook"
+
+    eagle_patch_hook "$SETTINGS" "Stop" "" \
+        "$EAGLE_MEM_DIR/hooks/stop.sh" \
+        "Stop hook"
+
+    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
+        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+        "PostToolUse hook"
+
+    eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
+        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+        "TaskCreated hook"
+
+    eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
+        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+        "TaskCompleted hook"
+
+    eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
+        "$EAGLE_MEM_DIR/hooks/session-end.sh" \
+        "SessionEnd hook"
+
+    eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
+        "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
+        "UserPromptSubmit hook"
+
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" \
+        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+        "PreToolUse hook (Bash)"
+
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" \
+        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+        "PreToolUse hook (Read)"
+
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Edit" \
+        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+        "PreToolUse hook (Edit)"
+
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Write" \
+        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+        "PreToolUse hook (Write)"
+else
+    eagle_info "Claude hooks skipped ${DIM}(Claude Code not detected)${RESET}"
 fi
 
-eagle_patch_hook "$SETTINGS" "SessionStart" "" \
-    "$EAGLE_MEM_DIR/hooks/session-start.sh" \
-    "SessionStart hook"
-
-eagle_patch_hook "$SETTINGS" "Stop" "" \
-    "$EAGLE_MEM_DIR/hooks/stop.sh" \
-    "Stop hook"
-
-eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
-    "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-    "PostToolUse hook"
-
-eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
-    "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-    "TaskCreated hook"
-
-eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
-    "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-    "TaskCompleted hook"
-
-eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
-    "$EAGLE_MEM_DIR/hooks/session-end.sh" \
-    "SessionEnd hook"
-
-eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
-    "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
-    "UserPromptSubmit hook"
-
-eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" \
-    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-    "PreToolUse hook (Bash)"
-
-eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" \
-    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-    "PreToolUse hook (Read)"
-
-eagle_patch_hook "$SETTINGS" "PreToolUse" "Edit" \
-    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-    "PreToolUse hook (Edit)"
-
-eagle_patch_hook "$SETTINGS" "PreToolUse" "Write" \
-    "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-    "PreToolUse hook (Write)"
+if [ "$codex_found" = true ]; then
+    eagle_register_codex_hooks
+else
+    eagle_info "Codex hooks skipped ${DIM}(Codex not detected)${RESET}"
+fi
 
 # ─── Install skills ────────────────────────────────────────
 
-if [ -d "$PACKAGE_DIR/skills" ]; then
+if [ "$claude_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
     mkdir -p "$EAGLE_SKILLS_DIR"
     for skill_dir in "$PACKAGE_DIR"/skills/*/; do
         [ ! -d "$skill_dir" ] && continue
@@ -224,42 +253,44 @@ fi
 
 # ─── Statusline integration ───────────────────────────────
 
-EM_STATUSLINE="$EAGLE_MEM_DIR/scripts/statusline-em.sh"
-existing_sl=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+if [ "$claude_found" = true ]; then
+    EM_STATUSLINE="$EAGLE_MEM_DIR/scripts/statusline-em.sh"
+    existing_sl=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
 
-if [ -z "$existing_sl" ]; then
-    # No statusline configured — set up a minimal one that shows Eagle Mem
-    wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
-    cat > "$wrapper" << 'WRAPPER'
+    if [ -z "$existing_sl" ]; then
+        # No statusline configured — set up a minimal one that shows Eagle Mem
+        wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
+        cat > "$wrapper" << 'WRAPPER'
 #!/usr/bin/env bash
 input=$(cat)
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
 source "$HOME/.eagle-mem/scripts/statusline-em.sh"
 eagle_mem_statusline "$project_dir"
 WRAPPER
-    chmod +x "$wrapper"
-    tmp=$(mktemp)
-    jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-    eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
-elif echo "$existing_sl" | grep -q "eagle-mem"; then
-    eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
-else
-    # Existing statusline — check if it's a .sh file we can patch
-    sl_file=$(echo "$existing_sl" | sed 's/^sh //')
-    if [ -f "$sl_file" ] && ! grep -q "eagle-mem" "$sl_file"; then
-        eagle_dim "  Statusline detected: $sl_file"
-        eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
-        echo ""
-        eagle_dim "    # ── Eagle Mem ──"
-        eagle_dim "    em_section=\"\""
-        eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
-        eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
-        eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\")"
-        eagle_dim "    fi"
-        echo ""
-        eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+        chmod +x "$wrapper"
+        tmp=$(mktemp)
+        jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+        eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
+    elif echo "$existing_sl" | grep -q "eagle-mem"; then
+        eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
     else
-        eagle_ok "Statusline ${DIM}(existing — cannot auto-patch; add Eagle Mem manually)${RESET}"
+        # Existing statusline — check if it's a .sh file we can patch
+        sl_file=$(echo "$existing_sl" | sed 's/^sh //')
+        if [ -f "$sl_file" ] && ! grep -q "eagle-mem" "$sl_file"; then
+            eagle_dim "  Statusline detected: $sl_file"
+            eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
+            echo ""
+            eagle_dim "    # ── Eagle Mem ──"
+            eagle_dim "    em_section=\"\""
+            eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
+            eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
+            eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\")"
+            eagle_dim "    fi"
+            echo ""
+            eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+        else
+            eagle_ok "Statusline ${DIM}(existing — cannot auto-patch; add Eagle Mem manually)${RESET}"
+        fi
     fi
 fi
 
@@ -275,10 +306,20 @@ fi
 
 # ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
 
-if eagle_patch_claude_md; then
-    eagle_ok "CLAUDE.md ${DIM}(eagle-summary instructions added)${RESET}"
-else
-    eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
+if [ "$claude_found" = true ]; then
+    if eagle_patch_claude_md; then
+        eagle_ok "CLAUDE.md ${DIM}(eagle-summary instructions added)${RESET}"
+    else
+        eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
+    fi
+fi
+
+if [ "$codex_found" = true ]; then
+    if eagle_patch_codex_agents_md; then
+        eagle_ok "AGENTS.md ${DIM}(Codex eagle-summary instructions added)${RESET}"
+    else
+        eagle_ok "AGENTS.md ${DIM}(already has Eagle Mem section)${RESET}"
+    fi
 fi
 
 # ─── Save installed version ───────────────────────────────
@@ -292,8 +333,9 @@ eagle_footer "Eagle Mem installed successfully."
 
 eagle_kv "Database:" "$EAGLE_MEM_DIR/memory.db"
 eagle_kv "Hooks:" "$EAGLE_MEM_DIR/hooks/"
-eagle_kv "Settings:" "$SETTINGS"
+[ "$claude_found" = true ] && eagle_kv "Claude settings:" "$SETTINGS"
+[ "$codex_found" = true ] && eagle_kv "Codex hooks:" "$EAGLE_CODEX_HOOKS"
 
 echo ""
-eagle_dim "Start a new Claude Code session — Eagle Mem will activate automatically."
+eagle_dim "Start a new Claude Code or Codex session — Eagle Mem will activate automatically."
 echo ""

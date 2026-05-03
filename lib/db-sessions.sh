@@ -11,13 +11,15 @@ eagle_upsert_session() {
     local cwd; cwd=$(eagle_sql_escape "${3:-}")
     local model; model=$(eagle_sql_escape "${4:-}")
     local source; source=$(eagle_sql_escape "${5:-}")
+    local agent; agent=$(eagle_sql_escape "${6:-$(eagle_agent_source)}")
 
-    eagle_db "INSERT INTO sessions (id, project, cwd, model, source, last_activity_at)
-              VALUES ('$session_id', '$project', '$cwd', '$model', '$source', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    eagle_db "INSERT INTO sessions (id, project, cwd, model, source, agent, last_activity_at)
+              VALUES ('$session_id', '$project', '$cwd', '$model', '$source', '$agent', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
               ON CONFLICT(id) DO UPDATE SET
                   cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
                   model = COALESCE(NULLIF(excluded.model, ''), sessions.model),
                   source = COALESCE(NULLIF(excluded.source, ''), sessions.source),
+                  agent = COALESCE(NULLIF(excluded.agent, ''), sessions.agent),
                   status = 'active',
                   last_activity_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
 }
@@ -43,6 +45,8 @@ eagle_get_project_stats() {
     local project; project=$(eagle_sql_escape "$1")
     eagle_db_pipe <<SQL
 SELECT 'sessions|' || COUNT(*) FROM sessions WHERE project = '$project';
+SELECT 'sessions_claude|' || COUNT(*) FROM sessions WHERE project = '$project' AND agent = 'claude-code';
+SELECT 'sessions_codex|' || COUNT(*) FROM sessions WHERE project = '$project' AND agent = 'codex';
 SELECT 'summaries|' || COUNT(*) FROM summaries WHERE project = '$project';
 SELECT 'with_summaries|' || COUNT(*) FROM summaries WHERE project = '$project' AND request IS NOT NULL AND request != '';
 SELECT 'memories|' || COUNT(*) FROM claude_memories WHERE project = '$project';

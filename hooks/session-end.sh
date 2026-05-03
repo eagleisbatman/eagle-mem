@@ -16,6 +16,7 @@ input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
 session_id=$(echo "$input" | jq -r '.session_id // empty')
+agent=$(eagle_agent_source_from_json "$input")
 [ -z "$session_id" ] && exit 0
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
 
@@ -30,7 +31,7 @@ if eagle_validate_session_id "$session_id"; then
     if [ -d "$task_dir" ]; then
         for task_file in "$task_dir"/*.json; do
             [ ! -f "$task_file" ] && continue
-            eagle_capture_claude_task "$task_file" "$session_id" "$project"
+            eagle_capture_claude_task "$task_file" "$session_id" "$project" "$agent"
         done
         eagle_log "INFO" "SessionEnd: re-synced tasks from $task_dir"
     fi

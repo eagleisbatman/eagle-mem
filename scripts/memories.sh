@@ -104,7 +104,7 @@ memories_list() {
     fi
 
     local count=0
-    while IFS='|' read -r name mtype desc _fp updated; do
+    while IFS='|' read -r name mtype desc _fp updated origin_agent; do
         [ -z "$name" ] && continue
         count=$((count + 1))
 
@@ -116,7 +116,7 @@ memories_list() {
             reference) type_color="$BLUE" ;;
         esac
 
-        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET}"
+        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         [ -n "$desc" ] && echo -e "    ${DIM}${desc}${RESET}"
         echo -e "    ${DIM}updated: ${updated}${RESET}"
         echo ""
@@ -146,7 +146,7 @@ memories_search() {
     fi
 
     local count=0
-    while IFS='|' read -r name mtype desc content _fp updated; do
+    while IFS='|' read -r name mtype desc content _fp updated origin_agent; do
         [ -z "$name" ] && continue
         count=$((count + 1))
 
@@ -158,7 +158,7 @@ memories_search() {
             reference) type_color="$BLUE" ;;
         esac
 
-        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET}"
+        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         [ -n "$desc" ] && echo -e "    ${DIM}${desc}${RESET}"
         local snippet
         snippet=$(printf '%s' "$content" | head -c 200)
@@ -178,7 +178,7 @@ memories_show() {
     fi
 
     local meta
-    meta=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_session_id
+    meta=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_session_id, origin_agent
                      FROM claude_memories WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
@@ -186,7 +186,7 @@ memories_show() {
         exit 1
     fi
 
-    IFS='|' read -r name mtype desc fp updated origin <<< "$meta"
+    IFS='|' read -r name mtype desc fp updated origin origin_agent <<< "$meta"
 
     eagle_header "Memory Detail"
 
@@ -194,6 +194,7 @@ memories_show() {
     eagle_kv "Type:" "$mtype"
     eagle_kv "File:" "$fp"
     eagle_kv "Updated:" "$updated"
+    eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
     [ -n "$origin" ] && eagle_kv "Session:" "$origin"
     echo ""
 
@@ -227,14 +228,14 @@ plans_list() {
     fi
 
     local count=0
-    while IFS='|' read -r title proj _fp updated; do
+    while IFS='|' read -r title proj _fp updated origin_agent; do
         [ -z "$title" ] && continue
         count=$((count + 1))
 
         local proj_label=""
         [ -n "$proj" ] && proj_label="  ${DIM}[${proj}]${RESET}"
 
-        echo -e "  ${BOLD}${title}${RESET}${proj_label}"
+        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         echo -e "    ${DIM}updated: ${updated}${RESET}"
         echo ""
     done <<< "$result"
@@ -263,14 +264,14 @@ plans_search() {
     fi
 
     local count=0
-    while IFS='|' read -r title proj snippet _fp updated; do
+    while IFS='|' read -r title proj snippet _fp updated origin_agent; do
         [ -z "$title" ] && continue
         count=$((count + 1))
 
         local proj_label=""
         [ -n "$proj" ] && proj_label="  ${DIM}[${proj}]${RESET}"
 
-        echo -e "  ${BOLD}${title}${RESET}${proj_label}"
+        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         [ -n "$snippet" ] && echo -e "    ${snippet}"
         echo -e "    ${DIM}updated: ${updated}${RESET}"
         echo ""
@@ -287,7 +288,7 @@ plans_show() {
     fi
 
     local meta
-    meta=$(eagle_db "SELECT title, project, file_path, updated_at, origin_session_id
+    meta=$(eagle_db "SELECT title, project, file_path, updated_at, origin_session_id, origin_agent
                      FROM claude_plans WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
@@ -295,7 +296,7 @@ plans_show() {
         exit 1
     fi
 
-    IFS='|' read -r title proj fp updated origin <<< "$meta"
+    IFS='|' read -r title proj fp updated origin origin_agent <<< "$meta"
 
     eagle_header "Plan Detail"
 
@@ -303,6 +304,7 @@ plans_show() {
     [ -n "$proj" ] && eagle_kv "Project:" "$proj"
     eagle_kv "File:" "$fp"
     eagle_kv "Updated:" "$updated"
+    eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
     [ -n "$origin" ] && eagle_kv "Session:" "$origin"
     echo ""
 
@@ -333,7 +335,7 @@ tasks_list() {
     fi
 
     local count=0
-    while IFS='|' read -r subject status sid tid updated; do
+    while IFS='|' read -r subject status sid tid updated origin_agent; do
         [ -z "$subject" ] && continue
         count=$((count + 1))
 
@@ -344,7 +346,7 @@ tasks_list() {
             completed)   status_color="$GREEN" ;;
         esac
 
-        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET}"
+        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
         echo ""
     done <<< "$result"
@@ -373,7 +375,7 @@ tasks_search() {
     fi
 
     local count=0
-    while IFS='|' read -r subject status desc sid tid updated; do
+    while IFS='|' read -r subject status desc sid tid updated origin_agent; do
         [ -z "$subject" ] && continue
         count=$((count + 1))
 
@@ -384,7 +386,7 @@ tasks_search() {
             completed)   status_color="$GREEN" ;;
         esac
 
-        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET}"
+        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
         [ -n "$desc" ] && echo -e "    ${desc}"
         echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
         echo ""
@@ -401,7 +403,7 @@ tasks_show() {
     fi
 
     local meta
-    meta=$(eagle_db "SELECT subject, status, description, active_form, source_session_id, source_task_id, file_path, updated_at
+    meta=$(eagle_db "SELECT subject, status, description, active_form, source_session_id, source_task_id, file_path, updated_at, origin_agent
                      FROM claude_tasks WHERE file_path = '$(eagle_sql_escape "$query")';")
 
     if [ -z "$meta" ]; then
@@ -409,7 +411,7 @@ tasks_show() {
         exit 1
     fi
 
-    IFS='|' read -r subject status desc af sid tid fp updated <<< "$meta"
+    IFS='|' read -r subject status desc af sid tid fp updated origin_agent <<< "$meta"
 
     eagle_header "Task Detail"
 
@@ -419,6 +421,7 @@ tasks_show() {
     eagle_kv "Session:" "$sid"
     eagle_kv "File:" "$fp"
     eagle_kv "Updated:" "$updated"
+    eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
     echo ""
 
     [ -n "$desc" ] && echo -e "  ${BOLD}Description:${RESET} $desc" && echo ""

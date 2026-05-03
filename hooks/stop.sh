@@ -23,6 +23,8 @@ input=$(eagle_read_stdin)
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
+last_assistant_message=$(echo "$input" | jq -r '.last_assistant_message // empty')
+agent=$(eagle_agent_source_from_json "$input")
 
 [ -z "$session_id" ] && exit 0
 
@@ -33,25 +35,62 @@ agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 project=$(eagle_project_from_cwd "$cwd")
 [ -z "$project" ] && exit 0
 
-eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path"
+eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path agent=$agent"
 
 # Ensure session exists (may not if SessionStart didn't fire)
-eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
+eagle_upsert_session "$session_id" "$project" "$cwd" "" "" "$agent"
 
-[ -z "$transcript_path" ] || [ ! -f "$transcript_path" ] && exit 0
+# Reconcile from git diff, not only from edit-tool hooks. This keeps
+# anti-regression agent-agnostic: Claude, Codex, manual edits, and script edits
+# all become visible before a release boundary.
+if [ -n "$cwd" ] && [ -d "$cwd" ]; then
+    changed_files=$(eagle_changed_files_for_release "$cwd")
+    if [ -n "$changed_files" ]; then
+        eagle_reconcile_current_feature_verifications "$project" "$cwd" "$session_id" "Stop" "Repository diff detected at turn end" "$changed_files" >/dev/null
+    fi
+fi
 
 # ─── Primary: heuristic extraction from transcript ───────────
 
-request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null \
-    | grep -v '<local-command-caveat>' \
-    | grep -v '<system-reminder>' \
-    | grep -v '<command-name>' \
-    | grep -v '<command-message>' \
-    | grep -v '^\[{' \
-    | head -1 | cut -c1-500)
+request=""
+heuristic_reads=""
+heuristic_writes=""
 
-heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
-heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+    request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null \
+        | grep -v '<local-command-caveat>' \
+        | grep -v '<system-reminder>' \
+        | grep -v '<command-name>' \
+        | grep -v '<command-message>' \
+        | grep -v '^\[{' \
+        | head -1 | cut -c1-500)
+
+    if [ -z "$request" ]; then
+        request=$(jq -r '
+            select(.type == "response_item" and .payload.role == "user")
+            | .payload.content
+            | if type == "string" then .
+              elif type == "array" then [.[]? | select(.type == "input_text" or .type == "text") | .text] | join(" ")
+              else "" end
+        ' "$transcript_path" 2>/dev/null \
+            | grep -v '<local-command-caveat>' \
+            | grep -v '<system-reminder>' \
+            | grep -v '<command-name>' \
+            | grep -v '<command-message>' \
+            | grep -v '^\[{' \
+            | head -1 | cut -c1-500)
+    fi
+
+    if [ -z "$request" ]; then
+        request=$(jq -r 'select(.type == "event_msg" and .payload.type == "user_message") | .payload.message // empty' "$transcript_path" 2>/dev/null \
+            | grep -v '<local-command-caveat>' \
+            | grep -v '<system-reminder>' \
+            | head -1 | cut -c1-500)
+    fi
+
+    heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+    heuristic_writes=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Write" or .name == "Edit") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
+fi
 
 files_read="[]"
 files_modified="[]"
@@ -70,17 +109,46 @@ notes=""
 decisions=""
 gotchas=""
 key_files=""
+affected_features=""
+verified_features=""
+regression_risks=""
 
 eagle_log "INFO" "Stop: heuristic extraction complete"
 
 # ─── Bonus: eagle-summary block overrides where present ──────
 
-text_content=$(jq -rs '
-    [.[] | select(.type == "assistant")] | last |
-    if . then
-        [.message.content[]? | select(.type == "text") | .text] | join("\n")
-    else "" end
-' "$transcript_path" 2>/dev/null)
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+    text_content=$(jq -r -s '
+        [.[] | select(.type == "assistant")] | last |
+        if . then
+            [.message.content[]? | select(.type == "text") | .text] | join("\n")
+        else "" end
+    ' "$transcript_path" 2>/dev/null)
+
+    if [ -z "$text_content" ]; then
+        text_content=$(jq -r -s '
+            def content_text:
+                if type == "string" then .
+                elif type == "array" then
+                    [.[]? | select(.type == "output_text" or .type == "text") | (.text // empty)] | join("\n")
+                else "" end;
+
+            (
+                [.[] | select(.type == "response_item" and .payload.role == "assistant") | (.payload.content | content_text)]
+                | map(select(. != ""))
+                | last
+            ) // (
+                [.[] | select(.type == "event_msg" and .payload.type == "agent_message") | (.payload.message // "")]
+                | map(select(. != ""))
+                | last
+            ) // ""
+        ' "$transcript_path" 2>/dev/null)
+    fi
+fi
+
+if [ -z "$text_content" ]; then
+    text_content="$last_assistant_message"
+fi
 
 # Strip <private>...</private> blocks
 text_content=$(echo "$text_content" | sed -E '/<[Pp][Rr][Ii][Vv][Aa][Tt][Ee][^>]*>/,/<\/[Pp][Rr][Ii][Vv][Aa][Tt][Ee][[:space:]]*>/d')
@@ -99,7 +167,7 @@ if [ -n "$summary_block" ]; then
             $0 ~ "^"f":" {
                 sub("^"f":[[:space:]]*", ""); found=1; val=$0; next
             }
-            found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes|decisions|gotchas|key_files):/ { exit }
+            found && /^(request|investigated|learned|completed|next_steps|files_read|files_modified|notes|decisions|gotchas|key_files|affected_features|verified_features|regression_risks):/ { exit }
             found { val = val " " $0 }
             END { if (found) print val }
         '
@@ -114,6 +182,9 @@ if [ -n "$summary_block" ]; then
     _val=$(parse_field "$summary_block" "decisions");     [ -n "$_val" ] && decisions="$_val"
     _val=$(parse_field "$summary_block" "gotchas");       [ -n "$_val" ] && gotchas="$_val"
     _val=$(parse_field "$summary_block" "key_files");     [ -n "$_val" ] && key_files="$_val"
+    _val=$(parse_field "$summary_block" "affected_features"); [ -n "$_val" ] && affected_features="$_val"
+    _val=$(parse_field "$summary_block" "verified_features"); [ -n "$_val" ] && verified_features="$_val"
+    _val=$(parse_field "$summary_block" "regression_risks");  [ -n "$_val" ] && regression_risks="$_val"
 
     # Convert bracket-list to JSON array
     to_json_array() {
@@ -295,11 +366,33 @@ next_steps=$(echo "$next_steps" | eagle_redact)
 decisions=$(echo "$decisions" | eagle_redact)
 gotchas=$(echo "$gotchas" | eagle_redact)
 key_files=$(echo "$key_files" | eagle_redact)
+notes=$(echo "$notes" | eagle_redact)
+affected_features=$(echo "$affected_features" | eagle_redact)
+verified_features=$(echo "$verified_features" | eagle_redact)
+regression_risks=$(echo "$regression_risks" | eagle_redact)
+
+regression_notes=""
+[ -n "$affected_features" ] && regression_notes+="affected_features: $affected_features"
+if [ -n "$verified_features" ]; then
+    [ -n "$regression_notes" ] && regression_notes+="; "
+    regression_notes+="verified_features: $verified_features"
+fi
+if [ -n "$regression_risks" ]; then
+    [ -n "$regression_notes" ] && regression_notes+="; "
+    regression_notes+="regression_risks: $regression_risks"
+fi
+if [ -n "$regression_notes" ]; then
+    if [ -n "$notes" ]; then
+        notes="${notes}; ${regression_notes}"
+    else
+        notes="$regression_notes"
+    fi
+fi
 
 # ─── Write to database ─────────────────────────────────────
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
-    if eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files"; then
+    if eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent"; then
         eagle_log "INFO" "Stop: summary saved for session=$session_id"
     else
         eagle_log "ERROR" "Stop: summary insert FAILED for session=$session_id — check DB constraints"

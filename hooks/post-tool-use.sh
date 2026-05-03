@@ -19,6 +19,7 @@ input=$(eagle_read_stdin)
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent=$(eagle_agent_source_from_json "$input")
 
 hook_event=$(echo "$input" | jq -r '.hook_event_name // empty')
 
@@ -30,7 +31,7 @@ case "$hook_event" in
         [ ! -f "$EAGLE_MEM_DB" ] && exit 0
         project=$(eagle_project_from_cwd "$cwd")
         [ -z "$project" ] && exit 0
-        eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
+        eagle_upsert_session "$session_id" "$project" "$cwd" "" "" "$agent"
 
         task_id=$(echo "$input" | jq -r '.task_id // empty')
         task_subject=$(echo "$input" | jq -r '.task_subject // empty')
@@ -50,14 +51,16 @@ case "$hook_event" in
             subj_sql=$(eagle_sql_escape "$task_subject")
             desc_sql=$(eagle_sql_escape "$task_desc")
             stat_sql=$(eagle_sql_escape "$local_status")
+            agent_sql=$(eagle_sql_escape "$agent")
 
             eagle_db_pipe <<SQL
-INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, status)
-VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$stat_sql')
+INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, status, origin_agent)
+VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$stat_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     subject     = excluded.subject,
     description = excluded.description,
     status      = excluded.status,
+    origin_agent = excluded.origin_agent,
     updated_at  = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
 SQL
         fi
@@ -69,8 +72,8 @@ esac
 
 # Only track relevant tools
 case "$tool_name" in
-    Read|Write|Edit|Bash|TaskCreate|TaskUpdate) ;;
-    *) exit 0 ;;
+    Read|Write|Edit|TaskCreate|TaskUpdate|apply_patch) ;;
+    *) eagle_is_shell_tool "$tool_name" || exit 0 ;;
 esac
 
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
@@ -80,7 +83,7 @@ project=$(eagle_project_from_cwd "$cwd")
 
 # Ensure session row exists before inserting observations (FK constraint).
 # PostToolUse can race SessionStart — the session row might not exist yet.
-eagle_upsert_session "$session_id" "$project" "$cwd" "" ""
+eagle_upsert_session "$session_id" "$project" "$cwd" "" "" "$agent"
 
 # ─── Extract observation data from tool call ──────────────
 
@@ -108,10 +111,22 @@ case "$tool_name" in
         [ -n "$fp" ] && files_modified=$(printf '%s' "$fp" | jq -Rsc '[.]')
         tool_summary="Edit $fp"
         ;;
-    Bash)
-        cmd=$(echo "$input" | jq -r '.tool_input.command // empty' | cut -c1-200)
+    apply_patch)
+        patch_cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
+        patch_files=$(printf '%s\n' "$patch_cmd" | eagle_extract_apply_patch_files)
+        if [ -n "$patch_files" ]; then
+            fp=$(printf '%s\n' "$patch_files" | head -1)
+            files_modified=$(printf '%s\n' "$patch_files" | jq -Rsc 'split("\n") | map(select(. != ""))')
+            patch_count=$(printf '%s\n' "$patch_files" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+            tool_summary="apply_patch: ${patch_count} file(s)"
+        else
+            tool_summary="apply_patch"
+        fi
+        ;;
+    Bash|exec_command|shell_command|unified_exec)
+        cmd=$(eagle_tool_command_from_json "$input" | cut -c1-200)
         cmd=$(echo "$cmd" | eagle_redact)
-        tool_summary="Bash: $cmd"
+        tool_summary="${tool_name}: $cmd"
 
         tool_output=$(echo "$input" | jq -r '.tool_response.stdout // empty' 2>/dev/null)
         if [ -n "$tool_output" ]; then
@@ -147,7 +162,7 @@ esac
 
 if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
     case "$tool_name" in
-        Edit|Write)
+        Edit|Write|apply_patch)
             mod_dir="$EAGLE_MEM_DIR/mod-tracker"
             mkdir -p "$mod_dir" 2>/dev/null
             mod_file="$mod_dir/${session_id}"
@@ -167,16 +182,29 @@ if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_i
     esac
 fi
 
+# ─── Enforced anti-regression: mark affected features pending ──
+
+case "$tool_name" in
+    Edit|Write|apply_patch)
+        if [ -n "$files_modified" ] && [ "$files_modified" != "[]" ]; then
+            while IFS= read -r mod_file; do
+                [ -z "$mod_file" ] && continue
+                eagle_record_current_feature_verifications_for_file "$project" "$cwd" "$mod_file" "$session_id" "$tool_name" "File changed by ${tool_name}" >/dev/null
+            done < <(echo "$files_modified" | jq -r '.[]?' 2>/dev/null)
+        fi
+        ;;
+esac
+
 # ─── Dispatch to extracted responsibilities ───────────────
 
-eagle_posttool_mirror_writes "$tool_name" "$fp" "$session_id" "$project"
-eagle_posttool_mirror_tasks "$tool_name" "$session_id" "$project" "$input"
+eagle_posttool_mirror_writes "$tool_name" "$fp" "$session_id" "$project" "$agent"
+eagle_posttool_mirror_tasks "$tool_name" "$session_id" "$project" "$input" "$agent"
 eagle_posttool_stale_hint "$tool_name" "$fp" "$project"
 eagle_posttool_decision_surface "$tool_name" "$fp" "$project"
 
 # ─── Record observation ──────────────────────────────────
 
-if ! eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category"; then
+if ! eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category" "$agent"; then
     eagle_log "ERROR" "PostToolUse: observation insert failed for session=$session_id tool=$tool_name"
 fi
 

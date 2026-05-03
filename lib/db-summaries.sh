@@ -19,12 +19,14 @@ eagle_insert_summary() {
     local decisions; decisions=$(eagle_sql_escape "${11:-}")
     local gotchas; gotchas=$(eagle_sql_escape "${12:-}")
     local key_files; key_files=$(eagle_sql_escape "${13:-}")
+    local agent; agent=$(eagle_sql_escape "${14:-$(eagle_agent_source)}")
 
     eagle_db_pipe <<SQL
-INSERT INTO summaries (session_id, project, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files)
+INSERT INTO summaries (session_id, project, agent, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files)
 VALUES (
     '$session_id',
     '$project',
+    '$agent',
     '$request',
     '$investigated',
     '$learned',
@@ -39,6 +41,7 @@ VALUES (
 )
 ON CONFLICT(session_id) DO UPDATE SET
     project        = excluded.project,
+    agent          = COALESCE(NULLIF(excluded.agent, ''), summaries.agent),
     request        = COALESCE(NULLIF(excluded.request, ''), summaries.request),
     investigated   = COALESCE(NULLIF(excluded.investigated, ''), summaries.investigated),
     learned        = COALESCE(NULLIF(excluded.learned, ''), summaries.learned),
@@ -57,7 +60,7 @@ eagle_get_recent_summaries() {
     local project; project=$(eagle_sql_escape "$1")
     local limit; limit=$(eagle_sql_int "${2:-5}")
 
-    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.decisions, s.gotchas, s.key_files
+    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.decisions, s.gotchas, s.key_files, s.agent
               FROM summaries s
               WHERE s.project = '$project'
               AND s.request NOT LIKE '%<local-command-caveat>%'
@@ -77,7 +80,7 @@ eagle_search_summaries() {
         where_clause="AND s.project = '$project'"
     fi
 
-    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.project, s.decisions, s.gotchas, s.key_files
+    eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.project, s.decisions, s.gotchas, s.key_files, s.agent
               FROM summaries s
               JOIN summaries_fts f ON f.rowid = s.id
               WHERE summaries_fts MATCH '$query'

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════
 # Eagle Mem — Feature management
-# eagle-mem feature [list|show|verify|add]
+# eagle-mem feature [list|show|verify|pending|waive|add]
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -59,8 +59,76 @@ case "$subcommand" in
                 *) notes="$1"; shift ;;
             esac
         done
+        fid=$(eagle_get_feature_id "$project" "$name")
+        if [ -z "$fid" ]; then
+            eagle_err "Feature not found: $name"
+            exit 1
+        fi
         eagle_verify_feature "$project" "$name" "$notes"
+        resolved=$(eagle_resolve_pending_feature_verifications "$project" "$name" "verified" "$notes" | tail -1)
         eagle_ok "Feature '$name' marked as verified"
+        if [ "${resolved:-0}" -gt 0 ] 2>/dev/null; then
+            eagle_info "Resolved pending verification records: $resolved"
+        fi
+        ;;
+
+    pending)
+        results=$(eagle_list_pending_feature_verifications "$project" 50)
+        if [ -z "$results" ]; then
+            eagle_ok "No pending feature verifications for '$project'"
+            exit 0
+        fi
+
+        echo -e "  ${BOLD}ID   Feature                        File                         Trigger   Diff${RESET}"
+        echo -e "  ${DIM}──── ────────────────────────────── ──────────────────────────── ───────── ────────────${RESET}"
+        while IFS='|' read -r id feat file reason trigger created smoke fingerprint; do
+            [ -z "$id" ] && continue
+            feat_display="${feat:0:30}"
+            file_display="${file:0:28}"
+            trigger_display="${trigger:-hook}"
+            fingerprint_display="${fingerprint:-unknown}"
+            printf "  %-4s %-30s %-28s %-9s %-12s\n" "$id" "$feat_display" "$file_display" "$trigger_display" "$fingerprint_display"
+            [ -n "$reason" ] && echo -e "       ${DIM}${reason}${RESET}"
+            [ -n "$smoke" ] && echo -e "       ${CYAN}smoke:${RESET} $smoke"
+            [ -n "$created" ] && echo -e "       ${DIM}created: $created${RESET}"
+        done <<< "$results"
+        echo ""
+        eagle_info "Verify after testing: eagle-mem feature verify <name> --notes \"what passed\""
+        eagle_info "Waive intentionally: eagle-mem feature waive <id> --reason \"why safe\""
+        ;;
+
+    waive)
+        id="${1:-}"
+        [ -z "$id" ] && { eagle_err "Usage: eagle-mem feature waive <id> --reason <text>"; exit 1; }
+        case "$id" in
+            *[!0-9]*)
+                eagle_err "Invalid ID: '$id' (must be numeric)"
+                exit 1
+                ;;
+        esac
+        shift
+        reason=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --reason|--notes)
+                    if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+                        eagle_err "$1 requires a value"
+                        exit 1
+                    fi
+                    reason="$2"
+                    shift 2
+                    ;;
+                *) reason="$1"; shift ;;
+            esac
+        done
+        [ -z "$reason" ] && { eagle_err "Usage: eagle-mem feature waive <id> --reason <text>"; exit 1; }
+        waived=$(eagle_waive_pending_feature_verification "$project" "$id" "$reason" | tail -1)
+        if [ "${waived:-0}" -gt 0 ] 2>/dev/null; then
+            eagle_ok "Pending verification #$id waived"
+        else
+            eagle_err "No pending verification found with ID $id"
+            exit 1
+        fi
         ;;
 
     add)
@@ -104,7 +172,7 @@ case "$subcommand" in
 
     *)
         eagle_err "Unknown feature command: $subcommand"
-        eagle_info "Usage: eagle-mem feature [list|show|verify|add]"
+        eagle_info "Usage: eagle-mem feature [list|show|verify|pending|waive|add]"
         exit 1
         ;;
 esac

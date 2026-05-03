@@ -15,6 +15,7 @@ eagle_insert_observation() {
     local output_bytes="${7:-}"
     local output_lines="${8:-}"
     local command_category; command_category=$(eagle_sql_escape "${9:-}")
+    local agent; agent=$(eagle_sql_escape "${10:-$(eagle_agent_source)}")
 
     local extra_cols=""
     local extra_vals=""
@@ -23,8 +24,8 @@ eagle_insert_observation() {
         extra_vals=", $(eagle_sql_int "$output_bytes"), $(eagle_sql_int "$output_lines"), '$command_category'"
     fi
 
-    eagle_db "INSERT INTO observations (session_id, project, tool_name, tool_input_summary, files_read, files_modified${extra_cols})
-              SELECT '$session_id', '$project', '$tool_name', '$tool_input_summary', '$files_read', '$files_modified'${extra_vals}
+    eagle_db "INSERT INTO observations (session_id, project, agent, tool_name, tool_input_summary, files_read, files_modified${extra_cols})
+              SELECT '$session_id', '$project', '$agent', '$tool_name', '$tool_input_summary', '$files_read', '$files_modified'${extra_vals}
               WHERE NOT EXISTS (
                   SELECT 1 FROM observations
                   WHERE session_id = '$session_id'

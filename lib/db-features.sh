@@ -58,6 +58,228 @@ eagle_verify_feature() {
         WHERE project = '$project' AND name = '$name';"
 }
 
+eagle_find_feature_impacts_for_file() {
+    local project; project=$(eagle_sql_escape "$1")
+    local file_path="$2"
+    local fname; fname=$(basename "$file_path")
+    local file_esc; file_esc=$(eagle_sql_escape "$file_path")
+    local fname_esc; fname_esc=$(eagle_sql_escape "$fname")
+    local file_like; file_like=$(eagle_like_escape "$file_esc")
+    local fname_like; fname_like=$(eagle_like_escape "$fname_esc")
+
+    eagle_db "SELECT DISTINCT f.id, f.name, f.description, f.last_verified_at,
+        ff.file_path,
+        (SELECT GROUP_CONCAT(fst.command, '; ')
+         FROM feature_smoke_tests fst WHERE fst.feature_id = f.id) as smoke_tests
+        FROM features f
+        JOIN feature_files ff ON ff.feature_id = f.id
+        WHERE f.project = '$project'
+        AND f.status = 'active'
+        AND (
+            ff.file_path = '$file_esc'
+            OR ff.file_path LIKE '%/$file_like' ESCAPE '\\'
+            OR '$file_esc' LIKE '%' || ff.file_path ESCAPE '\\'
+            OR ff.file_path LIKE '%$fname_like' ESCAPE '\\'
+            OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\'
+        )
+        ORDER BY f.updated_at DESC
+        LIMIT 10;"
+}
+
+eagle_record_pending_feature_verifications() {
+    local project="$1"
+    local file_path="$2"
+    local session_id="${3:-}"
+    local trigger_tool="${4:-}"
+    local reason="${5:-File changed}"
+    local change_fingerprint="${6:-}"
+
+    local impacts
+    impacts=$(eagle_find_feature_impacts_for_file "$project" "$file_path")
+    [ -z "$impacts" ] && return 0
+
+    local p_esc; p_esc=$(eagle_sql_escape "$project")
+    local fp_esc; fp_esc=$(eagle_sql_escape "$file_path")
+    local sid_esc; sid_esc=$(eagle_sql_escape "$session_id")
+    local tool_esc; tool_esc=$(eagle_sql_escape "$trigger_tool")
+    local reason_esc; reason_esc=$(eagle_sql_escape "$reason")
+    local fp_hash_esc; fp_hash_esc=$(eagle_sql_escape "$change_fingerprint")
+
+    while IFS='|' read -r feature_id feature_name _desc _verified _matched_file _smoke; do
+        [ -z "$feature_id" ] && continue
+        local fid; fid=$(eagle_sql_int "$feature_id")
+        local name_esc; name_esc=$(eagle_sql_escape "$feature_name")
+
+        if [ -n "$change_fingerprint" ]; then
+            already_resolved=$(eagle_db "SELECT 1 FROM pending_feature_verifications
+                WHERE project = '$p_esc'
+                  AND feature_id = $fid
+                  AND file_path = '$fp_esc'
+                  AND change_fingerprint = '$fp_hash_esc'
+                  AND status IN ('verified', 'waived')
+                LIMIT 1;")
+            [ -n "$already_resolved" ] && continue
+        fi
+
+        eagle_db "INSERT INTO pending_feature_verifications
+            (project, feature_id, feature_name, file_path, reason, source_session_id, trigger_tool, change_fingerprint)
+            VALUES ('$p_esc', $fid, '$name_esc', '$fp_esc', '$reason_esc', '$sid_esc', '$tool_esc', '$fp_hash_esc')
+            ON CONFLICT(project, feature_id, file_path) WHERE status = 'pending' DO UPDATE SET
+                feature_name = excluded.feature_name,
+                reason = excluded.reason,
+                source_session_id = excluded.source_session_id,
+                trigger_tool = excluded.trigger_tool,
+                change_fingerprint = excluded.change_fingerprint,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');" >/dev/null
+    done <<< "$impacts"
+
+    printf '%s\n' "$impacts"
+}
+
+eagle_record_current_feature_verifications_for_file() {
+    local project="$1"
+    local cwd="$2"
+    local file_path="$3"
+    local session_id="${4:-}"
+    local trigger_tool="${5:-}"
+    local reason="${6:-File changed}"
+
+    local norm_file
+    norm_file=$(eagle_project_file_path "$cwd" "$file_path")
+    [ -z "$norm_file" ] && return 0
+
+    local fingerprint
+    fingerprint=$(eagle_change_fingerprint_for_file "$cwd" "$norm_file")
+    eagle_record_pending_feature_verifications "$project" "$norm_file" "$session_id" "$trigger_tool" "$reason" "$fingerprint"
+}
+
+eagle_reconcile_current_feature_verifications() {
+    local project="$1"
+    local cwd="$2"
+    local session_id="${3:-}"
+    local trigger_tool="${4:-}"
+    local reason="${5:-Repository change detected}"
+    local changed_files="${6:-}"
+
+    [ -z "$changed_files" ] && return 0
+    while IFS= read -r changed_file; do
+        [ -z "$changed_file" ] && continue
+        eagle_record_current_feature_verifications_for_file "$project" "$cwd" "$changed_file" "$session_id" "$trigger_tool" "$reason" >/dev/null
+    done <<< "$changed_files"
+}
+
+eagle_list_current_pending_feature_verifications() {
+    local project="$1"
+    local cwd="$2"
+    local changed_files="${3:-}"
+    local limit; limit=$(eagle_sql_int "${4:-20}")
+    [ "$limit" -eq 0 ] && limit=20
+
+    [ -z "$changed_files" ] && return 0
+
+    local p_esc; p_esc=$(eagle_sql_escape "$project")
+    local emitted=0
+    local seen="|"
+
+    while IFS= read -r changed_file; do
+        [ -z "$changed_file" ] && continue
+        [ "$emitted" -ge "$limit" ] && break
+
+        local norm_file fingerprint impacts fp_esc fp_hash_esc
+        norm_file=$(eagle_project_file_path "$cwd" "$changed_file")
+        [ -z "$norm_file" ] && continue
+        fingerprint=$(eagle_change_fingerprint_for_file "$cwd" "$norm_file")
+        impacts=$(eagle_find_feature_impacts_for_file "$project" "$norm_file")
+        [ -z "$impacts" ] && continue
+
+        fp_esc=$(eagle_sql_escape "$norm_file")
+        fp_hash_esc=$(eagle_sql_escape "$fingerprint")
+
+        while IFS='|' read -r feature_id _feature_name _desc _verified _matched_file _smoke; do
+            [ -z "$feature_id" ] && continue
+            [ "$emitted" -ge "$limit" ] && break
+
+            local fid row row_id
+            fid=$(eagle_sql_int "$feature_id")
+            row=$(eagle_db "SELECT p.id, p.feature_name, p.file_path, p.reason, p.trigger_tool, p.created_at,
+                COALESCE((SELECT GROUP_CONCAT(fst.command, '; ')
+                 FROM feature_smoke_tests fst WHERE fst.feature_id = p.feature_id), '') as smoke_tests,
+                substr(p.change_fingerprint, 1, 12) as fingerprint
+                FROM pending_feature_verifications p
+                WHERE p.project = '$p_esc'
+                  AND p.feature_id = $fid
+                  AND p.file_path = '$fp_esc'
+                  AND p.change_fingerprint = '$fp_hash_esc'
+                  AND p.status = 'pending'
+                ORDER BY p.updated_at DESC, p.id DESC
+                LIMIT 1;")
+            [ -z "$row" ] && continue
+            row_id=${row%%|*}
+            case "$seen" in *"|$row_id|"*) continue ;; esac
+            seen+="$row_id|"
+            printf '%s\n' "$row"
+            emitted=$((emitted + 1))
+        done <<< "$impacts"
+    done <<< "$changed_files"
+}
+
+eagle_count_pending_feature_verifications() {
+    local project; project=$(eagle_sql_escape "$1")
+    eagle_db "SELECT COUNT(*) FROM pending_feature_verifications
+        WHERE project = '$project' AND status = 'pending';"
+}
+
+eagle_list_pending_feature_verifications() {
+    local project; project=$(eagle_sql_escape "$1")
+    local limit; limit=$(eagle_sql_int "${2:-20}")
+
+    eagle_db "SELECT p.id, p.feature_name, p.file_path, p.reason, p.trigger_tool, p.created_at,
+        COALESCE((SELECT GROUP_CONCAT(fst.command, '; ')
+         FROM feature_smoke_tests fst WHERE fst.feature_id = p.feature_id), '') as smoke_tests,
+        substr(p.change_fingerprint, 1, 12) as fingerprint
+        FROM pending_feature_verifications p
+        WHERE p.project = '$project' AND p.status = 'pending'
+        ORDER BY p.updated_at DESC, p.id DESC
+        LIMIT $limit;"
+}
+
+eagle_resolve_pending_feature_verifications() {
+    local project; project=$(eagle_sql_escape "$1")
+    local name; name=$(eagle_sql_escape "$2")
+    local status; status=$(eagle_sql_escape "${3:-verified}")
+    local notes; notes=$(eagle_sql_escape "${4:-}")
+
+    eagle_db_pipe <<SQL
+UPDATE pending_feature_verifications
+SET status = '$status',
+    notes = '$notes',
+    resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE project = '$project'
+  AND feature_name = '$name'
+  AND status = 'pending';
+SELECT changes();
+SQL
+}
+
+eagle_waive_pending_feature_verification() {
+    local project; project=$(eagle_sql_escape "$1")
+    local id; id=$(eagle_sql_int "$2")
+    local notes; notes=$(eagle_sql_escape "${3:-}")
+
+    eagle_db_pipe <<SQL
+UPDATE pending_feature_verifications
+SET status = 'waived',
+    notes = '$notes',
+    resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE project = '$project'
+  AND id = $id
+  AND status = 'pending';
+SELECT changes();
+SQL
+}
+
 eagle_get_feature_id() {
     local project; project=$(eagle_sql_escape "$1")
     local name; name=$(eagle_sql_escape "$2")

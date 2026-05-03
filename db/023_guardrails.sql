@@ -11,8 +11,9 @@ CREATE TABLE IF NOT EXISTS guardrails (
     source       TEXT NOT NULL DEFAULT 'manual',
     active       INTEGER NOT NULL DEFAULT 1,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    UNIQUE(project, source, file_pattern, rule)
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_guardrails_project ON guardrails(project, active);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guardrails_dedup
+    ON guardrails(project, COALESCE(file_pattern, ''), rule);

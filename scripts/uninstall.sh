@@ -10,6 +10,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
+. "$LIB_DIR/codex-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -31,6 +32,12 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     eagle_ok "Hooks removed from settings.json"
 else
     eagle_warn "Could not patch settings.json (jq not found or file missing)"
+fi
+
+if eagle_remove_codex_hooks; then
+    eagle_ok "Hooks removed from Codex hooks.json"
+else
+    eagle_warn "Could not patch Codex hooks.json (jq not found or file missing)"
 fi
 
 # ─── Remove skill symlinks ────────────────────────────────

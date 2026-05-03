@@ -1,7 +1,7 @@
 {
   "name": "eagle-mem",
-  "version": "4.6.2",
-  "description": "Context that survives /compact for Claude Code — SQLite + FTS5, no daemon, no bloat",
+  "version": "4.7.0",
+  "description": "Context that survives /compact for Claude Code and Codex — SQLite + FTS5, no daemon, no bloat",
   "bin": {
     "eagle-mem": "bin/eagle-mem"
   },
@@ -15,6 +15,7 @@
   ],
   "keywords": [
     "claude-code",
+    "codex",
     "memory",
     "sqlite",
     "fts5",
@@ -27,5 +28,8 @@
     "type": "git",
     "url": "git+https://github.com/eagleisbatman/eagle-mem.git"
   },
-  "homepage": "https://github.com/eagleisbatman/eagle-mem#readme"
+  "homepage": "https://eagleisbatman.github.io/eagle-mem/",
+  "bugs": {
+    "url": "https://github.com/eagleisbatman/eagle-mem/issues"
+  }
 }

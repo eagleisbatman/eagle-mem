@@ -21,7 +21,8 @@ eagle_add_guardrail() {
     file_pattern=$(eagle_sql_escape "$file_pattern")
     eagle_db "INSERT INTO guardrails (project, file_pattern, rule, source)
         VALUES ('$project', '$file_pattern', '$rule', '$source')
-        ON CONFLICT(project, source, file_pattern, rule) DO UPDATE SET
+        ON CONFLICT DO UPDATE SET
+            source = excluded.source,
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
 }
 

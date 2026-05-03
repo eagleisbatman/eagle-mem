@@ -55,7 +55,10 @@ case "$subcommand" in
             esac
         done
 
-        eagle_add_guardrail "$project" "$rule" "$file_pattern" "manual"
+        if ! eagle_add_guardrail "$project" "$rule" "$file_pattern" "manual"; then
+            eagle_err "Failed to add guardrail. Check $EAGLE_MEM_LOG for SQLite details."
+            exit 1
+        fi
         eagle_ok "Guardrail added for project: $project"
         if [ -n "$file_pattern" ]; then
             eagle_info "File pattern: $file_pattern"

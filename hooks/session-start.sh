@@ -24,6 +24,8 @@ session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 source_type=$(echo "$input" | jq -r '.source // empty')
 model=$(echo "$input" | jq -r '.model // empty')
+agent=$(eagle_agent_source_from_json "$input")
+agent_label=$(eagle_agent_label "$agent")
 
 [ -z "$session_id" ] && exit 0
 
@@ -32,9 +34,9 @@ project=$(eagle_project_from_cwd "$cwd")
 
 p_esc=$(eagle_sql_escape "$project")
 
-eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type"
+eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type agent=$agent"
 
-eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type"
+eagle_upsert_session "$session_id" "$project" "$cwd" "$model" "$source_type" "$agent"
 eagle_abandon_stale_sessions "$session_id"
 
 # ─── Reset turn counter on compact/clear ─────────────────
@@ -90,7 +92,8 @@ fi
 
 # ─── Gather stats ────────────────────────────────────────
 
-stat_sessions=0; stat_summaries=0; stat_with_summaries=0; stat_memories=0
+stat_sessions=0; stat_sessions_claude=0; stat_sessions_codex=0
+stat_summaries=0; stat_with_summaries=0; stat_memories=0
 stat_tasks_pending=0; stat_tasks_progress=0; stat_tasks_done=0
 stat_chunks=0; stat_observations=0; stat_plans=0
 stat_last_active="never"; stat_last_summary=""
@@ -98,6 +101,8 @@ stat_last_active="never"; stat_last_summary=""
 while IFS='|' read -r key val; do
     case "$key" in
         sessions)        stat_sessions="$val" ;;
+        sessions_claude) stat_sessions_claude="$val" ;;
+        sessions_codex)  stat_sessions_codex="$val" ;;
         summaries)       stat_summaries="$val" ;;
         with_summaries)  stat_with_summaries="$val" ;;
         memories)        stat_memories="$val" ;;
@@ -132,7 +137,12 @@ eagle_banner="======================================
        Eagle Mem Recall Ready
 ======================================
  Project      | $project
+ Agent        | $agent_label
  Sessions     | $stat_sessions ($stat_with_summaries with summaries)"
+if [ "$stat_sessions_codex" -gt 0 ] || [ "$stat_sessions_claude" -gt 0 ]; then
+    eagle_banner+="
+ Sources      | Claude $stat_sessions_claude, Codex $stat_sessions_codex"
+fi
 [ "$stat_memories" -gt 0 ] && eagle_banner+="
  Memories     | $stat_memories stored"
 [ "$stat_plans" -gt 0 ] && eagle_banner+="
@@ -188,10 +198,13 @@ if [ -n "$recent" ]; then
     context+="
 === Eagle Mem: Recent Recall ===
 "
-    while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files; do
+    while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files summary_agent; do
         [ -z "$request" ] && [ -z "$completed" ] && continue
+        summary_agent_label=$(eagle_agent_label "$summary_agent")
         context+="
 --- $created_at ---"
+        [ -n "$summary_agent" ] && context+="
+Source: $summary_agent_label"
         [ -n "$request" ] && context+="
 Request: $request"
         [ -n "$completed" ] && context+="
@@ -213,7 +226,7 @@ fi
 
 # ─── Memories (skip if none) ─────────────────────────────
 
-memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at,
+memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent,
     CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
     FROM claude_memories
     WHERE project = '$p_esc'
@@ -223,8 +236,9 @@ if [ -n "$memories" ]; then
     context+="
 === Eagle Mem: Stored Memories ===
 "
-    while IFS='|' read -r mname mtype mdesc _fpath _updated days_ago; do
+    while IFS='|' read -r mname mtype mdesc _fpath _updated morigin days_ago; do
         [ -z "$mname" ] && continue
+        origin_label=$(eagle_agent_label "$morigin")
         age_label=""
         if [ -n "$days_ago" ] && [ "$days_ago" -gt 0 ] 2>/dev/null; then
             if [ "$days_ago" -eq 1 ]; then
@@ -235,7 +249,7 @@ if [ -n "$memories" ]; then
         else
             age_label=" (today)"
         fi
-        context+="  - [$mtype] $mname: $mdesc$age_label
+        context+="  - [$mtype][$origin_label] $mname: $mdesc$age_label
 "
     done <<< "$memories"
 fi
@@ -247,16 +261,17 @@ if [ -n "$plans" ]; then
     context+="
 === Eagle Mem: Plans ===
 "
-    while IFS='|' read -r ptitle _pproj _fpath _updated; do
+    while IFS='|' read -r ptitle _pproj _fpath _updated porigin; do
         [ -z "$ptitle" ] && continue
-        context+="  - $ptitle
+        origin_label=$(eagle_agent_label "$porigin")
+        context+="  - [$origin_label] $ptitle
 "
     done <<< "$plans"
 fi
 
 # ─── Tasks (skip if none) ────────────────────────────────
 
-synced_tasks=$(eagle_db "SELECT subject, status, blocked_by FROM claude_tasks
+synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM claude_tasks
     WHERE project = '$p_esc'
     AND status IN ('in_progress', 'pending')
     AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
@@ -268,15 +283,38 @@ if [ -n "$synced_tasks" ]; then
     context+="
 === Eagle Mem: Tasks ===
 "
-    while IFS='|' read -r tsubject tstatus tblocked; do
+    while IFS='|' read -r tsubject tstatus tblocked torigin; do
         [ -z "$tsubject" ] && continue
+        origin_label=$(eagle_agent_label "$torigin")
         block_marker=""
         if [ "$tblocked" != "[]" ] && [ -n "$tblocked" ]; then
             block_marker=" (blocked)"
         fi
-        context+="  - [$tstatus] $tsubject$block_marker
+        context+="  - [$tstatus][$origin_label] $tsubject$block_marker
 "
     done <<< "$synced_tasks"
+fi
+
+# ─── Pending feature verifications ───────────────────────
+
+pending_features=$(eagle_list_pending_feature_verifications "$project" 10 2>/dev/null)
+if [ -n "$pending_features" ]; then
+    context+="
+=== Eagle Mem: Pending Feature Verification ===
+Release-boundary commands are blocked until these are verified or waived.
+"
+    while IFS='|' read -r pf_id pf_name pf_file pf_reason _pf_trigger _pf_created pf_smoke pfingerprint; do
+        [ -z "$pf_id" ] && continue
+        context+="  - #${pf_id} ${pf_name}"
+        [ -n "$pf_file" ] && context+=" (${pf_file})"
+        [ -n "$pf_reason" ] && context+=" — ${pf_reason}"
+        [ -n "$pf_smoke" ] && context+=" | smoke: ${pf_smoke}"
+        [ -n "$pfingerprint" ] && context+=" | diff: ${pfingerprint}"
+        context+="
+"
+    done <<< "$pending_features"
+    context+="Resolve with: eagle-mem feature verify <name> --notes \"what passed\"; or eagle-mem feature waive <id> --reason \"why safe\".
+"
 fi
 
 # ─── Core files (hot file hints from curator) ───────────
@@ -334,12 +372,15 @@ next_steps: [concrete actions]
 key_files: [path — role]
 files_read: [path, ...]
 files_modified: [path, ...]
+affected_features: [feature, ...]
+verified_features: [feature, ...]
+regression_risks: [risk, ...]
 </eagle-summary>
 "
 fi
 
 if [ -n "$context" ]; then
-    echo "$context"
+    eagle_emit_context_for_agent "$agent" "SessionStart" "$context"
 fi
 
 exit 0

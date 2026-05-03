@@ -9,6 +9,7 @@ eagle_capture_claude_memory() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
+    local agent="${4:-$(eagle_agent_source)}"
 
     [ ! -f "$file_path" ] && return 0
 
@@ -28,7 +29,7 @@ eagle_capture_claude_memory() {
     morigin=$(_fm_field "originSessionId")
     [ -z "$morigin" ] && morigin="$session_id"
 
-    local fp_sql proj_sql name_sql desc_sql type_sql content_sql hash_sql origin_sql
+    local fp_sql proj_sql name_sql desc_sql type_sql content_sql hash_sql origin_sql agent_sql
     fp_sql=$(eagle_sql_escape "$file_path")
     proj_sql=$(eagle_sql_escape "$project")
     name_sql=$(eagle_sql_escape "$mname")
@@ -37,10 +38,11 @@ eagle_capture_claude_memory() {
     content_sql=$(eagle_sql_escape "$body")
     hash_sql=$(eagle_sql_escape "$chash")
     origin_sql=$(eagle_sql_escape "$morigin")
+    agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id)
-VALUES ('$proj_sql', '$fp_sql', '$name_sql', '$desc_sql', '$type_sql', '$content_sql', '$hash_sql', '$origin_sql')
+INSERT INTO claude_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id, origin_agent)
+VALUES ('$proj_sql', '$fp_sql', '$name_sql', '$desc_sql', '$type_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     memory_name     = excluded.memory_name,
     description     = excluded.description,
@@ -48,6 +50,7 @@ ON CONFLICT(file_path) DO UPDATE SET
     content         = excluded.content,
     content_hash    = excluded.content_hash,
     origin_session_id = excluded.origin_session_id,
+    origin_agent    = excluded.origin_agent,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE claude_memories.content_hash != excluded.content_hash;
 SQL
@@ -71,7 +74,7 @@ eagle_search_claude_memories() {
 
     eagle_db "SELECT m.memory_name, m.memory_type, m.description,
                      replace(substr(m.content, 1, 200), char(10), ' '),
-                     m.file_path, m.updated_at
+                     m.file_path, m.updated_at, m.origin_agent
               FROM claude_memories m
               JOIN claude_memories_fts f ON f.rowid = m.id
               WHERE claude_memories_fts MATCH '$query'
@@ -90,7 +93,7 @@ eagle_list_claude_memories() {
         where_clause="WHERE project = '$project'"
     fi
 
-    eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at
+    eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent
               FROM claude_memories
               $where_clause
               ORDER BY updated_at DESC
@@ -101,6 +104,7 @@ eagle_capture_claude_plan() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
+    local agent="${4:-$(eagle_agent_source)}"
 
     [ ! -f "$file_path" ] && return 0
 
@@ -111,22 +115,24 @@ eagle_capture_claude_plan() {
     title=$(awk '/^# /{print; exit}' "$file_path" | sed 's/^# //')
     content=$(cat "$file_path")
 
-    local fp_sql proj_sql title_sql content_sql hash_sql origin_sql
+    local fp_sql proj_sql title_sql content_sql hash_sql origin_sql agent_sql
     fp_sql=$(eagle_sql_escape "$file_path")
     proj_sql=$(eagle_sql_escape "$project")
     title_sql=$(eagle_sql_escape "$title")
     content_sql=$(eagle_sql_escape "$content")
     hash_sql=$(eagle_sql_escape "$chash")
     origin_sql=$(eagle_sql_escape "$session_id")
+    agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_plans (project, file_path, title, content, content_hash, origin_session_id)
-VALUES ('$proj_sql', '$fp_sql', '$title_sql', '$content_sql', '$hash_sql', '$origin_sql')
+INSERT INTO claude_plans (project, file_path, title, content, content_hash, origin_session_id, origin_agent)
+VALUES ('$proj_sql', '$fp_sql', '$title_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     title           = excluded.title,
     content         = excluded.content,
     content_hash    = excluded.content_hash,
     origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), claude_plans.origin_session_id),
+    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), claude_plans.origin_agent),
     project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE claude_plans.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE claude_plans.content_hash != excluded.content_hash;
@@ -151,7 +157,7 @@ eagle_search_claude_plans() {
 
     eagle_db "SELECT p.title, p.project,
                      replace(substr(p.content, 1, 200), char(10), ' '),
-                     p.file_path, p.updated_at
+                     p.file_path, p.updated_at, p.origin_agent
               FROM claude_plans p
               JOIN claude_plans_fts f ON f.rowid = p.id
               WHERE claude_plans_fts MATCH '$query'
@@ -170,7 +176,7 @@ eagle_list_claude_plans() {
         where_clause="WHERE project = '$project'"
     fi
 
-    eagle_db "SELECT title, project, file_path, updated_at
+    eagle_db "SELECT title, project, file_path, updated_at, origin_agent
               FROM claude_plans
               $where_clause
               ORDER BY updated_at DESC
@@ -181,6 +187,7 @@ eagle_capture_claude_task() {
     local file_path="$1"
     local session_id="${2:-}"
     local project="${3:-}"
+    local agent="${4:-$(eagle_agent_source)}"
 
     [ ! -f "$file_path" ] && return 0
 
@@ -201,7 +208,7 @@ eagle_capture_claude_task() {
 
     [ -z "$task_id" ] && return 0
 
-    local fp_sql proj_sql sid_sql tid_sql subj_sql desc_sql af_sql status_sql blocks_sql bb_sql hash_sql
+    local fp_sql proj_sql sid_sql tid_sql subj_sql desc_sql af_sql status_sql blocks_sql bb_sql hash_sql agent_sql
     fp_sql=$(eagle_sql_escape "$file_path")
     proj_sql=$(eagle_sql_escape "$project")
     sid_sql=$(eagle_sql_escape "$session_id")
@@ -213,10 +220,11 @@ eagle_capture_claude_task() {
     blocks_sql=$(eagle_sql_escape "$blocks")
     bb_sql=$(eagle_sql_escape "$blocked_by")
     hash_sql=$(eagle_sql_escape "$chash")
+    agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash)
-VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$af_sql', '$status_sql', '$blocks_sql', '$bb_sql', '$hash_sql')
+INSERT INTO claude_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash, origin_agent)
+VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$af_sql', '$status_sql', '$blocks_sql', '$bb_sql', '$hash_sql', '$agent_sql')
 ON CONFLICT(file_path) DO UPDATE SET
     subject         = excluded.subject,
     description     = excluded.description,
@@ -225,6 +233,7 @@ ON CONFLICT(file_path) DO UPDATE SET
     blocks          = excluded.blocks,
     blocked_by      = excluded.blocked_by,
     content_hash    = excluded.content_hash,
+    origin_agent    = excluded.origin_agent,
     project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE claude_tasks.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE claude_tasks.content_hash != excluded.content_hash;
@@ -241,7 +250,7 @@ eagle_list_claude_tasks() {
         where_clause="WHERE project = '$project'"
     fi
 
-    eagle_db "SELECT subject, status, source_session_id, source_task_id, updated_at
+    eagle_db "SELECT subject, status, source_session_id, source_task_id, updated_at, origin_agent
               FROM claude_tasks
               $where_clause
               ORDER BY updated_at DESC
@@ -266,7 +275,7 @@ eagle_search_claude_tasks() {
 
     eagle_db "SELECT t.subject, t.status,
                      replace(substr(t.description, 1, 200), char(10), ' '),
-                     t.source_session_id, t.source_task_id, t.updated_at
+                     t.source_session_id, t.source_task_id, t.updated_at, t.origin_agent
               FROM claude_tasks t
               JOIN claude_tasks_fts f ON f.rowid = t.id
               WHERE claude_tasks_fts MATCH '$query'

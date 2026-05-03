@@ -20,6 +20,7 @@ input=$(eagle_read_stdin)
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 user_prompt=$(echo "$input" | jq -r '.prompt // empty')
+agent=$(eagle_agent_source_from_json "$input")
 
 [ -z "$user_prompt" ] && exit 0
 
@@ -60,7 +61,10 @@ fi
 
 # Skip short prompts — not enough signal for meaningful search
 word_count=$(echo "$user_prompt" | wc -w | tr -d ' ')
-[ "$word_count" -lt 3 ] && { [ -n "$context" ] && echo "$context"; exit 0; }
+if [ "$word_count" -lt 3 ]; then
+    eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
+    exit 0
+fi
 
 # Build FTS5 query from significant words (drop stop words, take first 6)
 fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:lower:]' | \
@@ -75,7 +79,10 @@ fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:low
         }
     }')
 
-[ -z "$fts_query" ] && { [ -n "$context" ] && echo "$context"; exit 0; }
+if [ -z "$fts_query" ]; then
+    eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
+    exit 0
+fi
 
 # Search for relevant past summaries (cross-session)
 results=$(eagle_search_summaries "$fts_query" "$project" 3)
@@ -83,9 +90,10 @@ results=$(eagle_search_summaries "$fts_query" "$project" 3)
 if [ -n "$results" ]; then
     context+="=== Eagle Mem: Relevant Recall ===
 "
-    while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files; do
+    while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files summary_agent; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
-        context+="[$created_at] "
+        origin_label=$(eagle_agent_label "$summary_agent")
+        context+="[$created_at][$origin_label] "
         [ -n "$req" ] && context+="$req"
         [ -n "$completed" ] && context+=" → $completed"
         [ -n "$learned" ] && context+=" (Learned: $learned)"
@@ -126,5 +134,5 @@ IMPORTANT: When Eagle Mem finds relevant memories or code for the user's prompt,
 === Eagle Mem: Persistent Memory ===
 "
 
-echo "$context"
+eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
 exit 0

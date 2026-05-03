@@ -9,15 +9,18 @@
 
 **Context that survives `/compact`.**
 
+**v4.7.0 adds first-class Codex support and enforced anti-regression checks.**
+Claude Code and Codex can now share the same local Eagle Mem database, while every captured row records which agent created it.
+
 ## The Problem
 
-Claude Code starts every session with amnesia. It doesn't remember what you built yesterday, what decisions you made, what files matter, or what broke last time. Every `/compact` wipes context. Every new session is a cold start. You waste tokens re-explaining your project, re-reading files, and watching Claude repeat mistakes you already corrected.
+Claude Code and Codex start every session with amnesia. They don't remember what you built yesterday, what decisions you made, what files matter, or what broke last time. Every `/compact` wipes context. Every new session is a cold start. You waste tokens re-explaining your project, re-reading files, and watching agents repeat mistakes you already corrected.
 
 The longer you work with Claude Code, the worse this gets. Projects accumulate history — decisions, gotchas, architectural patterns, feature dependencies — and none of it survives across sessions.
 
 ## The Solution
 
-Eagle Mem is a recall layer for Claude Code. Every session starts with context from previous sessions — summaries, decisions, memories, tasks, project overviews, and relevant code — injected automatically via hooks. No commands to run, no prompts to write. It just works.
+Eagle Mem is a recall and regression-control layer for Claude Code and Codex. Every session starts with context from previous sessions — summaries, decisions, memories, tasks, project overviews, and relevant code — injected automatically via hooks. Both agents share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code` or `Codex`.
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash scripts, sqlite3 (WAL mode, FTS5 full-text search), and jq.
 
@@ -41,28 +44,32 @@ npm install -g eagle-mem
 eagle-mem install
 ```
 
-That's it. Open Claude Code in any project directory. Eagle Mem activates automatically.
+That's it. Open Claude Code or Codex in any project directory. Eagle Mem activates automatically.
 
 Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, and prunes stale data — all in the background via hooks.
+
+For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, and patches `~/.codex/AGENTS.md` with the Eagle Mem summary contract. For Claude Code, it keeps using `~/.claude/settings.json`, `CLAUDE.md`, and the existing Claude memory/task locations.
 
 ### Prerequisites
 
 - `sqlite3` with FTS5 support (ships with macOS; the installer offers to install if missing)
 - `jq` (the installer offers to install if missing)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed (`~/.claude/` must exist)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, or both installed
 
 ## How It Works
 
-Six hooks fire automatically at different points in Claude Code's lifecycle:
+Hooks fire automatically at different points in the agent lifecycle:
 
 | Hook | Fires When | What It Does |
 |------|-----------|--------------|
 | **SessionStart** | startup, resume, clear, compact | Injects overview, summaries, memories, tasks, core files, working set. Auto-provisions new projects (scan, index). |
-| **PreToolUse** | before Bash, Read, Edit, Write | Surfaces guardrails and decisions before edits. Rewrites noisy commands (learned rules). Detects redundant reads, nudges co-edit partners, detects stuck loops. |
+| **PreToolUse** | before Bash/shell, Read, Edit, Write, apply_patch | Surfaces guardrails and decisions before edits. Blocks release-boundary commands while feature verification is pending. Rewrites noisy commands through RTK when available. Detects redundant reads, nudges co-edit partners, detects stuck loops. |
 | **UserPromptSubmit** | user sends a message | FTS5 search across past sessions and indexed code for relevant context |
 | **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, surfaces decision history and feature impacts on reads, stale memory warnings on edits |
-| **Stop** | Claude's turn ends | Extracts `<eagle-summary>` blocks for rich session summaries |
+| **Stop** | agent turn ends | Extracts `<eagle-summary>` blocks for rich session summaries from Claude Code and Codex transcripts |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
+
+Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths.
 
 ### Background Automation
 
@@ -92,9 +99,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 
 - **Decision surfacing** — when you edit a file that has past decisions recorded (from `<eagle-summary>` blocks), PreToolUse reminds Claude not to revert without asking
 - **Guardrails** — file-level rules (manual or curator-discovered) that fire before every Edit/Write
-- **Feature verification** — tracks features with smoke tests and dependencies; reminds you to verify on `git push`
+- **Feature verification** — tracks features with smoke tests and dependencies; current git diffs create fingerprinted pending verification records, and release-boundary commands such as `git push`, `gh pr create`, and package publish are blocked until the current fingerprint is verified or waived
 - **Gotcha surfacing** — past surprises and gotchas are surfaced when editing related files
 - **Stale memory detection** — warns when edits may contradict stored memories
+- **Token guard** — when `rtk` is installed, raw shell output commands are rewritten or blocked with an RTK equivalent so large output is compacted before it enters agent context
 
 ## Commands
 
@@ -129,6 +137,29 @@ eagle-mem search --stats           # project statistics
 eagle-mem search --session <id>    # full observation trail for one session
 ```
 
+### Feature Verification
+
+```bash
+eagle-mem feature pending
+eagle-mem feature verify "Feature name" --notes "smoke test passed"
+eagle-mem feature waive 12 --reason "docs-only change, no runtime impact"
+```
+
+Verification is tied to the current git diff fingerprint. If the same diff was already verified, release-boundary hooks do not reopen it. If the file changes again, Eagle Mem creates a new pending verification for the new fingerprint.
+
+Dry-run validation stays unblocked. For example, `gh pr create --dry-run` and `npm publish --dry-run` are treated as validation. Explicit real commands such as `npm publish --dry-run=false` are treated as release boundaries and will enforce pending feature verification.
+
+### Shared Claude Code + Codex Memory
+
+Both agents write to `~/.eagle-mem/memory.db`:
+
+- `sessions.agent` records whether a session came from Claude Code or Codex
+- `summaries.agent` records which agent produced the session summary
+- mirrored memories, plans, and tasks include `origin_agent`
+- SessionStart recall labels sources as `Claude Code` or `Codex`
+
+That means opening the same project in Claude Code and Codex does not create two isolated memory worlds. They recall the same project history while preserving the source of each memory.
+
 ## Skills (Inside Claude Code)
 
 | Skill | What It Does |
@@ -156,6 +187,7 @@ Single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text sea
 | `feature_files` | Files belonging to each feature |
 | `feature_dependencies` | Inter-feature dependency relationships |
 | `feature_smoke_tests` | Smoke test definitions for feature verification |
+| `pending_feature_verifications` | Release blockers created when files tied to features change |
 | `eagle_meta` | Internal metadata (last scan, last curate, etc.) |
 | `claude_memories` | Mirror of Claude Code auto-memories |
 | `claude_plans` | Mirror of Claude Code plans |

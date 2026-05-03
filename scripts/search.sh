@@ -93,7 +93,7 @@ search_keyword() {
     fi
 
     if [ "$json_output" = true ]; then
-        eagle_db_json "SELECT s.id, s.project, s.request, s.completed, s.learned, s.created_at
+        eagle_db_json "SELECT s.id, s.project, s.agent, s.request, s.completed, s.learned, s.created_at
                        FROM summaries s
                        JOIN summaries_fts f ON f.rowid = s.id
                        WHERE summaries_fts MATCH '$q'
@@ -104,7 +104,7 @@ search_keyword() {
     fi
 
     local results
-    results=$(eagle_db "SELECT s.id, s.project, s.request, s.completed, s.learned, s.created_at
+    results=$(eagle_db "SELECT s.id, s.project, s.agent, s.request, s.completed, s.learned, s.created_at
                         FROM summaries s
                         JOIN summaries_fts f ON f.rowid = s.id
                         WHERE summaries_fts MATCH '$q'
@@ -118,12 +118,13 @@ search_keyword() {
     fi
 
     echo ""
-    while IFS='|' read -r sid sproj req completed learned created_at; do
+    while IFS='|' read -r sid sproj sagent req completed learned created_at; do
         [ -z "$sid" ] && continue
         echo -e "  ${BOLD}#$sid${RESET}  ${DIM}$created_at${RESET}"
         if [ "$cross_project" = true ]; then
             echo -e "  ${DIM}project:${RESET} $sproj"
         fi
+        echo -e "  ${DIM}source:${RESET} $(eagle_agent_label "$sagent")"
         [ -n "$req" ] && echo -e "  ${CYAN}Request:${RESET} $req"
         [ -n "$completed" ] && echo -e "  ${GREEN}Done:${RESET} $completed"
         [ -n "$learned" ] && echo -e "  ${YELLOW}Learned:${RESET} $learned"
@@ -137,7 +138,7 @@ search_timeline() {
     local p; p=$(eagle_sql_escape "$project")
 
     if [ "$json_output" = true ]; then
-        eagle_db_json "SELECT s.id, s.request, s.completed, s.learned, s.next_steps, s.created_at
+        eagle_db_json "SELECT s.id, s.agent, s.request, s.completed, s.learned, s.next_steps, s.created_at
                        FROM summaries s
                        WHERE s.project = '$p'
                        ORDER BY s.created_at DESC
@@ -146,7 +147,7 @@ search_timeline() {
     fi
 
     local results
-    results=$(eagle_db "SELECT s.id, s.request, s.completed, s.learned, s.next_steps, s.created_at
+    results=$(eagle_db "SELECT s.id, s.agent, s.request, s.completed, s.learned, s.next_steps, s.created_at
                         FROM summaries s
                         WHERE s.project = '$p'
                         ORDER BY s.created_at DESC
@@ -162,9 +163,10 @@ search_timeline() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
 
-    while IFS='|' read -r sid req completed learned next_steps created_at; do
+    while IFS='|' read -r sid sagent req completed learned next_steps created_at; do
         [ -z "$sid" ] && continue
         echo -e "  ${BOLD}#$sid${RESET}  ${DIM}$created_at${RESET}"
+        echo -e "  ${DIM}source:${RESET} $(eagle_agent_label "$sagent")"
         [ -n "$req" ] && echo -e "  ${CYAN}Request:${RESET} $req"
         [ -n "$completed" ] && echo -e "  ${GREEN}Done:${RESET} $completed"
         [ -n "$learned" ] && echo -e "  ${YELLOW}Learned:${RESET} $learned"
@@ -179,7 +181,7 @@ search_session() {
     local sid_sql; sid_sql=$(eagle_sql_escape "$session_id")
 
     if [ "$json_output" = true ]; then
-        eagle_db_json "SELECT o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
+        eagle_db_json "SELECT o.agent, o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
                        FROM observations o
                        WHERE o.session_id = '$sid_sql'
                        ORDER BY o.created_at ASC;"
@@ -187,7 +189,7 @@ search_session() {
     fi
 
     local results
-    results=$(eagle_db "SELECT o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
+    results=$(eagle_db "SELECT o.agent, o.tool_name, o.tool_input_summary, o.files_read, o.files_modified, o.created_at
                         FROM observations o
                         WHERE o.session_id = '$sid_sql'
                         ORDER BY o.created_at ASC;")
@@ -202,7 +204,7 @@ search_session() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
 
-    while IFS='|' read -r tool_name summary files_r files_m created_at; do
+    while IFS='|' read -r oagent tool_name summary files_r files_m created_at; do
         [ -z "$tool_name" ] && continue
         local icon="$DOT"
         case "$tool_name" in
@@ -211,7 +213,7 @@ search_session() {
             Edit) icon="${YELLOW}E${RESET}" ;;
             Bash) icon="${BLUE}\$${RESET}" ;;
         esac
-        echo -e "  ${icon}  ${DIM}$created_at${RESET}  $summary"
+        echo -e "  ${icon}  ${DIM}$created_at $(eagle_agent_label "$oagent")${RESET}  $summary"
     done <<< "$results"
     echo ""
 }
@@ -261,8 +263,10 @@ search_files() {
 search_stats() {
     local p; p=$(eagle_sql_escape "$project")
 
-    local sessions summaries observations tasks
+    local sessions sessions_claude sessions_codex summaries observations tasks
     sessions=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p';")
+    sessions_claude=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p' AND agent = 'claude-code';")
+    sessions_codex=$(eagle_db "SELECT COUNT(*) FROM sessions WHERE project = '$p' AND agent = 'codex';")
     summaries=$(eagle_db "SELECT COUNT(*) FROM summaries WHERE project = '$p';")
     observations=$(eagle_db "SELECT COUNT(*) FROM observations o JOIN sessions s ON s.id = o.session_id WHERE s.project = '$p';")
     tasks=$(eagle_db "SELECT COUNT(*) FROM claude_tasks WHERE project = '$p';")
@@ -272,11 +276,13 @@ search_stats() {
     if [ "$json_output" = true ]; then
         jq -nc --arg project "$project" \
             --argjson sessions "${sessions:-0}" \
+            --argjson sessions_claude "${sessions_claude:-0}" \
+            --argjson sessions_codex "${sessions_codex:-0}" \
             --argjson summaries "${summaries:-0}" \
             --argjson observations "${observations:-0}" \
             --argjson tasks "${tasks:-0}" \
             --argjson code_chunks "${chunks:-0}" \
-            '{project: $project, sessions: $sessions, summaries: $summaries, observations: $observations, tasks: $tasks, code_chunks: $code_chunks}'
+            '{project: $project, sessions: $sessions, sessions_claude: $sessions_claude, sessions_codex: $sessions_codex, summaries: $summaries, observations: $observations, tasks: $tasks, code_chunks: $code_chunks}'
         return
     fi
 
@@ -285,6 +291,8 @@ search_stats() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
     eagle_kv "Sessions:" "${sessions:-0}"
+    eagle_kv "Claude Code:" "${sessions_claude:-0}"
+    eagle_kv "Codex:" "${sessions_codex:-0}"
     eagle_kv "Summaries:" "${summaries:-0}"
     eagle_kv "Observations:" "${observations:-0}"
     eagle_kv "Tasks:" "${tasks:-0}"
@@ -347,7 +355,7 @@ search_memories() {
         fi
 
         if [ "$json_output" = true ]; then
-            eagle_db_json "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at
+            eagle_db_json "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at, m.origin_agent
                            FROM claude_memories m
                            JOIN claude_memories_fts f ON f.rowid = m.id
                            $where_match
@@ -357,7 +365,7 @@ search_memories() {
         fi
 
         local results
-        results=$(eagle_db "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at
+        results=$(eagle_db "SELECT m.memory_name, m.memory_type, m.description, m.project, m.updated_at, m.origin_agent
                             FROM claude_memories m
                             JOIN claude_memories_fts f ON f.rowid = m.id
                             $where_match
@@ -370,9 +378,9 @@ search_memories() {
         fi
 
         echo ""
-        while IFS='|' read -r mname mtype mdesc mproj mupdated; do
+        while IFS='|' read -r mname mtype mdesc mproj mupdated morigin; do
             [ -z "$mname" ] && continue
-            echo -e "  ${BOLD}$mname${RESET}  ${DIM}[$mtype]${RESET}"
+            echo -e "  ${BOLD}$mname${RESET}  ${DIM}[$mtype][$(eagle_agent_label "$morigin")]${RESET}"
             [ "$cross_project" = true ] && echo -e "  ${DIM}project:${RESET} $mproj"
             [ -n "$mdesc" ] && echo -e "  $mdesc"
             echo ""
@@ -381,14 +389,14 @@ search_memories() {
     fi
 
     if [ "$json_output" = true ]; then
-        eagle_db_json "SELECT memory_name, memory_type, description, project, updated_at
+        eagle_db_json "SELECT memory_name, memory_type, description, project, updated_at, origin_agent
                        FROM claude_memories $where_project
                        ORDER BY updated_at DESC LIMIT $limit;"
         return
     fi
 
     local results
-    results=$(eagle_db "SELECT memory_name, memory_type, description, updated_at
+    results=$(eagle_db "SELECT memory_name, memory_type, description, updated_at, origin_agent
                         FROM claude_memories $where_project
                         ORDER BY updated_at DESC LIMIT $limit;")
 
@@ -402,9 +410,9 @@ search_memories() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
 
-    while IFS='|' read -r mname mtype mdesc mupdated; do
+    while IFS='|' read -r mname mtype mdesc mupdated morigin; do
         [ -z "$mname" ] && continue
-        echo -e "  ${CYAN}[$mtype]${RESET} ${BOLD}$mname${RESET}"
+        echo -e "  ${CYAN}[$mtype][$(eagle_agent_label "$morigin")]${RESET} ${BOLD}$mname${RESET}"
         [ -n "$mdesc" ] && echo -e "         ${DIM}$mdesc${RESET}"
     done <<< "$results"
     echo ""
@@ -430,7 +438,7 @@ search_tasks() {
         local q; q=$(eagle_sql_escape "$sanitized_tq")
 
         if [ "$json_output" = true ]; then
-            eagle_db_json "SELECT t.subject, t.status, t.project, t.updated_at
+            eagle_db_json "SELECT t.subject, t.status, t.project, t.updated_at, t.origin_agent
                            FROM claude_tasks t
                            JOIN claude_tasks_fts f ON f.rowid = t.id
                            WHERE claude_tasks_fts MATCH '$q'
@@ -441,7 +449,7 @@ search_tasks() {
         fi
 
         local results
-        results=$(eagle_db "SELECT t.subject, t.status, t.project, t.updated_at
+        results=$(eagle_db "SELECT t.subject, t.status, t.project, t.updated_at, t.origin_agent
                             FROM claude_tasks t
                             JOIN claude_tasks_fts f ON f.rowid = t.id
                             WHERE claude_tasks_fts MATCH '$q'
@@ -455,7 +463,7 @@ search_tasks() {
         fi
 
         echo ""
-        while IFS='|' read -r tsubject tstatus tproj tupdated; do
+        while IFS='|' read -r tsubject tstatus tproj tupdated torigin; do
             [ -z "$tsubject" ] && continue
             local color="$DIM"
             case "$tstatus" in
@@ -463,14 +471,14 @@ search_tasks() {
                 completed) color="$GREEN" ;;
                 pending) color="$CYAN" ;;
             esac
-            echo -e "  ${color}[$tstatus]${RESET} $tsubject"
+            echo -e "  ${color}[$tstatus][$(eagle_agent_label "$torigin")]${RESET} $tsubject"
         done <<< "$results"
         echo ""
         return
     fi
 
     if [ "$json_output" = true ]; then
-        eagle_db_json "SELECT subject, status, project, updated_at
+        eagle_db_json "SELECT subject, status, project, updated_at, origin_agent
                        FROM claude_tasks
                        WHERE status IN ('in_progress', 'pending')
                        $where_project
@@ -480,7 +488,7 @@ search_tasks() {
     fi
 
     local results
-    results=$(eagle_db "SELECT subject, status, updated_at
+    results=$(eagle_db "SELECT subject, status, updated_at, origin_agent
                         FROM claude_tasks
                         WHERE status IN ('in_progress', 'pending')
                         $where_project
@@ -497,14 +505,14 @@ search_tasks() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
 
-    while IFS='|' read -r tsubject tstatus tupdated; do
+    while IFS='|' read -r tsubject tstatus tupdated torigin; do
         [ -z "$tsubject" ] && continue
         local color="$DIM"
         case "$tstatus" in
             in_progress) color="$YELLOW" ;;
             pending) color="$CYAN" ;;
         esac
-        echo -e "  ${color}[$tstatus]${RESET} $tsubject"
+        echo -e "  ${color}[$tstatus][$(eagle_agent_label "$torigin")]${RESET} $tsubject"
     done <<< "$results"
     echo ""
 }

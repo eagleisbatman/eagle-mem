@@ -21,10 +21,11 @@ input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
 tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+agent=$(eagle_agent_source_from_json "$input")
 
 case "$tool_name" in
-    Bash|Read|Edit|Write) ;;
-    *) exit 0 ;;
+    Read|Edit|Write|apply_patch) ;;
+    *) eagle_is_shell_tool "$tool_name" || exit 0 ;;
 esac
 
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
@@ -38,27 +39,102 @@ context=""
 updated_input=""
 
 case "$tool_name" in
-Bash)
-    cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
+Bash|exec_command|shell_command|unified_exec)
+    cmd=$(eagle_tool_command_from_json "$input")
     [ -z "$cmd" ] && exit 0
 
-    # ─── Feature verification on git push ─────────────────────
+    # ─── Enforced feature verification on release boundaries ───
+
+    release_changed_files=""
+    if eagle_is_release_boundary_command "$cmd"; then
+        if [ -n "$cwd" ] && [ -d "$cwd" ]; then
+            release_changed_files=$(eagle_changed_files_for_release "$cwd")
+            eagle_reconcile_current_feature_verifications "$project" "$cwd" "$session_id" "$tool_name" "Release boundary detected for current repository diff" "$release_changed_files" >/dev/null
+        fi
+
+        pending_rows=$(eagle_list_current_pending_feature_verifications "$project" "$cwd" "$release_changed_files" 8 2>/dev/null)
+        pending_count=$(printf '%s\n' "$pending_rows" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+        pending_count=${pending_count:-0}
+        if [ "$pending_count" -gt 0 ] 2>/dev/null; then
+            block_reason="Eagle Mem blocked this release boundary because ${pending_count} feature verification(s) are pending.
+
+Run the affected smoke tests, then resolve them with:
+  eagle-mem feature verify <name> --notes \"what passed\"
+
+For intentional exceptions:
+  eagle-mem feature waive <id> --reason \"why this is safe\"
+
+Pending checks:"
+            while IFS='|' read -r pid pname pfile preason _ptrigger _pcreated psmoke pfingerprint; do
+                [ -z "$pid" ] && continue
+                block_reason+="
+  #${pid} ${pname}"
+                [ -n "$pfile" ] && block_reason+=" (${pfile})"
+                [ -n "$preason" ] && block_reason+=" — ${preason}"
+                [ -n "$psmoke" ] && block_reason+=" | smoke: ${psmoke}"
+                [ -n "$pfingerprint" ] && block_reason+=" | diff: ${pfingerprint}"
+            done <<< "$pending_rows"
+
+            jq -nc --arg reason "$block_reason" '{
+                "decision":"block",
+                "reason":$reason,
+                "hookSpecificOutput":{
+                    "hookEventName":"PreToolUse",
+                    "permissionDecision":"deny",
+                    "permissionDecisionReason":$reason
+                }
+            }'
+            exit 0
+        fi
+    fi
+
+    # ─── RTK command rewrite / enforcement ─────────────────
+
+    rtk_cmd=$(eagle_rtk_rewrite_command "$cmd")
+    if [ -n "$rtk_cmd" ]; then
+        if [ "$agent" = "codex" ] && ! eagle_raw_bash_unlock_active; then
+            reason="Eagle Mem token guard blocked raw shell output.
+
+Use RTK so large output is compact before it enters context:
+  $rtk_cmd
+
+Temporary escape hatch for one-off raw output:
+  touch $EAGLE_RAW_BASH_UNLOCK"
+            jq -nc --arg reason "$reason" '{
+                "decision":"block",
+                "reason":$reason,
+                "hookSpecificOutput":{
+                    "hookEventName":"PreToolUse",
+                    "permissionDecision":"deny",
+                    "permissionDecisionReason":$reason
+                }
+            }'
+            exit 0
+        fi
+
+        if ! eagle_raw_bash_unlock_active; then
+            updated_input=$(echo "$input" | jq --arg cmd "$rtk_cmd" '.tool_input + {"command":$cmd}')
+            context+="Eagle Mem token guard: rewrote raw shell command through RTK to reduce context load: ${rtk_cmd}. "
+        fi
+    fi
+
+    # ─── Feature verification context for non-blocked pushes ───
 
     case "$cmd" in
         *"git push"*|*"gh pr create"*)
             has_features=$(eagle_count_active_features "$project")
             if [ "${has_features:-0}" -gt 0 ]; then
-                changed_files=""
-                if [ -n "$cwd" ] && [ -d "$cwd" ]; then
-                    changed_files=$(git -C "$cwd" diff --name-only HEAD 2>/dev/null)
-                    [ -z "$changed_files" ] && changed_files=$(git -C "$cwd" diff --cached --name-only 2>/dev/null)
-                fi
+                    changed_files="$release_changed_files"
+                    if [ -z "$changed_files" ] && [ -n "$cwd" ] && [ -d "$cwd" ]; then
+                        changed_files=$(eagle_changed_files_for_release "$cwd")
+                    fi
 
                 if [ -n "$changed_files" ]; then
                     seen_features=""
                     while IFS= read -r changed_file; do
                         [ -z "$changed_file" ] && continue
-                        fname=$(basename "$changed_file")
+                        norm_file=$(eagle_project_file_path "$cwd" "$changed_file")
+                        fname=$(basename "$norm_file")
 
                         feature_hits=$(eagle_find_feature_for_push "$project" "$fname")
 
@@ -91,6 +167,7 @@ ${context}================"
 
     # ─── Command output filtering (learned rules) ─────────────
 
+    if [ -z "$updated_input" ]; then
     base_cmd=$(echo "$cmd" | awk '{print $1}' | sed 's|.*/||')
     rule=$(eagle_get_command_rule "$project" "$base_cmd" "$cmd")
 
@@ -117,11 +194,18 @@ ${context}================"
                 ;;
         esac
     fi
+    fi
     ;;
 
-Edit|Write)
-    fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
-    if [ -n "$fp" ]; then
+Edit|Write|apply_patch)
+    target_files=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+    if [ "$tool_name" = "apply_patch" ]; then
+        patch_cmd=$(echo "$input" | jq -r '.tool_input.command // empty')
+        target_files=$(printf '%s\n' "$patch_cmd" | eagle_extract_apply_patch_files | sed '/^[[:space:]]*$/d' | awk '!seen[$0]++')
+    fi
+    if [ -n "$target_files" ]; then
+        while IFS= read -r fp; do
+            [ -z "$fp" ] && continue
         # ─── Guardrail + decision/gotcha surfacing ────────
         fname=$(basename "$fp")
         fname_stem="${fname%.*}"
@@ -188,6 +272,7 @@ Edit|Write)
             partners=${partners%, }
             context+="Eagle Mem recall: when you change '$(basename "$fp")' you usually also touch: $partners"
         fi
+        done <<< "$target_files"
     fi
     ;;
 
@@ -216,6 +301,13 @@ Read)
 esac
 
 [ -z "$context" ] && [ -z "$updated_input" ] && exit 0
+
+if [ "$agent" = "codex" ]; then
+    # Codex PreToolUse currently supports deny decisions, but not advisory
+    # additionalContext or updatedInput. Deny paths above already returned JSON;
+    # non-blocking reminders are delivered through SessionStart/UserPromptSubmit.
+    exit 0
+fi
 
 if [ -n "$updated_input" ]; then
     jq -nc --arg ctx "$context" --argjson ui "$updated_input" \
