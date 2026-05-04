@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About Eagle Mem - Local-first Memory for AI Coding Agents</title>
+    <meta
+      name="description"
+      content="Why Eagle Mem exists, who it is for, and how it keeps Claude Code and Codex project memory local, useful, and source-attributed."
+    />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Eagle Mem home">
+        <span class="brand-mark">EM</span>
+        <span>Eagle Mem</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="./">Product</a>
+        <a href="architecture.html">Architecture</a>
+        <a class="active" href="about.html">About</a>
+        <a href="https://github.com/eagleisbatman/eagle-mem">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <p class="eyebrow">Why it exists</p>
+        <h1>Long AI coding sessions should compound.</h1>
+        <p>
+          Agents are good at short bursts. Real projects are not short bursts. They contain
+          decisions, weird fixes, important files, release risks, and unfinished tasks that
+          should not vanish every time context compacts or a different agent opens the repo.
+        </p>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Point of view</div>
+            <h2>Memory needs accountability.</h2>
+          </div>
+          <p>
+            Eagle Mem is built around one product belief: recalled context is useful only
+            when the agent can see where it came from, when it was created, and what safety
+            obligation it implies.
+          </p>
+        </div>
+
+        <div class="pillars">
+          <article class="card">
+            <span class="label">Local first</span>
+            <h3>Your project history stays on your machine</h3>
+            <p>
+              The core runtime is a local SQLite database and shell hooks. No remote memory
+              account is required for the main product to work.
+            </p>
+          </article>
+          <article class="card">
+            <span class="label">Source aware</span>
+            <h3>Claude Code and Codex do not blur together</h3>
+            <p>
+              Sessions, summaries, memories, plans, and tasks record their source agent, so
+              cross-agent recall stays auditable.
+            </p>
+          </article>
+          <article class="card">
+            <span class="label">Safety oriented</span>
+            <h3>Remembering is not enough</h3>
+            <p>
+              Feature verification and guardrails turn past lessons into concrete release
+              checks before push, PR, or publish.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="split">
+          <div>
+            <div class="section-kicker">Who it helps</div>
+            <h2>For people who keep reopening the same repo.</h2>
+            <p class="lead">
+              Eagle Mem is most useful when an AI coding agent is not just answering a question,
+              but repeatedly working inside the same project over days or weeks.
+            </p>
+          </div>
+          <div class="quote">
+            <p>
+              Use it when the agent should remember architecture, avoid repeating regressions,
+              pick up task state after compaction, and coordinate with another agent without
+              creating a second memory silo.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Principles</div>
+            <h2>Small pieces. Visible behavior.</h2>
+          </div>
+          <p>
+            The product deliberately favors boring tools that users can inspect and recover.
+            If a hook misbehaves, it should be visible. If memory is stale, it should be
+            correctable. If a release is blocked, the user should know why.
+          </p>
+        </div>
+
+        <div class="page-grid">
+          <article class="wide-panel">
+            <h3>No hidden daemon</h3>
+            <p>
+              Hooks run at lifecycle points. The database is a file. The installer can be
+              rerun with `eagle-mem update`, and uninstall removes the hook registrations.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>No blind memory injection</h3>
+            <p>
+              Recall is project-scoped, source-labeled, compacted, and tied to summaries,
+              memories, tasks, code index entries, or feature checks.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Agents run the workflow</h3>
+            <p>
+              Orchestration commands are designed to be invoked by the active agent. Users
+              should see the plan and results, not babysit lane bookkeeping.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Marketing should match runtime</h3>
+            <p>
+              The website, README, npm page, and CLI output now explain the same system:
+              shared memory, regression safety, RTK token guardrails, and worker lanes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="split">
+          <div>
+            <div class="section-kicker">Start</div>
+            <h2>Install it where the agents work.</h2>
+            <p class="lead">
+              Run the install once, then open Claude Code or Codex in a project. Eagle Mem
+              will create the project memory layer automatically.
+            </p>
+          </div>
+          <pre class="command"><code>npm install -g eagle-mem
+eagle-mem install
+
+# after upgrades
+npm install -g eagle-mem@latest
+eagle-mem update</code></pre>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>About Eagle Mem</span>
+      <span>Memory should make agents more accountable, not more mysterious.</span>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eagle Mem Architecture - Hooks, SQLite, Guardrails, Worker Lanes</title>
+    <meta
+      name="description"
+      content="How Eagle Mem connects Claude Code and Codex through hooks, SQLite, FTS5 search, feature verification, RTK token guardrails, and git-worktree worker lanes."
+    />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Eagle Mem home">
+        <span class="brand-mark">EM</span>
+        <span>Eagle Mem</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="./">Product</a>
+        <a class="active" href="architecture.html">Architecture</a>
+        <a href="about.html">About</a>
+        <a href="https://github.com/eagleisbatman/eagle-mem">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="page-hero">
+        <p class="eyebrow">System map</p>
+        <h1>Hooks capture the work. SQLite keeps the truth.</h1>
+        <p>
+          Eagle Mem is intentionally boring in the best way: agent hooks, a local SQLite
+          database, FTS5 search, and small shell scripts. The power comes from where it sits
+          in the loop, not from a hosted memory service.
+        </p>
+      </section>
+
+      <section class="section">
+        <div class="flow" aria-label="Architecture flow">
+          <div class="flow-box">
+            <h3>Agent Event</h3>
+            <p>Claude Code or Codex starts, receives a prompt, uses a tool, or stops a turn.</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">-&gt;</div>
+          <div class="flow-box">
+            <h3>Eagle Hook</h3>
+            <p>Hooks inject recall, record observations, block risky commands, or summarize work.</p>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">-&gt;</div>
+          <div class="flow-box">
+            <h3>Memory Core</h3>
+            <p>SQLite tables and FTS5 indexes store project memory with source attribution.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Runtime layers</div>
+            <h2>The moving parts are small.</h2>
+          </div>
+          <p>
+            Each layer owns a clear responsibility. That keeps Eagle Mem easy to install,
+            inspect, uninstall, and repair when a user's local environment is unusual.
+          </p>
+        </div>
+
+        <div class="steps">
+          <article class="step">
+            <span class="label">Layer 1</span>
+            <h3>Hook lifecycle</h3>
+            <p>
+              SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, and SessionEnd
+              provide the capture and injection points.
+            </p>
+          </article>
+          <article class="step">
+            <span class="label">Layer 2</span>
+            <h3>Project memory</h3>
+            <p>
+              Summaries, decisions, gotchas, memories, plans, tasks, and project overview
+              all land in one project namespace.
+            </p>
+          </article>
+          <article class="step">
+            <span class="label">Layer 3</span>
+            <h3>Feature safety</h3>
+            <p>
+              Changed feature files create fingerprinted pending checks. Release commands
+              stay blocked until the current diff is verified or waived.
+            </p>
+          </article>
+          <article class="step">
+            <span class="label">Layer 4</span>
+            <h3>Worker lanes</h3>
+            <p>
+              Broad work can split into git worktrees with owned lanes, validation commands,
+              worker logs, and durable handoff state.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Data model</div>
+            <h2>One database, multiple memory surfaces.</h2>
+          </div>
+          <p>
+            The same database powers hook recall, CLI search, mirrored agent memories,
+            feature verification, and orchestration status.
+          </p>
+        </div>
+
+        <div class="data-table" role="table" aria-label="Key Eagle Mem tables">
+          <div role="row">
+            <strong role="cell">sessions</strong>
+            <span role="cell">Tracks active and completed Claude Code or Codex sessions.</span>
+          </div>
+          <div role="row">
+            <strong role="cell">summaries</strong>
+            <span role="cell">Stores rich Stop-hook summaries with decisions, gotchas, files, and risks.</span>
+          </div>
+          <div role="row">
+            <strong role="cell">agent_memories, agent_plans, agent_tasks</strong>
+            <span role="cell">Mirror Claude Code and Codex memory surfaces with `origin_agent`.</span>
+          </div>
+          <div role="row">
+            <strong role="cell">features, feature_files, pending_feature_verifications</strong>
+            <span role="cell">Connect code changes to release verification and smoke-test state.</span>
+          </div>
+          <div role="row">
+            <strong role="cell">orchestrations, orchestration_lanes</strong>
+            <span role="cell">Persist worker ownership, status, worktree paths, logs, notes, and handoffs.</span>
+          </div>
+          <div role="row">
+            <strong role="cell">code_chunks</strong>
+            <span role="cell">FTS5-indexed source chunks for lightweight code recall.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="split">
+          <div>
+            <div class="section-kicker">Shell output</div>
+            <h2>RTK is a guardrail, not a dependency.</h2>
+            <p class="lead">
+              When `rtk` is installed, Eagle Mem can rewrite noisy commands through it.
+              In enforce mode, known raw-output commands are blocked if RTK is missing.
+            </p>
+            <pre class="command"><code>eagle-mem config set token_guard.rtk auto
+eagle-mem config set token_guard.rtk enforce
+eagle-mem config set token_guard.raw_bash block</code></pre>
+          </div>
+          <div class="terminal-shot"><span class="cyan">Token Guard</span>
+git diff          -> rtk git diff
+git show          -> rtk git show
+grep / rg / find  -> blocked in enforce mode
+
+<span class="green">Goal</span>
+Keep huge shell output from entering the model context raw.
+
+<span class="amber">Escape hatch</span>
+Temporary unlocks exist for intentional one-off raw output.</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Orchestration</div>
+            <h2>Opposite-agent work by default.</h2>
+          </div>
+          <p>
+            The coordinator can be Claude Code or Codex. By default Eagle Mem routes workers
+            to the other agent family, records model and effort, and runs lanes in isolated
+            git worktrees so handoff is reviewable.
+          </p>
+        </div>
+
+        <div class="page-grid">
+          <article class="wide-panel">
+            <h3>Codex coordinator</h3>
+            <p>
+              Defaults to Claude Code workers with `claude-opus-4-7` and `xhigh` effort when
+              the local CLI is available.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Claude Code coordinator</h3>
+            <p>
+              Defaults to Codex workers with `gpt-5.5` and `xhigh` effort when the local CLI
+              is available.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Eagle Mem architecture</span>
+      <span>Hooks + SQLite + FTS5 + git worktrees.</span>
+    </footer>
+  </body>
+</html>
