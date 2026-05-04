@@ -89,7 +89,7 @@ handoff      | captured back into the same project memory
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.8.2</strong>
+            <strong>v4.8.3</strong>
             <span>Orchestration, RTK guardrails, clean Codex output, and safer memory sync.</span>
           </div>
         </div>
@@ -148,7 +148,7 @@ handoff      | captured back into the same project memory
 eagle-mem install</code></pre>
           </div>
           <div class="terminal-shot"><span class="cyan">What users see now</span>
-Eagle Mem v4.8.2
+Eagle Mem v4.8.3
 Shared memory, guardrails, and worker lanes
 
 Core
@@ -165,6 +165,74 @@ Safety
 Coordination
   orchestrate    agent-run worker lanes in git worktrees
   tasks          mirrored task state across agents</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Installer behavior</div>
+            <h2>It updates the agent documents too.</h2>
+          </div>
+          <p>
+            The installer is not only copying shell scripts. It wires Eagle Mem into the places
+            Claude Code and Codex actually read on startup, then keeps those files current on
+            `eagle-mem update`.
+          </p>
+        </div>
+
+        <div class="page-grid">
+          <article class="wide-panel">
+            <h3>Claude Code</h3>
+            <p>
+              Registers lifecycle hooks in `~/.claude/settings.json`, links Eagle Mem skills
+              into `~/.claude/skills`, and creates or updates the Eagle Mem section in
+              `~/.claude/CLAUDE.md` so Claude knows the memory, verification, and orchestration
+              protocol.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Codex</h3>
+            <p>
+              Enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in
+              `~/.codex/hooks.json`, links skills into `~/.codex/skills`, and creates or updates
+              `~/.codex/AGENTS.md` with a clean-output contract so Codex does not print internal
+              capture blocks to the user.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Orchestrator and worker mode</div>
+            <h2>Broad work can split into owned lanes.</h2>
+          </div>
+          <p>
+            Eagle Mem treats orchestration as an agent-run workflow. The active agent becomes the
+            coordinator, creates durable lanes, launches the opposite agent in a git worktree, and
+            records each worker's status back into the same project memory.
+          </p>
+        </div>
+
+        <div class="page-grid">
+          <article class="wide-panel">
+            <h3>Opposite-agent defaults</h3>
+            <p>
+              Codex coordinators default to Claude Code workers. Claude Code coordinators default
+              to Codex workers. The selected worker model, effort, branch, worktree, PID, log, and
+              validation command are stored with the lane.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Worktree handoff</h3>
+            <p>
+              `eagle-mem orchestrate spawn` creates an isolated worktree, writes a self-contained
+              worker prompt, launches the worker CLI, syncs completion or blockers, and mirrors
+              the lane into shared tasks so the next session can resume cleanly.
+            </p>
+          </article>
         </div>
       </section>
 
@@ -203,7 +271,7 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.8.2 speaks the new architecture.</h2>
+            <h2>v4.8.3 speaks the new architecture.</h2>
           </div>
           <p>
             The product surface now matches the system: cross-agent memory, enforced
@@ -232,7 +300,7 @@ Coordination
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.8.2</span>
+      <span>Eagle Mem v4.8.3</span>
       <span>Local-first memory and release safety for Claude Code and Codex.</span>
     </footer>
   </body>

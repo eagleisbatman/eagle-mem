@@ -92,9 +92,9 @@ nav a.active {
 
 .hero {
   position: relative;
-  min-height: min(760px, 92vh);
+  min-height: min(820px, 92vh);
   display: grid;
-  align-items: end;
+  align-items: center;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
 }
@@ -102,8 +102,10 @@ nav a.active {
 .hero-visual {
   position: absolute;
   inset: 0;
-  opacity: 0.88;
+  opacity: 0.72;
   background:
+    linear-gradient(90deg, rgba(7, 8, 7, 0.98) 0%, rgba(7, 8, 7, 0.90) 37%, rgba(7, 8, 7, 0.42) 68%, rgba(7, 8, 7, 0.74) 100%),
+    linear-gradient(180deg, rgba(7, 8, 7, 0.22), rgba(7, 8, 7, 0.92)),
     linear-gradient(rgba(72, 229, 212, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(72, 229, 212, 0.05) 1px, transparent 1px);
   background-size: 42px 42px;
@@ -111,12 +113,16 @@ nav a.active {
 
 .terminal-cloud {
   position: absolute;
-  inset: 76px max(18px, calc((100vw - 1180px) / 2)) 84px;
+  top: 108px;
+  right: max(22px, calc((100vw - 1180px) / 2));
+  bottom: 72px;
+  left: max(440px, calc(50vw - 80px));
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
   grid-template-rows: 1fr 0.82fr;
   gap: 18px;
   transform: rotate(-1deg);
+  opacity: 0.78;
 }
 
 .terminal-panel {
@@ -145,8 +151,8 @@ nav a.active {
   z-index: 2;
   width: min(1180px, calc(100% - 44px));
   margin: 0 auto;
-  padding: 0 0 72px;
-  text-shadow: 0 12px 48px rgba(0, 0, 0, 0.7);
+  padding: 92px 0 86px;
+  text-shadow: 0 14px 54px rgba(0, 0, 0, 0.82);
 }
 
 .eyebrow {
@@ -170,19 +176,19 @@ nav a.active {
 }
 
 h1 {
-  max-width: 960px;
+  max-width: 760px;
   margin: 0;
-  font-size: clamp(54px, 10vw, 132px);
-  line-height: 0.9;
+  font-size: clamp(46px, 7vw, 94px);
+  line-height: 0.96;
   letter-spacing: 0;
 }
 
 .hero-copy p {
-  max-width: 770px;
+  max-width: 680px;
   margin: 24px 0 0;
   color: #e9eee8;
-  font-size: clamp(19px, 2.4vw, 30px);
-  line-height: 1.25;
+  font-size: clamp(18px, 2.1vw, 27px);
+  line-height: 1.28;
 }
 
 .page-hero {
@@ -469,8 +475,17 @@ h2 {
 @media (max-width: 860px) {
   .site-header { align-items: flex-start; flex-direction: column; padding: 14px 22px; }
   nav { flex-wrap: wrap; }
-  .hero { min-height: 820px; }
-  .terminal-cloud { grid-template-columns: 1fr; grid-template-rows: auto; opacity: 0.62; }
+  .hero { min-height: 760px; }
+  .terminal-cloud {
+    top: 126px;
+    right: 22px;
+    bottom: 36px;
+    left: 22px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    opacity: 0.26;
+  }
+  .hero-copy { padding: 76px 0 66px; }
   .terminal-panel:nth-child(3) { grid-column: auto; }
   .section-head,
   .pillars,
