@@ -89,8 +89,8 @@ handoff      | captured back into the same project memory
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.8.3</strong>
-            <span>Orchestration, RTK guardrails, clean Codex output, and safer memory sync.</span>
+            <strong>v4.8.4</strong>
+            <span>Real Codex-to-Claude worker proof, RTK guardrails, and clean Codex output.</span>
           </div>
         </div>
       </section>
@@ -148,7 +148,7 @@ handoff      | captured back into the same project memory
 eagle-mem install</code></pre>
           </div>
           <div class="terminal-shot"><span class="cyan">What users see now</span>
-Eagle Mem v4.8.3
+Eagle Mem v4.8.4
 Shared memory, guardrails, and worker lanes
 
 Core
@@ -233,6 +233,15 @@ Coordination
               the lane into shared tasks so the next session can resume cleanly.
             </p>
           </article>
+          <article class="wide-panel">
+            <h3>Proof path</h3>
+            <p>
+              A Codex coordinator can run `eagle-mem orchestrate spawn proof --foreground`,
+              launch Claude Code with `claude-opus-4-7` at `xhigh`, then confirm the completed
+              lane with `eagle-mem orchestrate --json`, `eagle-mem tasks completed`, and
+              `eagle-mem orchestrate handoff`.
+            </p>
+          </article>
         </div>
       </section>
 
@@ -271,11 +280,12 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.8.3 speaks the new architecture.</h2>
+            <h2>v4.8.4 proves the worker lane.</h2>
           </div>
           <p>
             The product surface now matches the system: cross-agent memory, enforced
-            anti-regression, RTK protection, and worker orchestration are first-class.
+            anti-regression, RTK protection, clean Codex output, and worker orchestration
+            are first-class and testable.
           </p>
         </div>
 
@@ -295,12 +305,22 @@ Coordination
               contract, feature verification state, RTK guidance, and orchestration protocol.
             </p>
           </article>
+          <article class="wide-panel">
+            <h3>For proof</h3>
+            <p>
+              `orchestrate handoff` now works cleanly on Bash 3.2, so worker status, worktree,
+              model, effort, validation, and log path can be shown without sending users into
+              raw database queries. Eagle Mem's own `feature verify` and `feature waive`
+              commands are also ignored by release-boundary detection, so verification notes
+              can mention dry-run checks without blocking themselves.
+            </p>
+          </article>
         </div>
       </section>
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.8.3</span>
+      <span>Eagle Mem v4.8.4</span>
       <span>Local-first memory and release safety for Claude Code and Codex.</span>
     </footer>
   </body>
