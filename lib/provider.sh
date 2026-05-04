@@ -189,6 +189,16 @@ model = "gpt-4o-mini"
 schedule = "auto"
 min_sessions = 5
 
+[updates]
+# Eagle Mem is infrastructure: patch fixes auto-apply by default so stale bugs
+# do not keep blocking Claude Code or Codex sessions.
+# mode: "auto" applies eligible updates, "notify" only reports them, "off" disables checks.
+mode = "auto"
+# allow: "patch" auto-applies x.y.Z fixes only; "minor" allows x.Y.z; "major" allows all.
+allow = "patch"
+channel = "latest"
+interval_hours = 24
+
 [token_guard]
 # rtk: "off" disables RTK help, "auto" uses RTK when found,
 # "enforce" blocks known raw-output shell commands when RTK is unavailable.
@@ -564,6 +574,13 @@ eagle_show_config() {
     echo "  Worktrees:  $(eagle_config_get "orchestration" "auto_worktree" "true")"
     echo "  Codex:      $(eagle_config_get "orchestration" "codex_worker_model" "gpt-5.5") / $(eagle_config_get "orchestration" "codex_worker_effort" "xhigh")"
     echo "  Claude:     $(eagle_config_get "orchestration" "claude_worker_model" "claude-opus-4-7") / $(eagle_config_get "orchestration" "claude_worker_effort" "xhigh")"
+
+    echo ""
+    echo "Updates:"
+    echo "  Mode:       $(eagle_config_get "updates" "mode" "auto")"
+    echo "  Allow:      $(eagle_config_get "updates" "allow" "patch")"
+    echo "  Channel:    $(eagle_config_get "updates" "channel" "latest")"
+    echo "  Interval:   $(eagle_config_get "updates" "interval_hours" "24")h"
 
     echo ""
     echo "Token guard:"

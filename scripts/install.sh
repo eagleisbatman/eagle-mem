@@ -316,12 +316,15 @@ fi
 # ─── Initialize config ────────────────────────────────────
 
 . "$LIB_DIR/provider.sh"
+. "$LIB_DIR/updater.sh"
 if [ ! -f "$EAGLE_CONFIG_FILE" ]; then
     eagle_config_init
     eagle_ok "Config created ${DIM}(auto-detected provider)${RESET}"
 else
+    eagle_update_ensure_defaults
     eagle_ok "Config ${DIM}(already exists)${RESET}"
 fi
+eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_update_config_allow))${RESET}"
 
 # ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
 

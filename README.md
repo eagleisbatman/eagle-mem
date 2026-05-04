@@ -67,7 +67,7 @@ eagle-mem install
 
 That's it. Open Claude Code or Codex in any project directory. Eagle Mem activates automatically.
 
-Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, and prunes stale data — all in the background via hooks.
+Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, prunes stale data, and installs patch bug fixes — all in the background via hooks.
 
 For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md` with the Eagle Mem summary contract. For Claude Code, it keeps using `~/.claude/settings.json`, `CLAUDE.md`, `~/.claude/skills`, and the existing Claude memory/task locations.
 
@@ -101,6 +101,7 @@ These run automatically via SessionStart — no commands needed:
 - **Auto-index** — new or stale project triggers FTS5 source indexing
 - **Auto-prune** — observations over 10K rows trigger cleanup
 - **Auto-curate** — the self-learning curator analyzes observation data and generates command rules, co-edit patterns, hot file detection, and guardrails (partially requires LLM provider)
+- **Auto-update** — patch releases install automatically by default, then hooks, skills, migrations, and runtime files refresh through `eagle-mem update`
 
 ### Token Savings
 
@@ -138,6 +139,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem search` | Search past sessions, memories, and code |
 | `eagle-mem health` | Diagnose pipeline health and background automation |
 | `eagle-mem config` | View or change LLM provider and token-guard settings |
+| `eagle-mem updates` | View or change auto-update policy |
 | `eagle-mem guard` | Manage regression guardrails for files |
 | `eagle-mem overview` | Build or view project overview |
 | `eagle-mem session` | Save a manual fallback session summary |
@@ -149,6 +151,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.9.0 Patch
+
+Eagle Mem now auto-updates by default for patch bug fixes. SessionStart performs a throttled background npm check, applies eligible patch releases with a lock and runtime/database backup, runs `eagle-mem update`, and records a one-time notice for the next session. Minor and major releases stay outside the default auto-apply range unless users opt in with `eagle-mem updates enable minor` or `eagle-mem updates enable major`.
 
 ### v4.8.6 Patch
 
@@ -186,6 +192,7 @@ eagle-mem search --files           # most frequently modified files
 eagle-mem search --stats           # project statistics
 eagle-mem search --session <id>    # full observation trail for one session
 eagle-mem session save --summary "fixed auth flow"  # manual fallback capture
+eagle-mem updates status           # auto-update state and policy
 ```
 
 ### Feature Verification

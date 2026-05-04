@@ -32,6 +32,8 @@ show_help() {
     echo -e "    eagle-mem config set orchestration.route opposite"
     echo -e "    eagle-mem config set orchestration.codex_worker_model gpt-5.5"
     echo -e "    eagle-mem config set orchestration.claude_worker_model claude-opus-4-7"
+    echo -e "    eagle-mem config set updates.mode auto"
+    echo -e "    eagle-mem config set updates.allow patch"
     echo -e "    eagle-mem config set token_guard.rtk enforce"
     echo -e "    eagle-mem config set token_guard.raw_bash block"
     echo ""

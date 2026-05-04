@@ -12,6 +12,7 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 . "$SCRIPT_DIR/style.sh"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/provider.sh"
+. "$LIB_DIR/updater.sh"
 
 project=""
 JSON_OUT=0
@@ -191,6 +192,32 @@ if [ -n "$orch_worktree_root" ]; then
     eagle_dim "  Worktree root: $orch_worktree_root"
 fi
 
+# ─── Auto-update visibility (informational) ────────────────
+
+updates_mode=$(eagle_update_config_mode)
+updates_allow=$(eagle_update_config_allow)
+updates_channel=$(eagle_update_config_channel)
+updates_interval=$(eagle_update_config_interval_hours)
+updates_latest=$(eagle_update_latest_version 0 2>/dev/null || true)
+updates_installed=$(eagle_update_installed_version)
+updates_status="current"
+
+if [ "$updates_mode" = "off" ]; then
+    eagle_warn "Updates: disabled"
+    issues+=("Auto-updates disabled. Re-enable bug-fix delivery: eagle-mem updates enable patch")
+    updates_status="disabled"
+elif [ -n "$updates_latest" ] && eagle_update_version_gt "$updates_latest" "$updates_installed"; then
+    if eagle_update_allowed "$updates_installed" "$updates_latest" "$updates_allow"; then
+        eagle_warn "Updates: v${updates_latest} available (mode=$updates_mode, allow=$updates_allow)"
+        updates_status="available"
+    else
+        eagle_warn "Updates: v${updates_latest} available, outside $updates_allow range"
+        updates_status="outside-range"
+    fi
+else
+    eagle_ok "Updates: auto/${updates_allow} (${updates_channel}, every ${updates_interval}h)"
+fi
+
 # ─── 5. Data quality (10 pts) ──────────────────────────
 
 max_score=$((max_score + 10))
@@ -290,6 +317,13 @@ if [ "$JSON_OUT" -eq 1 ]; then
         --arg claude_worker_effort "$orch_claude_effort" \
         --arg codex_bin "${codex_bin:-}" \
         --arg claude_bin "${claude_bin:-}" \
+        --arg updates_mode "$updates_mode" \
+        --arg updates_allow "$updates_allow" \
+        --arg updates_channel "$updates_channel" \
+        --arg updates_interval "$updates_interval" \
+        --arg updates_installed "$updates_installed" \
+        --arg updates_latest "${updates_latest:-}" \
+        --arg updates_status "$updates_status" \
         --argjson noise_pct "$noise_pct" \
         --arg last_curated "${last_curated:-never}" \
         '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
@@ -303,6 +337,15 @@ if [ "$JSON_OUT" -eq 1 ]; then
             worktree_root:$orchestration_worktree_root,
             codex:{model:$codex_worker_model, effort:$codex_worker_effort, cli:$codex_bin},
             claude_code:{model:$claude_worker_model, effort:$claude_worker_effort, cli:$claude_bin}
+          },
+          updates:{
+            mode:$updates_mode,
+            allow:$updates_allow,
+            channel:$updates_channel,
+            interval_hours:$updates_interval,
+            installed:$updates_installed,
+            latest:$updates_latest,
+            status:$updates_status
           },
           noise_pct:$noise_pct, last_curated:$last_curated}' >&3
 fi

@@ -12,6 +12,8 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
+. "$LIB_DIR/provider.sh"
+. "$LIB_DIR/updater.sh"
 . "$LIB_DIR/hooks.sh"
 . "$LIB_DIR/codex-hooks.sh"
 
@@ -149,6 +151,11 @@ if [ "${backfilled:-0}" -gt 0 ]; then
 else
     eagle_ok "Project names up to date"
 fi
+
+# ─── Ensure auto-update defaults exist ─────────────────────
+
+eagle_update_ensure_defaults
+eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_update_config_allow))${RESET}"
 
 # ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
 

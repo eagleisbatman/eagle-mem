@@ -14,6 +14,7 @@ SCRIPTS_DIR="$SCRIPT_DIR/../scripts"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/provider.sh"
+. "$LIB_DIR/updater.sh"
 . "$LIB_DIR/hooks-sessionstart.sh"
 
 eagle_ensure_db
@@ -59,39 +60,16 @@ esac
 eagle_sessionstart_auto_provision "$project" "$cwd" "$SCRIPTS_DIR"
 eagle_sessionstart_auto_prune "$project" "$SCRIPTS_DIR" "$(eagle_db "SELECT COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project='$p_esc');")"
 eagle_sessionstart_auto_curate "$project" "$SCRIPTS_DIR"
+nohup bash "$SCRIPTS_DIR/updates.sh" auto >> "$EAGLE_MEM_LOG" 2>&1 &
 
 find "$EAGLE_MEM_DIR/read-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/mod-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR/edit-tracker" -type f -mtime +1 -delete 2>/dev/null &
 find "$EAGLE_MEM_DIR" -name ".turn-counter.*" -mtime +1 -delete 2>/dev/null &
 
-# ─── Version check (non-blocking) ────────────────────────
+# ─── Update notice from previous background run ────────────
 
-update_notice=""
-version_file="$EAGLE_MEM_DIR/.version"
-latest_file="$EAGLE_MEM_DIR/.latest-version"
-
-if [ -f "$version_file" ] && [ -s "$version_file" ]; then
-    installed_version=$(tr -d '[:space:]' < "$version_file")
-
-    if [ -f "$latest_file" ] && [ -s "$latest_file" ]; then
-        latest_version=$(tr -d '[:space:]' < "$latest_file")
-        newest=$(printf '%s\n' "$installed_version" "$latest_version" | sort -V | tail -1)
-        if [ "$newest" != "$installed_version" ]; then
-            update_notice="Update available: v${installed_version} → v${latest_version} — run: npm update -g eagle-mem && eagle-mem update"
-        fi
-    fi
-
-    if [ ! -f "$latest_file" ] || [ -n "$(find "$latest_file" -mtime +0 2>/dev/null)" ]; then
-        (tmp_latest=$(mktemp)
-         npm view eagle-mem version 2>/dev/null | tr -d '[:space:]' > "$tmp_latest"
-         if [ -s "$tmp_latest" ]; then
-             mv "$tmp_latest" "$latest_file"
-         else
-             rm -f "$tmp_latest"
-         fi) &
-    fi
-fi
+update_notice=$(eagle_update_take_notice)
 
 # ─── Gather stats ────────────────────────────────────────
 
