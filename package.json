@@ -1,6 +1,6 @@
 {
   "name": "eagle-mem",
-  "version": "4.9.2",
+  "version": "4.9.3",
   "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code and Codex",
   "bin": {
     "eagle-mem": "bin/eagle-mem"

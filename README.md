@@ -152,6 +152,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
 
+### v4.9.3 Patch
+
+Follow-up hardening for the v4.9.2 project-key repair: Claude transcript workspace detection now reads complete early JSONL records instead of a fixed byte slice, so large SessionStart hook context cannot hide the first `cwd`. Metadata-only memory/plan/task repairs also avoid touching FTS-indexed columns, preventing SQLite FTS update triggers from firing during safe project/source rekeys.
+
 ### v4.9.2 Patch
 
 Nested-repo Claude Code projects now use one stable project key. When a Claude workspace contains a git repo subdirectory, hooks prefer the Claude transcript workspace root while repo-local CLI commands can still use git-root keys where appropriate. Memory sync and backfill also repair unchanged memory rows whose content hash stayed the same but whose project key was stale. FTS5 update triggers now ignore metadata-only project rekeys, avoiding SQLite virtual-table errors during safe repairs.

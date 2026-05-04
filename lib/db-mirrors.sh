@@ -63,22 +63,32 @@ eagle_capture_agent_memory() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO agent_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id, origin_agent)
-VALUES ('$proj_sql', '$fp_sql', '$name_sql', '$desc_sql', '$type_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
-ON CONFLICT(file_path) DO UPDATE SET
-    memory_name     = excluded.memory_name,
-    description     = excluded.description,
-    memory_type     = excluded.memory_type,
-    content         = excluded.content,
-    content_hash    = excluded.content_hash,
-    origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), agent_memories.origin_session_id),
-    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), agent_memories.origin_agent),
-    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_memories.project END,
-    updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_memories.content_hash != excluded.content_hash
-   OR (excluded.project != '' AND agent_memories.project != excluded.project)
-   OR (excluded.origin_session_id != '' AND agent_memories.origin_session_id != excluded.origin_session_id)
-   OR (excluded.origin_agent != '' AND agent_memories.origin_agent != excluded.origin_agent);
+INSERT OR IGNORE INTO agent_memories (project, file_path, memory_name, description, memory_type, content, content_hash, origin_session_id, origin_agent)
+VALUES ('$proj_sql', '$fp_sql', '$name_sql', '$desc_sql', '$type_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql');
+
+UPDATE agent_memories
+SET memory_name       = '$name_sql',
+    description       = '$desc_sql',
+    memory_type       = '$type_sql',
+    content           = '$content_sql',
+    content_hash      = '$hash_sql',
+    origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
+    origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash != '$hash_sql';
+
+UPDATE agent_memories
+SET origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
+    origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash = '$hash_sql'
+  AND (('$proj_sql' != '' AND project != '$proj_sql')
+       OR ('$origin_sql' != '' AND origin_session_id != '$origin_sql')
+       OR ('$agent_sql' != '' AND origin_agent != '$agent_sql'));
 SQL
 }
 
@@ -151,20 +161,30 @@ eagle_capture_agent_plan() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO agent_plans (project, file_path, title, content, content_hash, origin_session_id, origin_agent)
-VALUES ('$proj_sql', '$fp_sql', '$title_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql')
-ON CONFLICT(file_path) DO UPDATE SET
-    title           = excluded.title,
-    content         = excluded.content,
-    content_hash    = excluded.content_hash,
-    origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), agent_plans.origin_session_id),
-    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), agent_plans.origin_agent),
-    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_plans.project END,
-    updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_plans.content_hash != excluded.content_hash
-   OR (excluded.project != '' AND agent_plans.project != excluded.project)
-   OR (excluded.origin_session_id != '' AND agent_plans.origin_session_id != excluded.origin_session_id)
-   OR (excluded.origin_agent != '' AND agent_plans.origin_agent != excluded.origin_agent);
+INSERT OR IGNORE INTO agent_plans (project, file_path, title, content, content_hash, origin_session_id, origin_agent)
+VALUES ('$proj_sql', '$fp_sql', '$title_sql', '$content_sql', '$hash_sql', '$origin_sql', '$agent_sql');
+
+UPDATE agent_plans
+SET title             = '$title_sql',
+    content           = '$content_sql',
+    content_hash      = '$hash_sql',
+    origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
+    origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash != '$hash_sql';
+
+UPDATE agent_plans
+SET origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
+    origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash = '$hash_sql'
+  AND (('$proj_sql' != '' AND project != '$proj_sql')
+       OR ('$origin_sql' != '' AND origin_session_id != '$origin_sql')
+       OR ('$agent_sql' != '' AND origin_agent != '$agent_sql'));
 SQL
 }
 
@@ -252,22 +272,31 @@ eagle_capture_agent_task() {
     agent_sql=$(eagle_sql_escape "$agent")
 
     eagle_db_pipe <<SQL
-INSERT INTO agent_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash, origin_agent)
-VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$af_sql', '$status_sql', '$blocks_sql', '$bb_sql', '$hash_sql', '$agent_sql')
-ON CONFLICT(file_path) DO UPDATE SET
-    subject         = excluded.subject,
-    description     = excluded.description,
-    active_form     = excluded.active_form,
-    status          = excluded.status,
-    blocks          = excluded.blocks,
-    blocked_by      = excluded.blocked_by,
-    content_hash    = excluded.content_hash,
-    origin_agent    = excluded.origin_agent,
-    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_tasks.project END,
-    updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_tasks.content_hash != excluded.content_hash
-   OR (excluded.project != '' AND agent_tasks.project != excluded.project)
-   OR (excluded.origin_agent != '' AND agent_tasks.origin_agent != excluded.origin_agent);
+INSERT OR IGNORE INTO agent_tasks (project, source_session_id, source_task_id, file_path, subject, description, active_form, status, blocks, blocked_by, content_hash, origin_agent)
+VALUES ('$proj_sql', '$sid_sql', '$tid_sql', '$fp_sql', '$subj_sql', '$desc_sql', '$af_sql', '$status_sql', '$blocks_sql', '$bb_sql', '$hash_sql', '$agent_sql');
+
+UPDATE agent_tasks
+SET subject       = '$subj_sql',
+    description   = '$desc_sql',
+    active_form   = '$af_sql',
+    status        = '$status_sql',
+    blocks        = '$blocks_sql',
+    blocked_by    = '$bb_sql',
+    content_hash  = '$hash_sql',
+    origin_agent  = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project       = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at    = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash != '$hash_sql';
+
+UPDATE agent_tasks
+SET origin_agent  = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
+    project       = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
+    updated_at    = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql'
+  AND content_hash = '$hash_sql'
+  AND (('$proj_sql' != '' AND project != '$proj_sql')
+       OR ('$agent_sql' != '' AND origin_agent != '$agent_sql'));
 SQL
 }
 

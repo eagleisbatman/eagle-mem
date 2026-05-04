@@ -210,15 +210,12 @@ eagle_transcript_first_cwd() {
     local transcript_path="${1:-}"
     [ -f "$transcript_path" ] || return 1
 
-    local sample
-    sample=$(dd if="$transcript_path" bs=65536 count=4 2>/dev/null)
-    [ -n "$sample" ] || return 1
-
-    printf '%s\n' "$sample" | sed -nE '/"cwd"[[:space:]]*:/ {
-        s/.*"cwd"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/
-        p
-        q
-    }'
+    local cwd
+    cwd=$(sed -n '1,200p' "$transcript_path" 2>/dev/null \
+        | jq -r 'select((.cwd? // "") != "") | .cwd' 2>/dev/null \
+        | awk 'NF { print; exit }' || true)
+    [ -n "$cwd" ] || return 1
+    printf '%s\n' "$cwd"
 }
 
 eagle_project_from_claude_project_dir() {
