@@ -452,7 +452,11 @@ parse_lane_options() {
         esac
         i=$((i + 1))
     done
-    args=("${parsed[@]}")
+    if [ "${#parsed[@]}" -gt 0 ]; then
+        args=("${parsed[@]}")
+    else
+        args=()
+    fi
 }
 
 lane_add() {
@@ -758,7 +762,11 @@ parse_spawn_options() {
         esac
         i=$((i + 1))
     done
-    args=("${parsed[@]}")
+    if [ "${#parsed[@]}" -gt 0 ]; then
+        args=("${parsed[@]}")
+    else
+        args=()
+    fi
 }
 
 orchestrate_worker_run_script() {

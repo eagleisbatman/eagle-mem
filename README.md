@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.8.3 ships Codex output and communication polish:** Codex final replies now stay clean by default instead of printing large `<eagle-summary>` capture blocks, installer/update output uses clean-output wording, and the GitHub Pages homepage now has a clearer hero plus explicit installer/orchestrator sections.
+**v4.8.4 proves the worker-lane path end to end:** Codex can create an orchestration, route a lane to Claude Code by default, launch the Claude worker in an isolated worktree, mirror the lane into `agent_tasks`, and generate a durable handoff without crashing on Bash 3.2.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -148,6 +148,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.8.4 Patch
+
+The orchestration handoff path is now Bash 3.2-safe, so `eagle-mem orchestrate handoff` works even when no lane options are present. This patch was verified with a real Codex coordinator -> Claude Code worker proof lane using `claude-opus-4-7` at `xhigh`; the completed lane is visible through `eagle-mem orchestrate --json`, `eagle-mem tasks completed`, and the generated handoff output. Release-boundary detection also ignores Eagle Mem's own `feature verify`/`waive` commands, so verification notes can mention dry-run checks without blocking themselves.
 
 ### v4.8.3 Patch
 

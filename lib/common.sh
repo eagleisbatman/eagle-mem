@@ -378,6 +378,10 @@ eagle_is_release_boundary_command() {
             function has_dry_run_flag(line) {
                 return line ~ /(^|[[:space:]])--dry-run([[:space:]]|$|=([Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss])([[:space:]]|$))/
             }
+            function is_eagle_feature_command(line) {
+                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+feature[[:space:]]+(verify|waive|pending|list)([[:space:]]|$)/
+            }
+            is_eagle_feature_command($0) { next }
             /(^|[[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)/ ||
             /(^|[[:space:]])npm[[:space:]]+publish([[:space:]]|$)/ ||
             /(^|[[:space:]])pnpm[[:space:]]+publish([[:space:]]|$)/ ||
@@ -399,6 +403,10 @@ eagle_is_release_boundary_command() {
             function has_dry_run_flag(line) {
                 return line ~ /(^|[[:space:]])--dry-run([[:space:]]|$|=([Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss])([[:space:]]|$))/
             }
+            function is_eagle_feature_command(line) {
+                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+feature[[:space:]]+(verify|waive|pending|list)([[:space:]]|$)/
+            }
+            is_eagle_feature_command($0) { next }
             /(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)/ {
                 if (!has_dry_run_flag($0)) found = 1
             }
