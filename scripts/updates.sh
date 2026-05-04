@@ -32,7 +32,7 @@ updates_status() {
 
     local installed latest latest_rc
     installed=$(eagle_update_installed_version)
-    latest=$(eagle_update_latest_version 0 2>/dev/null) && latest_rc=0 || latest_rc=$?
+    latest=$(eagle_update_latest_version 1 2>/dev/null) && latest_rc=0 || latest_rc=$?
 
     eagle_header "Updates"
     eagle_kv "Installed:" "v${installed:-unknown}"

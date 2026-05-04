@@ -152,6 +152,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
 
+### v4.9.1 Patch
+
+`eagle-mem updates status` now refreshes the npm version live, and install/update seed the local latest-version cache with the installed version. This avoids confusing status output immediately after an update.
+
 ### v4.9.0 Patch
 
 Eagle Mem now auto-updates by default for patch bug fixes. SessionStart performs a throttled background npm check, applies eligible patch releases with a lock and runtime/database backup, runs `eagle-mem update`, and records a one-time notice for the next session. Minor and major releases stay outside the default auto-apply range unless users opt in with `eagle-mem updates enable minor` or `eagle-mem updates enable major`.

@@ -348,6 +348,7 @@ fi
 
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
 echo "$version" > "$EAGLE_MEM_DIR/.version"
+echo "$version" > "$EAGLE_MEM_DIR/.latest-version"
 
 # ─── Summary ───────────────────────────────────────────────
 
