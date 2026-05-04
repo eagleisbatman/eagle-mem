@@ -6,7 +6,7 @@
     <title>Eagle Mem — Shared Memory for Claude Code and Codex</title>
     <meta
       name="description"
-      content="Shared persistent memory and regression control for Claude Code and Codex — SQLite + FTS5, no daemon, no vector DB. Session summaries, code indexing, feature verification, and hook-based recall."
+      content="Shared persistent memory, regression control, and cross-agent orchestration for Claude Code and Codex — SQLite + FTS5, no daemon, no vector DB. Session summaries, code indexing, feature verification, RTK token guardrails, and compact hook-based recall."
     />
     <style>
       :root {
@@ -269,6 +269,10 @@
         padding: 48px 0 0;
       }
 
+      .skills-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
       .feature {
         padding: 32px 28px;
         background: var(--card);
@@ -496,6 +500,7 @@
         .ascii-banner { font-size: clamp(5px, 2.8vw, 10px); }
         .highlights { grid-template-columns: 1fr 1fr; }
         section.details { grid-template-columns: 1fr 1fr; }
+        .skills-grid { grid-template-columns: 1fr 1fr; }
         .problem-solution { grid-template-columns: 1fr; }
         .cmd-grid { grid-template-columns: 1fr 1fr; }
       }
@@ -503,6 +508,7 @@
       @media (max-width: 500px) {
         .highlights { grid-template-columns: 1fr; }
         section.details { grid-template-columns: 1fr; }
+        .skills-grid { grid-template-columns: 1fr; }
         .cmd-grid { grid-template-columns: 1fr; }
       }
     </style>
@@ -518,7 +524,7 @@
 ███████╗██║░░██║╚██████╔╝███████╗███████╗  ██║░╚═╝░██║███████╗██║░╚═╝░██║
 ╚══════╝╚═╝░░╚═╝░╚═════╝░╚══════╝╚══════╝  ╚═╝░░░░░╚═╝╚══════╝╚═╝░░░░░╚═╝</pre>
         <p class="tagline">
-          Shared persistent memory for
+          Shared persistent memory and worker orchestration for
           <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a>
           and Codex.
           SQLite + FTS5. No daemon, no vector DB, no bloat.
@@ -561,7 +567,7 @@
       </div>
 
       <div class="banner-preview"><span class="dim">======================================</span>
-       Eagle Mem Loaded
+       Eagle Mem Recall Ready
 <span class="dim">======================================</span>
  Project      | my-app
  Sessions     | 42 (18 with summaries)
@@ -581,8 +587,8 @@
         </div>
         <div class="highlight">
           <h3>Commands</h3>
-          <span class="num">15</span>
-          <p>CLI commands for search, health, config, guard, curate, and more</p>
+          <span class="num">16</span>
+          <p>CLI commands for search, health, orchestration, config, guard, curate, and more</p>
         </div>
         <div class="highlight">
           <h3>Agents</h3>
@@ -591,8 +597,8 @@
         </div>
         <div class="highlight">
           <h3>Skills</h3>
-          <span class="num">4</span>
-          <p>In-session skills for search, overview, memories, and tasks in Claude Code and Codex</p>
+          <span class="num">5</span>
+          <p>In-session skills for search, overview, memories, tasks, and orchestration in Claude Code and Codex</p>
         </div>
       </div>
 
@@ -695,7 +701,8 @@
           </p>
           <ul>
             <li><strong>Injection compression</strong> &mdash; zero-value stats elided, compact reloads get 1 recent session instead of 3</li>
-            <li><strong>Command rewriting</strong> &mdash; noisy Bash commands piped through <code>head -N</code> via <code>updatedInput</code></li>
+            <li><strong>RTK token guard</strong> &mdash; noisy shell commands routed through <code>rtk</code> or blocked in enforce mode</li>
+            <li><strong>Compact Codex recall</strong> &mdash; Codex hooks emit short JSON context instead of multi-screen prompt dumps</li>
             <li><strong>Read-after-modify</strong> &mdash; detects reads of just-edited files, nudges that the diff is already in context</li>
             <li><strong>Read dedup</strong> &mdash; files read 3+ times get a soft nudge</li>
             <li><strong>Co-edit nudges</strong> &mdash; learned from observations: editing X reminds you to also touch Y</li>
@@ -716,6 +723,7 @@
             <li><strong>Gotcha surfacing</strong> &mdash; past surprises surfaced when editing related files</li>
             <li><strong>Stale memory detection</strong> &mdash; warns when edits may contradict stored memories</li>
             <li><strong>Dry-run aware</strong> &mdash; validation commands stay unblocked; real publish forms such as <code>--dry-run=false</code> still enforce checks</li>
+            <li><strong>Orchestration lanes</strong> &mdash; durable worker lanes preserve ownership, worktrees, validation, and handoff state</li>
           </ul>
         </div>
       </section>
@@ -758,6 +766,7 @@
             <li><code>eagle-mem prune</code> &mdash; clean stale data</li>
             <li><code>eagle-mem scan</code> &mdash; scan codebase</li>
             <li><code>eagle-mem index</code> &mdash; index source files</li>
+            <li><code>eagle-mem orchestrate</code> &mdash; coordinate durable worker lanes</li>
           </ul>
         </div>
       </div>
@@ -806,7 +815,7 @@
 
       <p class="section-title">Skills (inside Claude Code and Codex)</p>
 
-      <section class="details" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
+      <section class="details skills-grid">
         <div class="feature">
           <h3>// /eagle-mem-search</h3>
           <p>
@@ -831,6 +840,12 @@
             TaskAware Compact Loop &mdash; break complex work into tasks that survive <code>/compact</code>.
           </p>
         </div>
+        <div class="feature">
+          <h3>// /eagle-mem-orchestrate</h3>
+          <p>
+            Split broad work into opposite-agent worker lanes with git worktrees, validation commands, and handoffs.
+          </p>
+        </div>
       </section>
 
       <!-- ─── How it works: deeper ───────────────── -->
@@ -849,6 +864,7 @@
             <li><strong>Codex hooks</strong> &mdash; installer enables <code>codex_hooks</code>, registers hooks in <code>~/.codex/hooks.json</code>, and symlinks Eagle Mem skills into <code>~/.codex/skills</code></li>
             <li><strong>Agent mirror</strong> &mdash; memories, plans, and tasks are mirrored with source attribution</li>
             <li><strong>Shared recall</strong> &mdash; SessionStart injects the same project history into either agent</li>
+            <li><strong>Opposite workers</strong> &mdash; Codex can launch Claude workers, and Claude Code can launch Codex workers</li>
           </ul>
         </div>
         <div class="feature">
@@ -908,6 +924,8 @@
             <tr><td>feature_dependencies</td><td>Inter-feature dependency relationships</td></tr>
             <tr><td>feature_smoke_tests</td><td>Smoke test definitions for feature verification</td></tr>
             <tr><td>pending_feature_verifications</td><td>Release blockers created when files tied to features change</td></tr>
+            <tr><td>orchestrations</td><td>Durable multi-agent work plans per project</td></tr>
+            <tr><td>orchestration_lanes</td><td>Worker lane ownership, status, validation, worktree, and notes</td></tr>
             <tr><td>eagle_meta</td><td>Internal metadata (last scan, last curate, etc.)</td></tr>
             <tr><td>agent_memories</td><td>Mirror of agent memory files, with source attribution</td></tr>
             <tr><td>agent_plans</td><td>Mirror of agent plan files, with source attribution</td></tr>
@@ -931,7 +949,7 @@
       </div>
 
       <footer>
-        v4.7.1 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
+        v4.8.0 &mdash; Built by <a href="https://github.com/eagleisbatman">eagleisbatman</a> &mdash; MIT License
       </footer>
     </main>
   </body>
