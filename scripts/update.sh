@@ -162,7 +162,7 @@ fi
 
 if [ "$codex_found" = true ]; then
     if eagle_patch_codex_agents_md; then
-        eagle_ok "AGENTS.md updated ${DIM}(Codex eagle-summary instructions added)${RESET}"
+        eagle_ok "AGENTS.md updated ${DIM}(Codex clean-output memory instructions updated)${RESET}"
     else
         eagle_ok "AGENTS.md up to date"
     fi
