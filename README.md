@@ -1,16 +1,29 @@
 ```
 ======================================
        Eagle Mem
-  context that survives /compact
+ shared memory | guardrails | lanes
 ======================================
 ```
 
 # Eagle Mem
 
-**Context that survives `/compact`.**
+**Shared memory, release guardrails, and worker lanes for Claude Code and Codex.**
 
-**v4.8.0 ships first-class cross-agent orchestration, compact Codex hook recall, enforced anti-regression checks, and configurable RTK token guardrails.**
-Claude Code and Codex can now share the same local Eagle Mem database, while every captured row records which agent created it.
+Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
+
+**v4.8.1 ships the communication refresh for the new architecture:** cross-agent orchestration, compact Codex hook recall, enforced anti-regression checks, configurable RTK token guardrails, and a memory-sync fix for large memory files.
+
+**Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
+[Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
+[About](https://eagleisbatman.github.io/eagle-mem/about.html)
+
+## Why People Install It
+
+- **Start warmer** - every new session can recall project overviews, decisions, gotchas, summaries, hot files, mirrored memories, plans, and tasks.
+- **Ship safer** - feature-mapped changes create pending verification records, and release-boundary commands stay blocked until the current diff is verified or waived.
+- **Waste fewer tokens** - Eagle Mem injects compact context, nudges duplicate reads, and can route noisy shell output through RTK.
+- **Coordinate agents** - Codex and Claude Code can share one project memory while worker lanes record owner, model, effort, worktree, logs, validation, and handoff.
+- **Stay local** - no daemon, no hosted memory service, no vector database. The core is hooks plus SQLite/FTS5.
 
 ## The Problem
 
@@ -18,9 +31,17 @@ Claude Code and Codex start every session with amnesia. They don't remember what
 
 The longer you work with Claude Code, the worse this gets. Projects accumulate history — decisions, gotchas, architectural patterns, feature dependencies — and none of it survives across sessions.
 
-## The Solution
+## The Product
 
-Eagle Mem is a recall and regression-control layer for Claude Code and Codex. Every session starts with context from previous sessions — summaries, decisions, memories, tasks, project overviews, and relevant code — injected automatically via hooks. Both agents share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code` or `Codex`.
+Eagle Mem is a local runtime layer for AI coding agents. It adds three things that ordinary agent sessions do not have by default:
+
+| Layer | What users feel | What Eagle Mem does |
+|-------|-----------------|---------------------|
+| **Recall** | "The agent remembers this repo." | Loads project overviews, summaries, decisions, memories, tasks, plans, and relevant indexed code. |
+| **Guardrails** | "The agent cannot casually undo known decisions or push unverified feature changes." | Surfaces decisions before edits and enforces feature verification on push, PR, and publish boundaries. |
+| **Lanes** | "A big task can survive compaction and split across agents." | Persists orchestrations, worker lanes, worktrees, logs, validation commands, and handoffs. |
+
+Both agents share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code` or `Codex`.
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash scripts, sqlite3 (WAL mode, FTS5 full-text search), and jq.
 
@@ -127,6 +148,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.8.1 Patch
+
+`eagle-mem memories sync` is now safe on large Claude Code/Codex memory files. The memory mirror parser no longer uses early-exit pipelines under `pipefail`, avoiding exit `141` during sync.
 
 ### Search Modes
 

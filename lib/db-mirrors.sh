@@ -23,7 +23,7 @@ eagle_capture_agent_memory() {
         body=$(cat "$file_path")
     fi
 
-    _fm_field() { printf '%s\n' "$fm" | awk -F': *' -v k="$1" '$1==k{sub(/^[^:]+: */,""); gsub(/^"|"$/,""); print; exit}'; }
+    _fm_field() { awk -F': *' -v k="$1" '$1==k{sub(/^[^:]+: */,""); gsub(/^"|"$/,""); print; exit}' <<< "$fm"; }
 
     local mname mdesc mtype morigin
     mname=$(_fm_field "name")
@@ -41,7 +41,14 @@ eagle_capture_agent_memory() {
     fi
     [ -z "$mtype" ] && mtype="$agent"
     if [ -z "$mdesc" ]; then
-        mdesc=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/d' | head -1 | cut -c1-200)
+        mdesc=$(awk '
+            /^[[:space:]]*$/ { next }
+            {
+                line = substr($0, 1, 200)
+                print line
+                exit
+            }
+        ' <<< "$body")
     fi
 
     local fp_sql proj_sql name_sql desc_sql type_sql content_sql hash_sql origin_sql agent_sql

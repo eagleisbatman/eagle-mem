@@ -1,7 +1,7 @@
 {
   "name": "eagle-mem",
-  "version": "4.8.0",
-  "description": "Context that survives /compact for Claude Code and Codex — SQLite + FTS5, no daemon, no bloat",
+  "version": "4.8.1",
+  "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code and Codex",
   "bin": {
     "eagle-mem": "bin/eagle-mem"
   },

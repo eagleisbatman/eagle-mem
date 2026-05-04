@@ -18,7 +18,7 @@ CROSS="${RED}✗${RESET}"
 ARROW="${CYAN}→${RESET}"
 DOT="${DIM}·${RESET}"
 EAGLE_RULE="======================================"
-EAGLE_TAGLINE="context that survives /compact"
+EAGLE_TAGLINE="shared memory | guardrails | lanes"
 
 eagle_header() {
     echo ""
