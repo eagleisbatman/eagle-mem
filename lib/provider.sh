@@ -143,6 +143,7 @@ eagle_config_init() {
     # Create config with restrictive permissions from the start (no TOCTOU window)
     (
         umask 077
+        mkdir -p "$EAGLE_MEM_DIR"
         cat > "$EAGLE_CONFIG_FILE" << TOML
 # Eagle Mem configuration
 # Docs: https://github.com/eagleisbatman/eagle-mem
@@ -164,6 +165,17 @@ preferred = "current"
 codex_model = ""
 claude_model = ""
 
+[orchestration]
+# route = "opposite" means Codex coordinates Claude workers and Claude
+# coordinates Codex workers by default.
+route = "opposite"
+auto_worktree = "true"
+worktree_root = ""
+codex_worker_model = "gpt-5.5"
+codex_worker_effort = "xhigh"
+claude_worker_model = "claude-opus-4-7"
+claude_worker_effort = "xhigh"
+
 [anthropic]
 # Uses ANTHROPIC_API_KEY env var for authentication
 model = "claude-haiku-4-5-20251001"
@@ -177,11 +189,20 @@ model = "gpt-4o-mini"
 schedule = "auto"
 min_sessions = 5
 
+[token_guard]
+# rtk: "off" disables RTK help, "auto" uses RTK when found,
+# "enforce" blocks known raw-output shell commands when RTK is unavailable.
+rtk = "auto"
+# raw_bash: "block" blocks raw Codex shell output when an RTK rewrite exists.
+# "allow" keeps RTK advisory only.
+raw_bash = "block"
+
 [redaction]
 # Additional secret patterns (regex) beyond built-in defaults
 # extra_patterns = ["MY_CUSTOM_SECRET_.*"]
 TOML
     )
+    chmod 700 "$EAGLE_MEM_DIR" 2>/dev/null || true
     eagle_log "INFO" "Config initialized: provider=$provider model=$model"
 }
 
@@ -536,6 +557,19 @@ eagle_show_config() {
         echo "Codex:     $(command -v codex 2>/dev/null || echo "not found")"
         echo "Claude:    $(command -v claude 2>/dev/null || echo "not found")"
     fi
+
+    echo ""
+    echo "Orchestration:"
+    echo "  Route:      $(eagle_config_get "orchestration" "route" "opposite")"
+    echo "  Worktrees:  $(eagle_config_get "orchestration" "auto_worktree" "true")"
+    echo "  Codex:      $(eagle_config_get "orchestration" "codex_worker_model" "gpt-5.5") / $(eagle_config_get "orchestration" "codex_worker_effort" "xhigh")"
+    echo "  Claude:     $(eagle_config_get "orchestration" "claude_worker_model" "claude-opus-4-7") / $(eagle_config_get "orchestration" "claude_worker_effort" "xhigh")"
+
+    echo ""
+    echo "Token guard:"
+    echo "  RTK mode:  $(eagle_config_get "token_guard" "rtk" "auto")"
+    echo "  Raw bash:  $(eagle_config_get "token_guard" "raw_bash" "block")"
+    echo "  RTK bin:   $(command -v rtk 2>/dev/null || echo "not found")"
 
     echo ""
     echo "Config:   $EAGLE_CONFIG_FILE"

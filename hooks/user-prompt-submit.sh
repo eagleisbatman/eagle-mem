@@ -26,6 +26,8 @@ agent=$(eagle_agent_source_from_json "$input")
 [ -z "$user_prompt" ] && exit 0
 
 project=$(eagle_project_from_cwd "$cwd")
+codex_compact=0
+[ "$agent" = "codex" ] && codex_compact=1
 
 # ─── Context pressure detection (turn counter since last compact) ──
 # Must run before any early exits so every prompt is counted
@@ -85,8 +87,37 @@ if [ -z "$fts_query" ]; then
     exit 0
 fi
 
+# ─── Agent-run orchestration nudge ────────────────────────
+
+lower_prompt=$(printf '%s' "$user_prompt" | tr '[:upper:]' '[:lower:]')
+if printf '%s\n' "$lower_prompt" | grep -Eq '(orchestrat|worker|parallel|multi-agent|multi agent|split|lane|scope out|plan and get started|broad|full codebase|release|publish|ship)'; then
+    if [ "$codex_compact" -eq 1 ]; then
+        context+="=== Eagle Mem: Orchestration Protocol ===
+For broad work, you run eagle-mem orchestrate yourself. Use durable lanes, opposite-agent workers, and concise user-visible status.
+"
+    else
+        context+="=== Eagle Mem: Orchestration Protocol ===
+If this request is broad enough to split into worker lanes, YOU run the orchestration commands. Do not ask the user to run them.
+
+Use:
+  eagle-mem orchestrate init \"<goal>\"
+  eagle-mem orchestrate lane add <key> --agent codex|claude-code --desc \"<self-contained scope>\" --validate \"<command>\"
+  eagle-mem orchestrate lane start|block|complete <key>
+
+Keep this mostly invisible to the user; surface only concise status or handoff when useful.
+"
+    fi
+fi
+
 # Search for relevant past summaries (cross-session)
-results=$(eagle_search_summaries "$fts_query" "$project" 3)
+summary_limit=2
+code_limit=3
+if [ "$codex_compact" -eq 1 ]; then
+    summary_limit=1
+    code_limit=2
+fi
+
+results=$(eagle_search_summaries "$fts_query" "$project" "$summary_limit")
 
 if [ -n "$results" ]; then
     context+="=== Eagle Mem: Relevant Recall ===
@@ -94,25 +125,46 @@ if [ -n "$results" ]; then
     while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files summary_agent; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
         origin_label=$(eagle_agent_label "$summary_agent")
-        context+="[$created_at][$origin_label] "
-        [ -n "$req" ] && context+="$req"
-        [ -n "$completed" ] && context+=" → $completed"
-        [ -n "$learned" ] && context+=" (Learned: $learned)"
-        [ -n "$decisions" ] && context+="
-  Decisions: $decisions"
-        [ -n "$gotchas" ] && context+="
-  Gotchas: $gotchas"
-        [ -n "$key_files" ] && context+="
-  Key files: $key_files"
-        context+="
+        if [ "$codex_compact" -eq 1 ]; then
+            req=$(eagle_trim_text "$req" 90)
+            completed=$(eagle_trim_text "$completed" 150)
+            learned=$(eagle_trim_text "$learned" 110)
+            context+="- [$origin_label] "
+            if [ -n "$completed" ]; then
+                context+="$completed"
+            else
+                context+="$req"
+            fi
+            [ -n "$learned" ] && context+=" | learned: $learned"
+            context+="
 "
+        else
+            req=$(eagle_trim_text "$req" 160)
+            completed=$(eagle_trim_text "$completed" 220)
+            learned=$(eagle_trim_text "$learned" 180)
+            decisions=$(eagle_trim_text "$decisions" 160)
+            gotchas=$(eagle_trim_text "$gotchas" 160)
+            key_files=$(eagle_trim_text "$key_files" 160)
+            context+="[$created_at][$origin_label] "
+            [ -n "$req" ] && context+="$req"
+            [ -n "$completed" ] && context+=" → $completed"
+            [ -n "$learned" ] && context+=" (Learned: $learned)"
+            [ -n "$decisions" ] && context+="
+  Decisions: $decisions"
+            [ -n "$gotchas" ] && context+="
+  Gotchas: $gotchas"
+            [ -n "$key_files" ] && context+="
+  Key files: $key_files"
+            context+="
+"
+        fi
     done <<< "$results"
 fi
 
 # Search indexed code chunks (if any exist for this project)
 has_chunks=$(eagle_count_code_chunks "$project")
 if [ "${has_chunks:-0}" -gt 0 ]; then
-    code_results=$(eagle_search_code_chunks "$fts_query" "$project" 5)
+    code_results=$(eagle_search_code_chunks "$fts_query" "$project" "$code_limit")
 
     if [ -n "$code_results" ]; then
         context+="=== Eagle Mem: Relevant Code ===
@@ -129,11 +181,17 @@ fi
 
 [ -z "$context" ] && exit 0
 
-context+="
-IMPORTANT: When Eagle Mem finds relevant memories or code for the user's prompt, briefly mention it at the start of your response: \"Eagle Mem recalled N relevant sessions\" or \"Eagle Mem found related code in [files]\". One line max — then proceed with the answer.
+if [ "$codex_compact" -eq 1 ]; then
+    context+="
+Use only if directly useful. If you mention it to the user, keep Eagle Mem attribution to one short line.
+"
+else
+    context+="
+IMPORTANT: If directly useful, start with one short Eagle Mem attribution line, then proceed.
 
 === Eagle Mem: Persistent Memory ===
 "
+fi
 
 eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
 exit 0

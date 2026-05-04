@@ -17,7 +17,32 @@ eagle_header "Config"
 subcommand="${1:-show}"
 shift 2>/dev/null || true
 
+show_help() {
+    echo -e "  ${BOLD}eagle-mem config${RESET} — Provider and token-guard settings"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem config                  ${DIM}# show current config${RESET}"
+    echo -e "    eagle-mem config ${CYAN}init${RESET}             ${DIM}# create config.toml${RESET}"
+    echo -e "    eagle-mem config ${CYAN}set${RESET} section.key value"
+    echo -e "    eagle-mem config ${CYAN}test${RESET}             ${DIM}# test curator provider${RESET}"
+    echo ""
+    echo -e "  ${BOLD}Examples:${RESET}"
+    echo -e "    eagle-mem config set provider.type agent_cli"
+    echo -e "    eagle-mem config set agent_cli.preferred current"
+    echo -e "    eagle-mem config set orchestration.route opposite"
+    echo -e "    eagle-mem config set orchestration.codex_worker_model gpt-5.5"
+    echo -e "    eagle-mem config set orchestration.claude_worker_model claude-opus-4-7"
+    echo -e "    eagle-mem config set token_guard.rtk enforce"
+    echo -e "    eagle-mem config set token_guard.raw_bash block"
+    echo ""
+    exit 0
+}
+
 case "$subcommand" in
+    --help|-h|help)
+        show_help
+        ;;
+
     init)
         eagle_config_init
         eagle_ok "Config created: $EAGLE_CONFIG_FILE"
@@ -38,8 +63,13 @@ case "$subcommand" in
             eagle_info "  eagle-mem config set provider.type ollama"
             eagle_info "  eagle-mem config set provider.type agent_cli"
             eagle_info "  eagle-mem config set agent_cli.preferred current"
+            eagle_info "  eagle-mem config set orchestration.route opposite"
+            eagle_info "  eagle-mem config set orchestration.codex_worker_effort xhigh"
+            eagle_info "  eagle-mem config set orchestration.claude_worker_effort xhigh"
             eagle_info "  eagle-mem config set ollama.model mistral"
             eagle_info "  eagle-mem config set anthropic.model claude-haiku-4-5-20251001"
+            eagle_info "  eagle-mem config set token_guard.rtk enforce"
+            eagle_info "  eagle-mem config set token_guard.raw_bash block"
             exit 1
         fi
         section="${key%%.*}"

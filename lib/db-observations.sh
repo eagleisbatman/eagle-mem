@@ -70,6 +70,13 @@ eagle_search_code_chunks() {
               JOIN code_chunks_fts f ON f.rowid = c.id
               WHERE code_chunks_fts MATCH '$query'
               AND c.project = '$project'
+              AND c.file_path NOT LIKE '.playwright-mcp/%'
+              AND c.file_path NOT LIKE '.eagle-worktrees/%'
+              AND c.file_path NOT LIKE '.git/%'
+              AND c.file_path NOT LIKE 'node_modules/%'
+              AND c.file_path NOT LIKE 'dist/%'
+              AND c.file_path NOT LIKE 'build/%'
+              AND c.file_path NOT LIKE 'coverage/%'
               ORDER BY rank
               LIMIT $limit;"
 }

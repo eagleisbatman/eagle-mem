@@ -27,6 +27,8 @@ source_type=$(echo "$input" | jq -r '.source // empty')
 model=$(echo "$input" | jq -r '.model // empty')
 agent=$(eagle_agent_source_from_json "$input")
 agent_label=$(eagle_agent_label "$agent")
+codex_compact=0
+[ "$agent" = "codex" ] && codex_compact=1
 
 [ -z "$session_id" ] && exit 0
 
@@ -131,8 +133,7 @@ if [ "$stat_tasks_done" -gt 0 ]; then
     task_parts+="${stat_tasks_done} completed"
 fi
 
-stat_last_display="${stat_last_summary:0:60}"
-[ ${#stat_last_summary} -gt 60 ] && stat_last_display+="..."
+stat_last_display=$(eagle_trim_text "$stat_last_summary" 60)
 
 eagle_banner="======================================
        Eagle Mem Recall Ready
@@ -178,9 +179,9 @@ fi
 
 overview=$(eagle_get_overview "$project")
 if [ -n "$overview" ]; then
-    if [ ${#overview} -gt 500 ]; then
-        overview="${overview:0:497}..."
-    fi
+    overview_limit=500
+    [ "$codex_compact" -eq 1 ] && overview_limit=320
+    overview=$(eagle_trim_text "$overview" "$overview_limit")
     context+="
 === Eagle Mem: Project Overview ===
 $overview
@@ -196,8 +197,10 @@ fi
 
 if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     _summary_limit=1
+elif [ "$codex_compact" -eq 1 ]; then
+    _summary_limit=1
 else
-    _summary_limit=3
+    _summary_limit=2
 fi
 
 recent=$(eagle_get_recent_summaries "$project" "$_summary_limit")
@@ -209,6 +212,21 @@ if [ -n "$recent" ]; then
     while IFS='|' read -r request completed learned next_steps created_at decisions gotchas key_files summary_agent; do
         [ -z "$request" ] && [ -z "$completed" ] && continue
         summary_agent_label=$(eagle_agent_label "$summary_agent")
+        request=$(eagle_trim_text "$request" 160)
+        completed=$(eagle_trim_text "$completed" 220)
+        learned=$(eagle_trim_text "$learned" 180)
+        decisions=$(eagle_trim_text "$decisions" 160)
+        gotchas=$(eagle_trim_text "$gotchas" 160)
+        key_files=$(eagle_trim_text "$key_files" 160)
+        next_steps=$(eagle_trim_text "$next_steps" 160)
+        if [ "$codex_compact" -eq 1 ]; then
+            request=$(eagle_trim_text "$request" 120)
+            completed=$(eagle_trim_text "$completed" 160)
+            learned=$(eagle_trim_text "$learned" 120)
+            decisions=""
+            key_files=""
+            next_steps=""
+        fi
         context+="
 --- $created_at ---"
         [ -n "$summary_agent" ] && context+="
@@ -234,12 +252,14 @@ fi
 
 # ─── Memories (skip if none) ─────────────────────────────
 
+memory_limit=3
+[ "$codex_compact" -eq 1 ] && memory_limit=2
 memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent,
     CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
     FROM agent_memories
     WHERE project = '$p_esc'
     ORDER BY updated_at DESC
-    LIMIT 5;")
+    LIMIT $memory_limit;")
 if [ -n "$memories" ]; then
     context+="
 === Eagle Mem: Stored Memories ===
@@ -247,6 +267,7 @@ if [ -n "$memories" ]; then
     while IFS='|' read -r mname mtype mdesc _fpath _updated morigin days_ago; do
         [ -z "$mname" ] && continue
         origin_label=$(eagle_agent_label "$morigin")
+        mdesc=$(eagle_trim_text "$mdesc" 180)
         age_label=""
         if [ -n "$days_ago" ] && [ "$days_ago" -gt 0 ] 2>/dev/null; then
             if [ "$days_ago" -eq 1 ]; then
@@ -279,14 +300,17 @@ fi
 
 # ─── Tasks (skip if none) ────────────────────────────────
 
+task_limit=5
+[ "$codex_compact" -eq 1 ] && task_limit=3
 synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM agent_tasks
     WHERE project = '$p_esc'
     AND status IN ('in_progress', 'pending')
+    AND source_session_id != 'orchestration'
     AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
     ORDER BY
         CASE status WHEN 'in_progress' THEN 0 ELSE 1 END,
         updated_at DESC
-    LIMIT 10;")
+    LIMIT $task_limit;")
 if [ -n "$synced_tasks" ]; then
     context+="
 === Eagle Mem: Tasks ===
@@ -303,10 +327,54 @@ if [ -n "$synced_tasks" ]; then
     done <<< "$synced_tasks"
 fi
 
+# ─── Orchestration lanes (skip if none) ───────────────────
+
+lane_limit=8
+[ "$codex_compact" -eq 1 ] && lane_limit=4
+orchestration_lanes=$(eagle_db "SELECT o.name, o.goal, l.lane_key, l.title,
+        COALESCE(REPLACE(REPLACE(l.description, char(10), ' '), '|', '/'), ''),
+        l.agent, l.status, l.validation, l.worktree_path, l.notes
+    FROM orchestration_lanes l
+    JOIN orchestrations o ON o.id = l.orchestration_id
+    WHERE l.project = '$p_esc'
+      AND o.status = 'active'
+      AND l.status IN ('in_progress', 'pending', 'blocked')
+    ORDER BY
+        CASE l.status WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 ELSE 2 END,
+        l.updated_at DESC
+    LIMIT $lane_limit;" 2>/dev/null)
+if [ -n "$orchestration_lanes" ]; then
+    context+="
+=== Eagle Mem: Orchestration Lanes ===
+"
+    while IFS='|' read -r oname ogoal lkey ltitle ldesc lagent lstatus lvalidation lworktree lnotes; do
+        [ -z "$lkey" ] && continue
+        origin_label=$(eagle_agent_label "$lagent")
+        context+="  - [$lstatus][$origin_label] $lkey: $ltitle"
+        if [ -n "$ldesc" ]; then
+            desc_limit=220
+            [ "$codex_compact" -eq 1 ] && desc_limit=120
+            context+=" | scope: $(eagle_trim_text "$ldesc" "$desc_limit")"
+        fi
+        [ -n "$oname" ] && context+=" | plan: $oname"
+        [ -n "$lvalidation" ] && context+=" | validate: $lvalidation"
+        [ -n "$lworktree" ] && context+=" | worktree: $lworktree"
+        [ -n "$lnotes" ] && context+=" | notes: $lnotes"
+        context+="
+"
+    done <<< "$orchestration_lanes"
+    context+="You, the active agent, must run 'eagle-mem orchestrate' before taking lane work. Do not ask the user to run these commands. Update lane status when work starts, blocks, or completes.
+"
+fi
+
 # ─── Pending feature verifications ───────────────────────
 
-pending_features=$(eagle_list_pending_feature_verifications "$project" 10 2>/dev/null)
+pending_limit=5
+[ "$codex_compact" -eq 1 ] && pending_limit=3
+pending_features=$(eagle_list_pending_feature_verifications "$project" "$pending_limit" 2>/dev/null)
 if [ -n "$pending_features" ]; then
+    pending_total=$(eagle_db "SELECT COUNT(*) FROM pending_feature_verifications WHERE project = '$p_esc' AND status = 'pending';" 2>/dev/null)
+    pending_total=${pending_total:-0}
     context+="
 === Eagle Mem: Pending Feature Verification ===
 Release-boundary commands are blocked until these are verified or waived.
@@ -321,6 +389,10 @@ Release-boundary commands are blocked until these are verified or waived.
         context+="
 "
     done <<< "$pending_features"
+    if [ "$pending_total" -gt "$pending_limit" ] 2>/dev/null; then
+        context+="  - ... $((pending_total - pending_limit)) more pending; run: eagle-mem feature pending
+"
+    fi
     context+="Resolve with: eagle-mem feature verify <name> --notes \"what passed\"; or eagle-mem feature waive <id> --reason \"why safe\".
 "
 fi
@@ -334,9 +406,14 @@ if [ -n "$hot_files" ]; then
 Frequently read — re-read sparingly if unchanged.
 "
     IFS=',' read -ra hf_arr <<< "$hot_files"
+    hf_count=0
+    hot_file_limit=8
+    [ "$codex_compact" -eq 1 ] && hot_file_limit=5
     for hf in "${hf_arr[@]}"; do
+        [ "$hf_count" -ge "$hot_file_limit" ] && break
         [ -n "$hf" ] && context+="  - $(basename "$hf")
 "
+        hf_count=$((hf_count + 1))
     done
 fi
 
@@ -359,7 +436,12 @@ fi
 
 # ─── Instructions (compressed) ───────────────────────────
 
-if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
+if [ "$agent" = "codex" ]; then
+    context+="
+=== Eagle Mem: Active ===
+Memory active for '$project'. Emit <eagle-summary> in final responses with request, completed, learned, decisions, gotchas, next_steps, key_files, files_read, files_modified, affected_features, verified_features, and regression_risks.
+"
+elif [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     context+="
 === Eagle Mem: Active ===
 Memory active. Attribute recalled context to Eagle Mem. Do not revert PostToolUse-surfaced decisions without asking. Emit <eagle-summary> before final response.

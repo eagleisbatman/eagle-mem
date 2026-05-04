@@ -63,7 +63,9 @@ eagle_get_recent_summaries() {
     eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.decisions, s.gotchas, s.key_files, s.agent
               FROM summaries s
               WHERE s.project = '$project'
-              AND s.request NOT LIKE '%<local-command-caveat>%'
+              AND COALESCE(s.request, '') NOT LIKE '%<local-command-caveat>%'
+              AND COALESCE(s.request, '') NOT LIKE '# AGENTS.md instructions%'
+              AND COALESCE(s.request, '') NOT LIKE '<environment_context>%'
               ORDER BY s.created_at DESC
               LIMIT $limit;"
 }
@@ -84,7 +86,9 @@ eagle_search_summaries() {
               FROM summaries s
               JOIN summaries_fts f ON f.rowid = s.id
               WHERE summaries_fts MATCH '$query'
-              AND s.request NOT LIKE '%<local-command-caveat>%'
+              AND COALESCE(s.request, '') NOT LIKE '%<local-command-caveat>%'
+              AND COALESCE(s.request, '') NOT LIKE '# AGENTS.md instructions%'
+              AND COALESCE(s.request, '') NOT LIKE '<environment_context>%'
               $where_clause
               ORDER BY rank
               LIMIT $limit;"

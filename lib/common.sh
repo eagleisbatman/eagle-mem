@@ -31,6 +31,11 @@ eagle_log() {
 }
 
 eagle_project_from_cwd() {
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        echo "$EAGLE_MEM_PROJECT"
+        return
+    fi
+
     local cwd="${1:-$(pwd)}"
     local resolved="$cwd"
 
@@ -113,7 +118,13 @@ eagle_agent_source() {
     case "$agent" in
         codex|openai-codex) echo "codex" ;;
         claude|claude-code|cloud-code) echo "claude-code" ;;
-        *) echo "claude-code" ;;
+        *)
+            if [ -n "${CODEX_THREAD_ID:-}" ] || [ -n "${CODEX_CI:-}" ] || [ -n "${CODEX_MANAGED_BY_NPM:-}" ]; then
+                echo "codex"
+            else
+                echo "claude-code"
+            fi
+            ;;
     esac
 }
 
@@ -145,6 +156,22 @@ eagle_agent_label() {
         codex) echo "Codex" ;;
         *) echo "Claude Code" ;;
     esac
+}
+
+eagle_trim_text() {
+    local text="${1:-}"
+    local max="${2:-240}"
+
+    text=$(printf '%s' "$text" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+    if [ "${#text}" -gt "$max" ] 2>/dev/null; then
+        if [ "$max" -gt 3 ] 2>/dev/null; then
+            printf '%s...' "${text:0:$((max - 3))}"
+        else
+            printf '%s' "${text:0:$max}"
+        fi
+    else
+        printf '%s' "$text"
+    fi
 }
 
 eagle_is_shell_tool() {
@@ -190,8 +217,124 @@ eagle_emit_context_for_agent() {
     printf '%s\n' "$context"
 }
 
+eagle_config_get_light() {
+    local section="$1"
+    local key="$2"
+    local default="${3:-}"
+    local cfg="${EAGLE_CONFIG_FILE:-$EAGLE_MEM_DIR/config.toml}"
+
+    if [ ! -f "$cfg" ]; then
+        echo "$default"
+        return
+    fi
+
+    local value
+    value=$(awk -v section="$section" -v key="$key" '
+        /^[[:space:]]*\[/ {
+            gsub(/[\[\][:space:]]/, "")
+            current = $0
+        }
+        current == section && /^[[:space:]]*[^#\[]/ {
+            split($0, parts, "=")
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[1])
+            if (parts[1] == key) {
+                val = substr($0, index($0, "=") + 1)
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+                gsub(/^["'"'"']|["'"'"']$/, "", val)
+                print val
+                exit
+            }
+        }
+    ' "$cfg")
+
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
+}
+
+eagle_token_guard_rtk_mode() {
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        eagle_config_get "token_guard" "rtk" "auto"
+    else
+        eagle_config_get_light "token_guard" "rtk" "auto"
+    fi
+}
+
+eagle_token_guard_raw_bash_mode() {
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        eagle_config_get "token_guard" "raw_bash" "block"
+    else
+        eagle_config_get_light "token_guard" "raw_bash" "block"
+    fi
+}
+
+eagle_raw_output_command_needs_guard() {
+    local cmd="$1"
+    local first
+    first=$(printf '%s\n' "$cmd" | awk 'NR == 1 {print $1}' | sed 's|.*/||')
+
+    case "$first" in
+        cat|head|tail|find|grep|rg|wc) return 0 ;;
+    esac
+
+    if printf '%s\n' "$cmd" \
+        | tr '\n' ';' \
+        | sed -E 's/(&&|[|][|]|;)/\
+/g' \
+        | awk '
+            {
+                for (i = 1; i <= NF; i++) {
+                    token = $i
+                    sub(/^.*\//, "", token)
+                    if (token ~ /^(cat|head|tail|find|grep|rg|wc)$/) found = 1
+                }
+            }
+            END { exit(found ? 0 : 1) }
+        '
+    then
+        return 0
+    fi
+
+    if printf '%s\n' "$cmd" \
+        | tr '\n' ';' \
+        | sed -E 's/(&&|[|][|]|;)/\
+/g' \
+        | awk '
+            {
+                for (i = 1; i <= NF; i++) {
+                    if ($i !~ /(^|\/)git$/) continue
+                    j = i + 1
+                    while (j <= NF && $j ~ /^-/) {
+                        opt = $j
+                        j++
+                        if (opt == "-C" || opt == "-c" ||
+                            opt == "--git-dir" || opt == "--work-tree" ||
+                            opt == "--namespace" || opt == "--exec-path" ||
+                            opt == "--config-env" || opt == "--super-prefix") {
+                            j++
+                        }
+                    }
+                    if ($j ~ /^(diff|show|log|blame|grep)$/) found = 1
+                }
+            }
+            END { exit(found ? 0 : 1) }
+        '
+    then
+        return 0
+    fi
+
+    if printf '%s\n' "$cmd" | grep -qE '\|\s*(head|tail|grep|rg|wc)\b'; then
+        return 0
+    fi
+
+    return 1
+}
+
 eagle_rtk_rewrite_command() {
     local cmd="$1"
+    [ "$(eagle_token_guard_rtk_mode)" = "off" ] && return 1
     command -v rtk >/dev/null 2>&1 || return 1
 
     case "$cmd" in
@@ -464,7 +607,7 @@ _eagle_claude_md_section() {
 
 ## Eagle Mem — Persistent Memory
 
-Eagle Mem hooks are active in every project. SessionStart injects context (overview, recent sessions, memories, tasks, core files). Stop captures session summaries. PostToolUse mirrors memories/plans/tasks.
+Eagle Mem hooks are active in every project. SessionStart injects context (overview, recent sessions, memories, tasks, orchestration lanes, core files). Stop captures session summaries. PostToolUse mirrors memories/plans/tasks.
 
 **Rule:** Before your final response in every session, emit an `<eagle-summary>` block so the Stop hook can capture a rich summary instead of just heuristics.
 
@@ -492,6 +635,7 @@ regression_risks: [risk, ...]
 - When Eagle Mem injects context at SessionStart, attribute it: "Eagle Mem recalls:"
 - Do not revert decisions surfaced by PostToolUse without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
+- For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
 - Never put raw secrets in the summary — Eagle Mem redacts but defense in depth
 - If you contradict a loaded memory, update the memory file
 EAGLE_MD
@@ -520,6 +664,17 @@ eagle_patch_claude_md() {
             mv "${tmp_md}.clean" "$claude_md"
             rm -f "$tmp_md"
             _eagle_claude_md_section >> "$claude_md"
+            return 0
+        fi
+        if ! grep -qF 'eagle-mem orchestrate' "$claude_md" 2>/dev/null; then
+            local tmp_md
+            tmp_md=$(mktemp)
+            awk '
+                { print }
+                /pending feature verification/ {
+                    print "- For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands"
+                }
+            ' "$claude_md" > "$tmp_md" && mv "$tmp_md" "$claude_md"
             return 0
         fi
         return 1
@@ -558,7 +713,8 @@ regression_risks: [risk, ...]
 
 **How to apply:**
 - Attribute recalled context as "Eagle Mem recalls:" when it is injected
-- Use the Eagle Mem skills when relevant: `eagle-mem-search`, `eagle-mem-overview`, `eagle-mem-memories`, and `eagle-mem-tasks`
+- Use the Eagle Mem skills when relevant: `eagle-mem-search`, `eagle-mem-overview`, `eagle-mem-memories`, `eagle-mem-tasks`, and `eagle-mem-orchestrate`
+- For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
 - For important decisions, preferences, gotchas, or durable project facts, explicitly include them in the `<eagle-summary>` block so Codex-originated memories become available to future Claude Code and Codex sessions
 - Do not revert Eagle Mem-surfaced decisions without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
@@ -573,6 +729,17 @@ eagle_patch_codex_agents_md() {
     mkdir -p "$(dirname "$agents_md")"
 
     if [ -f "$agents_md" ] && grep -qF "$marker" "$agents_md" 2>/dev/null; then
+        if ! grep -qF 'eagle-mem orchestrate' "$agents_md" 2>/dev/null; then
+            local tmp_md
+            tmp_md=$(mktemp)
+            awk '
+                { print }
+                /eagle-mem-tasks/ {
+                    print "- Use the `eagle-mem-orchestrate` skill for broad multi-agent work. YOU run `eagle-mem orchestrate`; do not ask the user to run these commands"
+                }
+            ' "$agents_md" > "$tmp_md" && mv "$tmp_md" "$agents_md"
+            return 0
+        fi
         return 1
     fi
 

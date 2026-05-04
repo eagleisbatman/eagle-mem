@@ -57,7 +57,13 @@ SELECT 'tasks_done|' || COUNT(*) FROM agent_tasks WHERE project = '$project' AND
 SELECT 'chunks|' || COUNT(*) FROM code_chunks WHERE project = '$project';
 SELECT 'observations|' || COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project = '$project');
 SELECT 'last_active|' || COALESCE(MAX(date(COALESCE(last_activity_at, started_at))), 'never') FROM sessions WHERE project = '$project';
-SELECT 'last_summary|' || COALESCE((SELECT substr(request, 1, 60) FROM summaries WHERE project = '$project' ORDER BY created_at DESC LIMIT 1), '');
+SELECT 'last_summary|' || COALESCE((SELECT substr(request, 1, 60)
+    FROM summaries
+    WHERE project = '$project'
+    AND COALESCE(request, '') NOT LIKE '# AGENTS.md instructions%'
+    AND COALESCE(request, '') NOT LIKE '<environment_context>%'
+    ORDER BY created_at DESC
+    LIMIT 1), '');
 SQL
 }
 

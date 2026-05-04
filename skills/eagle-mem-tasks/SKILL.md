@@ -26,6 +26,8 @@ description: >
 - The work fits in one context window — just do it directly
 - It's a single-file fix or a quick question
 - The user is exploring, not building (use search/overview instead)
+- The work needs parallel agent lanes or ownership across Claude Code and Codex
+  (use `eagle-mem-orchestrate` instead)
 
 ## Steps
 

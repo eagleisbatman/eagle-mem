@@ -4,3 +4,5 @@ node_modules/
 # Local dev
 .claude/
 .remember/
+.playwright-mcp/
+ghpages-*.png

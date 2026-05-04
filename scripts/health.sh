@@ -39,6 +39,8 @@ if [ -z "$project" ]; then
     exit 1
 fi
 
+eagle_ensure_db
+
 p_esc=$(eagle_sql_escape "$project")
 
 eagle_info "Project: ${BOLD}$project${RESET}"
@@ -145,6 +147,50 @@ else
     issues+=("Configure a provider: eagle-mem config init")
 fi
 
+# ─── Token guard visibility (informational) ────────────────
+
+rtk_mode=$(eagle_config_get "token_guard" "rtk" "auto")
+raw_bash_mode=$(eagle_config_get "token_guard" "raw_bash" "block")
+rtk_bin=$(command -v rtk 2>/dev/null || true)
+if [ -n "$rtk_bin" ]; then
+    eagle_ok "Token guard: RTK $rtk_mode (${rtk_bin}), raw_bash=$raw_bash_mode"
+elif [ "$rtk_mode" = "enforce" ]; then
+    eagle_fail "Token guard: RTK enforce enabled, but rtk not found"
+    issues+=("Install RTK or run: eagle-mem config set token_guard.rtk auto")
+else
+    eagle_dim "  Token guard: RTK not found (mode: $rtk_mode, raw_bash: $raw_bash_mode)"
+fi
+
+# ─── Orchestration visibility (informational) ───────────────
+
+orch_route=$(eagle_config_get "orchestration" "route" "opposite")
+orch_auto_worktree=$(eagle_config_get "orchestration" "auto_worktree" "true")
+orch_worktree_root=$(eagle_config_get "orchestration" "worktree_root" "")
+orch_codex_model=$(eagle_config_get "orchestration" "codex_worker_model" "gpt-5.5")
+orch_codex_effort=$(eagle_config_get "orchestration" "codex_worker_effort" "xhigh")
+orch_claude_model=$(eagle_config_get "orchestration" "claude_worker_model" "claude-opus-4-7")
+orch_claude_effort=$(eagle_config_get "orchestration" "claude_worker_effort" "xhigh")
+codex_bin=$(command -v codex 2>/dev/null || true)
+claude_bin=$(command -v claude 2>/dev/null || true)
+
+if [ -n "$codex_bin" ] && [ -n "$claude_bin" ]; then
+    eagle_ok "Orchestration: route=$orch_route, worktrees=$orch_auto_worktree, Codex + Claude workers available"
+elif [ -n "$codex_bin" ]; then
+    eagle_warn "Orchestration: Codex available, Claude CLI missing"
+    issues+=("Install or authenticate Claude Code CLI before spawning Claude worker lanes.")
+elif [ -n "$claude_bin" ]; then
+    eagle_warn "Orchestration: Claude available, Codex CLI missing"
+    issues+=("Install or authenticate Codex CLI before spawning Codex worker lanes.")
+else
+    eagle_warn "Orchestration: worker CLIs not found"
+    issues+=("Install/authenticate Codex and Claude Code CLIs before using eagle-mem orchestrate spawn.")
+fi
+
+eagle_dim "  Workers: codex=${orch_codex_model}/${orch_codex_effort}, claude-code=${orch_claude_model}/${orch_claude_effort}"
+if [ -n "$orch_worktree_root" ]; then
+    eagle_dim "  Worktree root: $orch_worktree_root"
+fi
+
 # ─── 5. Data quality (10 pts) ──────────────────────────
 
 max_score=$((max_score + 10))
@@ -232,11 +278,31 @@ if [ "$JSON_OUT" -eq 1 ]; then
         --argjson enriched_summaries "${enriched_summaries:-0}" \
         --argjson features "${feature_count:-0}" \
         --arg provider "$provider" \
+        --arg token_guard_rtk "$rtk_mode" \
+        --arg token_guard_raw_bash "$raw_bash_mode" \
+        --arg rtk_bin "${rtk_bin:-}" \
+        --arg orchestration_route "$orch_route" \
+        --arg orchestration_auto_worktree "$orch_auto_worktree" \
+        --arg orchestration_worktree_root "$orch_worktree_root" \
+        --arg codex_worker_model "$orch_codex_model" \
+        --arg codex_worker_effort "$orch_codex_effort" \
+        --arg claude_worker_model "$orch_claude_model" \
+        --arg claude_worker_effort "$orch_claude_effort" \
+        --arg codex_bin "${codex_bin:-}" \
+        --arg claude_bin "${claude_bin:-}" \
         --argjson noise_pct "$noise_pct" \
         --arg last_curated "${last_curated:-never}" \
         '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
           capture:{sessions:$total_sessions, summaries:$total_summaries, heuristic:$heuristic_summaries},
           enrichment:$enriched_summaries,
           features:$features, provider:$provider,
+          token_guard:{rtk:$token_guard_rtk, raw_bash:$token_guard_raw_bash, rtk_bin:$rtk_bin},
+          orchestration:{
+            route:$orchestration_route,
+            auto_worktree:$orchestration_auto_worktree,
+            worktree_root:$orchestration_worktree_root,
+            codex:{model:$codex_worker_model, effort:$codex_worker_effort, cli:$codex_bin},
+            claude_code:{model:$claude_worker_model, effort:$claude_worker_effort, cli:$claude_bin}
+          },
           noise_pct:$noise_pct, last_curated:$last_curated}' >&3
 fi

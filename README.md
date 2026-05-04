@@ -9,7 +9,7 @@
 
 **Context that survives `/compact`.**
 
-**v4.7.1 hardens first-class Codex support and enforced anti-regression checks.**
+**v4.8.0 ships first-class cross-agent orchestration, compact Codex hook recall, enforced anti-regression checks, and configurable RTK token guardrails.**
 Claude Code and Codex can now share the same local Eagle Mem database, while every captured row records which agent created it.
 
 ## The Problem
@@ -70,6 +70,7 @@ Hooks fire automatically at different points in the agent lifecycle:
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
 
 Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths.
+Codex recall is emitted as compact hook JSON, so local Codex sessions get shared memory without the multi-screen hook dumps.
 
 ### Background Automation
 
@@ -85,13 +86,14 @@ These run automatically via SessionStart — no commands needed:
 Eagle Mem actively reduces token consumption:
 
 - **Injection compression** — zero-value stats are elided from the banner, overview is capped, compact reloads get 1 recent session instead of 3
-- **Command rewriting** — PreToolUse rewrites noisy Bash commands to pipe through `head -N` via `updatedInput`. Rules are learned by the curator from real usage, not hardcoded.
+- **Command rewriting** — PreToolUse routes noisy shell output through RTK when available and blocks known raw-output commands in enforce mode when RTK is missing.
 - **Read-after-modify detection** — detects when you read a file that was just edited or written, nudges that the diff is already in context
 - **Read dedup tracking** — files read 3+ times in a session get a soft nudge
 - **Co-edit nudges** — learned from observation data: when you edit file X, PreToolUse reminds you that you usually also touch file Y
 - **Hot file awareness** — curator identifies files read in 50%+ of sessions; SessionStart flags them as "likely in context" to reduce re-reads
 - **Working set recovery** — on compact, SessionStart injects the files you were actively editing so you resume without re-reading everything
 - **Stuck loop detection** — if the same file is edited 5+ times in one session, PreToolUse nudges to reconsider the approach
+- **RTK token guard** — optional `rtk` integration can rewrite or block noisy shell commands before raw output enters Claude Code or Codex context. Configure with `eagle-mem config set token_guard.rtk auto|off|enforce`.
 
 ### Anti-Regression
 
@@ -103,6 +105,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 - **Gotcha surfacing** — past surprises and gotchas are surfaced when editing related files
 - **Stale memory detection** — warns when edits may contradict stored memories
 - **Token guard** — when `rtk` is installed, raw shell output commands are rewritten or blocked with an RTK equivalent so large output is compacted before it enters agent context
+- **Orchestration lanes** — long-running work can be split into durable worker lanes with owners, validation commands, worktree paths, status notes, and handoff output shared by Claude Code and Codex
 
 ## Commands
 
@@ -113,11 +116,12 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem uninstall` | Remove hooks and optionally delete data |
 | `eagle-mem search` | Search past sessions, memories, and code |
 | `eagle-mem health` | Diagnose pipeline health and background automation |
-| `eagle-mem config` | View or change LLM provider settings |
+| `eagle-mem config` | View or change LLM provider and token-guard settings |
 | `eagle-mem guard` | Manage regression guardrails for files |
 | `eagle-mem overview` | Build or view project overview |
 | `eagle-mem memories` | View/sync agent memories |
 | `eagle-mem tasks` | View mirrored tasks |
+| `eagle-mem orchestrate` | Coordinate durable worker lanes across agents |
 | `eagle-mem curate` | Run curator (co-edits, hot files, guardrails) |
 | `eagle-mem feature` | Track and verify features |
 | `eagle-mem prune` | Clean old sessions and stale data |
@@ -149,6 +153,32 @@ Verification is tied to the current git diff fingerprint. If the same diff was a
 
 Dry-run validation stays unblocked. For example, `gh pr create --dry-run` and `npm publish --dry-run` are treated as validation. Explicit real commands such as `npm publish --dry-run=false` are treated as release boundaries and will enforce pending feature verification.
 
+### Orchestrator/Worker Lanes
+
+Use orchestration when a broad task is split across Claude Code, Codex, subagents, or separate worktrees. These are **agent-run commands**: Eagle Mem injects the protocol into Claude Code/Codex, and the active agent runs the lane/status/spawn commands itself. Users should not have to operate this manually.
+
+By default Eagle Mem uses the opposite-agent worker model:
+
+- Codex coordinator -> Claude Code worker using `claude-opus-4-7` at `xhigh`
+- Claude Code coordinator -> Codex worker using `gpt-5.5` at `xhigh`
+
+Worker models, effort, route, and worktree behavior are configurable in `~/.eagle-mem/config.toml` under `[orchestration]`.
+
+```bash
+eagle-mem orchestrate init "Ship auth cleanup"
+eagle-mem orchestrate lane add api --agent codex --desc "API fixes + tests" --validate "npm test"
+eagle-mem orchestrate lane add docs --agent claude-code --desc "README and release notes"
+eagle-mem orchestrate spawn api
+eagle-mem orchestrate sync
+eagle-mem orchestrate complete
+eagle-mem orchestrate handoff --write docs/handoff-context.md
+```
+
+`spawn` creates a git worktree, writes a self-contained worker prompt, launches the selected worker CLI, captures its log/exit status under `~/.eagle-mem/orchestrations/`, and updates lane/task state when the worker finishes. Worker hooks export the original Eagle Mem project name, so observations and summaries created inside worktrees still attach to the main project memory.
+Use `lane complete` or `lane block` manually only when work happened outside the wrapper or the worker needs an explicit correction.
+
+Each lane is stored in `orchestration_lanes` and mirrored into `agent_tasks`, so the next Claude Code or Codex session sees what is pending, who owns it, which worktree/log belongs to it, and how to validate it.
+
 ### Shared Claude Code + Codex Memory
 
 Both agents write to `~/.eagle-mem/memory.db`:
@@ -160,7 +190,7 @@ Both agents write to `~/.eagle-mem/memory.db`:
 
 That means opening the same project in Claude Code and Codex does not create two isolated memory worlds. They recall the same project history while preserving the source of each memory.
 
-## Skills (Inside Claude Code)
+## Skills (Inside Claude Code and Codex)
 
 | Skill | What It Does |
 |-------|-------------|
@@ -168,6 +198,7 @@ That means opening the same project in Claude Code and Codex does not create two
 | `/eagle-mem-overview` | Build a rich project briefing from README, entry points, and git history |
 | `/eagle-mem-memories` | View and search mirrored agent memories and plans |
 | `/eagle-mem-tasks` | TaskAware Compact Loop — break complex work into tasks that survive `/compact` |
+| `/eagle-mem-orchestrate` | Orchestrator/worker lane handoffs across Claude Code and Codex |
 
 ## Data
 
@@ -188,6 +219,8 @@ Single SQLite database at `~/.eagle-mem/memory.db` (WAL mode, FTS5 full-text sea
 | `feature_dependencies` | Inter-feature dependency relationships |
 | `feature_smoke_tests` | Smoke test definitions for feature verification |
 | `pending_feature_verifications` | Release blockers created when files tied to features change |
+| `orchestrations` | Durable multi-agent work plans per project |
+| `orchestration_lanes` | Worker lane ownership, status, validation, worktree, and notes |
 | `eagle_meta` | Internal metadata (last scan, last curate, etc.) |
 | `agent_memories` | Mirror of agent memory files, with source attribution |
 | `agent_plans` | Mirror of agent plan files, with source attribution |
@@ -212,6 +245,15 @@ eagle-mem config set agent_cli.preferred current
 ```
 
 Provider preference is local-first: Ollama is auto-detected when running, then Eagle Mem can use the installed Codex/Claude CLI via `agent_cli` before falling back to explicit Anthropic/OpenAI API providers. Eagle Mem works fully without a provider — LLM features gracefully degrade to heuristic fallbacks.
+
+RTK is configured separately from the LLM provider:
+
+```bash
+eagle-mem config set token_guard.rtk auto      # default: use RTK when available
+eagle-mem config set token_guard.rtk enforce   # block known raw-output commands if RTK is missing
+eagle-mem config set token_guard.rtk off       # disable RTK behavior
+eagle-mem config set token_guard.raw_bash block
+```
 
 ## License
 

@@ -57,14 +57,22 @@ request=""
 heuristic_reads=""
 heuristic_writes=""
 
-if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
-    request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null \
-        | grep -v '<local-command-caveat>' \
+eagle_clean_request_candidates() {
+    grep -v '<local-command-caveat>' \
         | grep -v '<system-reminder>' \
         | grep -v '<command-name>' \
         | grep -v '<command-message>' \
         | grep -v '^\[{' \
-        | head -1 | cut -c1-500)
+        | grep -v '^# AGENTS.md instructions' \
+        | grep -v '^<environment_context>' \
+        | awk 'NF' \
+        | tail -1 \
+        | cut -c1-500
+}
+
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+    request=$(jq -r 'select(.type == "user") | .message.content | if type == "string" then . elif type == "array" then [.[] | select(.type == "text") | .text] | join(" ") else "" end' "$transcript_path" 2>/dev/null \
+        | eagle_clean_request_candidates)
 
     if [ -z "$request" ]; then
         request=$(jq -r '
@@ -74,19 +82,12 @@ if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
               elif type == "array" then [.[]? | select(.type == "input_text" or .type == "text") | .text] | join(" ")
               else "" end
         ' "$transcript_path" 2>/dev/null \
-            | grep -v '<local-command-caveat>' \
-            | grep -v '<system-reminder>' \
-            | grep -v '<command-name>' \
-            | grep -v '<command-message>' \
-            | grep -v '^\[{' \
-            | head -1 | cut -c1-500)
+            | eagle_clean_request_candidates)
     fi
 
     if [ -z "$request" ]; then
         request=$(jq -r 'select(.type == "event_msg" and .payload.type == "user_message") | .payload.message // empty' "$transcript_path" 2>/dev/null \
-            | grep -v '<local-command-caveat>' \
-            | grep -v '<system-reminder>' \
-            | head -1 | cut -c1-500)
+            | eagle_clean_request_candidates)
     fi
 
     heuristic_reads=$(jq -r 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | select(.name == "Read") | .input.file_path // empty' "$transcript_path" 2>/dev/null | sort -u | head -20)
