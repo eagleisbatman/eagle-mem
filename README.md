@@ -140,6 +140,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem config` | View or change LLM provider and token-guard settings |
 | `eagle-mem guard` | Manage regression guardrails for files |
 | `eagle-mem overview` | Build or view project overview |
+| `eagle-mem session` | Save a manual fallback session summary |
 | `eagle-mem memories` | View/sync agent memories |
 | `eagle-mem tasks` | View mirrored tasks |
 | `eagle-mem orchestrate` | Coordinate durable worker lanes across agents |
@@ -148,6 +149,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.8.6 Patch
+
+`eagle-mem session save --summary "..."` now exists as a clean manual fallback for agents that need to persist an explicit session note. It writes through the same `sessions` and `summaries` tables used by Stop hooks, keeps Claude Code/Codex source attribution, and is immediately searchable through normal recall.
 
 ### v4.8.5 Patch
 
@@ -180,6 +185,7 @@ eagle-mem search --tasks           # in-flight tasks (pending/in-progress)
 eagle-mem search --files           # most frequently modified files
 eagle-mem search --stats           # project statistics
 eagle-mem search --session <id>    # full observation trail for one session
+eagle-mem session save --summary "fixed auth flow"  # manual fallback capture
 ```
 
 ### Feature Verification

@@ -24,6 +24,8 @@ case "$command" in
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     guard)      bash "$SCRIPTS_DIR/guard.sh" "$@" ;;
     overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
+    session|sessions)
+                bash "$SCRIPTS_DIR/session.sh" "$@" ;;
     memories)   bash "$SCRIPTS_DIR/memories.sh" "$@" ;;
     tasks)      bash "$SCRIPTS_DIR/tasks.sh" "$@" ;;
     orchestrate) bash "$SCRIPTS_DIR/orchestrate.sh" "$@" ;;
