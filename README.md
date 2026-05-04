@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.8.4 proves the worker-lane path end to end:** Codex can create an orchestration, route a lane to Claude Code by default, launch the Claude worker in an isolated worktree, mirror the lane into `agent_tasks`, and generate a durable handoff without crashing on Bash 3.2.
+**v4.8.5 hardens first-run setup:** `eagle-mem config init` now falls through cleanly when Ollama is not running, and DB-backed commands fail loudly when the active `sqlite3` lacks FTS5 support.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -148,6 +148,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.8.5 Patch
+
+First-run configuration no longer exits silently when Ollama is not listening on `localhost:11434`; Eagle Mem falls through to the installed Codex/Claude CLI provider or API-key providers. SQLite/FTS5 failures are now surfaced before DB-backed commands run, including the exact `sqlite3` binary being used and PATH guidance for common macOS Android SDK shadowing. Worker worktree paths are also canonicalized back to the main project key so backfill cannot move feature guardrails into disposable orchestration worktrees.
 
 ### v4.8.4 Patch
 

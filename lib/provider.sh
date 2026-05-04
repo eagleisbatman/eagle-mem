@@ -124,10 +124,10 @@ eagle_config_init() {
     local ollama_model="mistral"
 
     local ollama_response
-    ollama_response=$(eagle_detect_ollama "$ollama_url")
+    ollama_response=$(eagle_detect_ollama "$ollama_url" || true)
     if [ -n "$ollama_response" ]; then
         provider="ollama"
-        model=$(eagle_ollama_best_model "$ollama_url")
+        model=$(eagle_ollama_best_model "$ollama_url" || true)
         ollama_model="$model"
     elif command -v codex &>/dev/null || command -v claude &>/dev/null; then
         provider="agent_cli"

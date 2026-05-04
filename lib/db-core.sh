@@ -57,6 +57,8 @@ eagle_db_json() {
 }
 
 eagle_ensure_db() {
+    eagle_require_sqlite_fts5 || return 1
+
     if [ ! -f "$EAGLE_MEM_DB" ]; then
         local script_dir
         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../db" && pwd)"

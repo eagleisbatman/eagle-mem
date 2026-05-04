@@ -81,12 +81,19 @@ fi
 
 # FTS5 support
 if command -v sqlite3 &>/dev/null; then
-    if sqlite3 :memory: "SELECT sqlite_compileoption_used('ENABLE_FTS5');" 2>/dev/null | grep -q "1"; then
-        eagle_ok "FTS5 support"
+    sqlite_path=$(eagle_sqlite_path)
+    if eagle_sqlite_supports_fts5; then
+        eagle_ok "FTS5 support ${DIM}($sqlite_path)${RESET}"
     else
         eagle_fail "SQLite was compiled without FTS5 support"
-        eagle_dim "On macOS: brew install sqlite3 (system sqlite3 includes FTS5)"
-        eagle_dim "On Linux: install libsqlite3-dev or rebuild with --enable-fts5"
+        eagle_dim "Detected sqlite3: $sqlite_path"
+        sqlite_version=$(eagle_sqlite_version)
+        [ -n "$sqlite_version" ] && eagle_dim "SQLite version: $sqlite_version"
+        eagle_dim "Run: command -v sqlite3"
+        eagle_dim "Fix PATH so an FTS5-capable sqlite3 is first."
+        eagle_dim "macOS: /usr/bin/sqlite3 usually has FTS5; move Android SDK platform-tools later if it shadows sqlite3."
+        eagle_dim "Homebrew: brew install sqlite, then prepend /opt/homebrew/opt/sqlite/bin or /usr/local/opt/sqlite/bin."
+        eagle_dim "Linux: install a sqlite3 package compiled with ENABLE_FTS5."
         prereqs_ok=false
     fi
 fi

@@ -20,6 +20,47 @@ EAGLE_CODEX_SKILLS_DIR="${EAGLE_CODEX_SKILLS_DIR:-$EAGLE_CODEX_DIR/skills}"
 EAGLE_CODEX_MEMORIES_DIR="${EAGLE_CODEX_MEMORIES_DIR:-$EAGLE_CODEX_DIR/memories}"
 EAGLE_RAW_BASH_UNLOCK="${EAGLE_RAW_BASH_UNLOCK:-/tmp/eagle-mem-raw-bash-unlock}"
 
+eagle_sqlite_path() {
+    command -v sqlite3 2>/dev/null || true
+}
+
+eagle_sqlite_version() {
+    sqlite3 --version 2>/dev/null | awk '{print $1}'
+}
+
+eagle_sqlite_supports_fts5() {
+    command -v sqlite3 >/dev/null 2>&1 || return 1
+    sqlite3 :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" >/dev/null 2>&1
+}
+
+eagle_print_sqlite_fts5_error() {
+    local sqlite_path sqlite_version probe_error
+    sqlite_path=$(eagle_sqlite_path)
+    sqlite_version=$(eagle_sqlite_version)
+    probe_error=$(sqlite3 :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" 2>&1 >/dev/null || true)
+
+    printf '%s\n' "Eagle Mem requires SQLite FTS5, but the active sqlite3 does not support it." >&2
+    if [ -n "$sqlite_path" ]; then
+        printf '%s\n' "Detected sqlite3: $sqlite_path" >&2
+    else
+        printf '%s\n' "Detected sqlite3: not found on PATH" >&2
+    fi
+    [ -n "$sqlite_version" ] && printf '%s\n' "SQLite version: $sqlite_version" >&2
+    [ -n "$probe_error" ] && printf '%s\n' "SQLite error: $probe_error" >&2
+    printf '%s\n' "Fix: put an FTS5-capable sqlite3 earlier in PATH, then re-run the command." >&2
+    printf '%s\n' "macOS: check 'command -v sqlite3'; /usr/bin/sqlite3 usually has FTS5. If Android SDK platform-tools is first, move it later in PATH." >&2
+    printf '%s\n' "Homebrew: install sqlite and prepend its bin directory, for example: export PATH=\"/opt/homebrew/opt/sqlite/bin:\$PATH\"" >&2
+    printf '%s\n' "Linux: install a sqlite3 package compiled with ENABLE_FTS5." >&2
+}
+
+eagle_require_sqlite_fts5() {
+    if eagle_sqlite_supports_fts5; then
+        return 0
+    fi
+    eagle_print_sqlite_fts5_error
+    return 1
+}
+
 eagle_log() {
     local level="$1"
     shift
@@ -49,6 +90,23 @@ eagle_project_from_cwd() {
         /var/folders|/var/folders/*) echo ""; return ;;
         "$HOME/Downloads"|"$HOME/Downloads/"*) echo ""; return ;;
         "$HOME/Desktop"|"$HOME/Desktop/"*) echo ""; return ;;
+    esac
+
+    # Eagle Mem worker lanes run in sibling git worktrees under
+    # <parent>/.eagle-worktrees/<repo>/<lane>. Keep their observations attached
+    # to the real project, not to the disposable worktree path.
+    case "$resolved" in
+        "$HOME"/*/.eagle-worktrees/*)
+            local worktree_parent worktree_tail worktree_repo worktree_project
+            worktree_parent="${resolved%%/.eagle-worktrees/*}"
+            worktree_tail="${resolved#"$worktree_parent/.eagle-worktrees/"}"
+            worktree_repo="${worktree_tail%%/*}"
+            worktree_project="$worktree_parent/$worktree_repo"
+            if [ -n "$worktree_repo" ] && [ -d "$worktree_project" ]; then
+                echo "${worktree_project#$HOME/}"
+                return
+            fi
+            ;;
     esac
 
     local target_dir
