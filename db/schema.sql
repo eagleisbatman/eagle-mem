@@ -99,7 +99,9 @@ CREATE TRIGGER IF NOT EXISTS summaries_ad AFTER DELETE ON summaries BEGIN
     VALUES ('delete', old.id, old.request, old.investigated, old.learned, old.completed, old.next_steps, old.notes);
 END;
 
-CREATE TRIGGER IF NOT EXISTS summaries_au AFTER UPDATE ON summaries BEGIN
+CREATE TRIGGER IF NOT EXISTS summaries_au
+AFTER UPDATE OF request, investigated, learned, completed, next_steps, notes ON summaries
+BEGIN
     INSERT INTO summaries_fts(summaries_fts, rowid, request, investigated, learned, completed, next_steps, notes)
     VALUES ('delete', old.id, old.request, old.investigated, old.learned, old.completed, old.next_steps, old.notes);
     INSERT INTO summaries_fts(rowid, request, investigated, learned, completed, next_steps, notes)

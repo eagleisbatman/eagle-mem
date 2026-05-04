@@ -33,7 +33,7 @@ esac
 
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 cwd=$(echo "$input" | jq -r '.cwd // empty')
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 context=""

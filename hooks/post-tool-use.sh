@@ -30,7 +30,7 @@ if [ -z "$session_id" ]; then exit 0; fi
 case "$hook_event" in
     TaskCreated|TaskCompleted)
         [ ! -f "$EAGLE_MEM_DB" ] && exit 0
-        project=$(eagle_project_from_cwd "$cwd")
+        project=$(eagle_project_from_hook_input "$input")
         [ -z "$project" ] && exit 0
         eagle_upsert_session "$session_id" "$project" "$cwd" "" "" "$agent"
 
@@ -79,7 +79,7 @@ esac
 
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
 
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 # Ensure session row exists before inserting observations (FK constraint).

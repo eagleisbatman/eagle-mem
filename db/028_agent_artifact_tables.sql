@@ -78,7 +78,9 @@ CREATE TRIGGER IF NOT EXISTS agent_memories_ad AFTER DELETE ON agent_memories BE
     VALUES ('delete', old.id, old.memory_name, old.description, old.content);
 END;
 
-CREATE TRIGGER IF NOT EXISTS agent_memories_au AFTER UPDATE ON agent_memories BEGIN
+CREATE TRIGGER IF NOT EXISTS agent_memories_au
+AFTER UPDATE OF memory_name, description, content ON agent_memories
+BEGIN
     INSERT INTO agent_memories_fts(agent_memories_fts, rowid, memory_name, description, content)
     VALUES ('delete', old.id, old.memory_name, old.description, old.content);
     INSERT INTO agent_memories_fts(rowid, memory_name, description, content)
@@ -95,7 +97,9 @@ CREATE TRIGGER IF NOT EXISTS agent_plans_ad AFTER DELETE ON agent_plans BEGIN
     VALUES ('delete', old.id, old.title, old.content);
 END;
 
-CREATE TRIGGER IF NOT EXISTS agent_plans_au AFTER UPDATE ON agent_plans BEGIN
+CREATE TRIGGER IF NOT EXISTS agent_plans_au
+AFTER UPDATE OF title, content ON agent_plans
+BEGIN
     INSERT INTO agent_plans_fts(agent_plans_fts, rowid, title, content)
     VALUES ('delete', old.id, old.title, old.content);
     INSERT INTO agent_plans_fts(rowid, title, content)
@@ -112,7 +116,9 @@ CREATE TRIGGER IF NOT EXISTS agent_tasks_ad AFTER DELETE ON agent_tasks BEGIN
     VALUES ('delete', old.id, old.subject, old.description);
 END;
 
-CREATE TRIGGER IF NOT EXISTS agent_tasks_au AFTER UPDATE ON agent_tasks BEGIN
+CREATE TRIGGER IF NOT EXISTS agent_tasks_au
+AFTER UPDATE OF subject, description ON agent_tasks
+BEGIN
     INSERT INTO agent_tasks_fts(agent_tasks_fts, rowid, subject, description)
     VALUES ('delete', old.id, old.subject, old.description);
     INSERT INTO agent_tasks_fts(rowid, subject, description)

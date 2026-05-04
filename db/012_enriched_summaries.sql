@@ -43,7 +43,9 @@ CREATE TRIGGER summaries_ad AFTER DELETE ON summaries BEGIN
     VALUES ('delete', old.id, old.request, old.investigated, old.learned, old.completed, old.next_steps, old.notes, old.decisions, old.gotchas, old.key_files);
 END;
 
-CREATE TRIGGER summaries_au AFTER UPDATE ON summaries BEGIN
+CREATE TRIGGER summaries_au
+AFTER UPDATE OF request, investigated, learned, completed, next_steps, notes, decisions, gotchas, key_files ON summaries
+BEGIN
     INSERT INTO summaries_fts(summaries_fts, rowid, request, investigated, learned, completed, next_steps, notes, decisions, gotchas, key_files)
     VALUES ('delete', old.id, old.request, old.investigated, old.learned, old.completed, old.next_steps, old.notes, old.decisions, old.gotchas, old.key_files);
     INSERT INTO summaries_fts(rowid, request, investigated, learned, completed, next_steps, notes, decisions, gotchas, key_files)

@@ -8,10 +8,10 @@ EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
 EAGLE_MEM_DB="$EAGLE_MEM_DIR/memory.db"
 EAGLE_MEM_LOG="$EAGLE_MEM_DIR/eagle-mem.log"
 EAGLE_SETTINGS="${EAGLE_SETTINGS:-$HOME/.claude/settings.json}"
-EAGLE_SKILLS_DIR="$HOME/.claude/skills"
-EAGLE_CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
-EAGLE_CLAUDE_PLANS_DIR="$HOME/.claude/plans"
-EAGLE_CLAUDE_TASKS_DIR="$HOME/.claude/tasks"
+EAGLE_SKILLS_DIR="${EAGLE_SKILLS_DIR:-$HOME/.claude/skills}"
+EAGLE_CLAUDE_PROJECTS_DIR="${EAGLE_CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
+EAGLE_CLAUDE_PLANS_DIR="${EAGLE_CLAUDE_PLANS_DIR:-$HOME/.claude/plans}"
+EAGLE_CLAUDE_TASKS_DIR="${EAGLE_CLAUDE_TASKS_DIR:-$HOME/.claude/tasks}"
 EAGLE_CODEX_DIR="${EAGLE_CODEX_DIR:-$HOME/.codex}"
 EAGLE_CODEX_CONFIG="${EAGLE_CODEX_CONFIG:-$EAGLE_CODEX_DIR/config.toml}"
 EAGLE_CODEX_HOOKS="${EAGLE_CODEX_HOOKS:-$EAGLE_CODEX_DIR/hooks.json}"
@@ -71,57 +71,38 @@ eagle_log() {
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [$level] $*" >> "$EAGLE_MEM_LOG" 2>/dev/null || true
 }
 
-eagle_project_from_cwd() {
-    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
-        echo "$EAGLE_MEM_PROJECT"
-        return
-    fi
+eagle_normalize_project_path() {
+    local path="${1:-$(pwd)}"
 
-    local cwd="${1:-$(pwd)}"
-    local resolved="$cwd"
+    # Normalize macOS /private prefixes.
+    case "$path" in /private/tmp*) path="/tmp${path#/private/tmp}" ;; esac
+    case "$path" in /private/var/*) path="/var${path#/private/var}" ;; esac
 
-    # Normalize macOS /private prefixes
-    case "$resolved" in /private/tmp*) resolved="/tmp${resolved#/private/tmp}" ;; esac
-    case "$resolved" in /private/var/*) resolved="/var${resolved#/private/var}" ;; esac
+    printf '%s\n' "$path"
+}
 
-    # Skip ephemeral directories — return empty so hooks early-exit
-    case "$resolved" in
-        /tmp|/tmp/*|/var/tmp|/var/tmp/*) echo ""; return ;;
-        /var/folders|/var/folders/*) echo ""; return ;;
-        "$HOME/Downloads"|"$HOME/Downloads/"*) echo ""; return ;;
-        "$HOME/Desktop"|"$HOME/Desktop/"*) echo ""; return ;;
+eagle_is_ephemeral_project_path() {
+    local path="${1:-}"
+
+    case "$path" in
+        /tmp|/tmp/*|/var/tmp|/var/tmp/*) return 0 ;;
+        /var/folders|/var/folders/*) return 0 ;;
+        "$HOME/Downloads"|"$HOME/Downloads/"*) return 0 ;;
+        "$HOME/Desktop"|"$HOME/Desktop/"*) return 0 ;;
     esac
 
-    # Eagle Mem worker lanes run in sibling git worktrees under
-    # <parent>/.eagle-worktrees/<repo>/<lane>. Keep their observations attached
-    # to the real project, not to the disposable worktree path.
-    case "$resolved" in
-        "$HOME"/*/.eagle-worktrees/*)
-            local worktree_parent worktree_tail worktree_repo worktree_project
-            worktree_parent="${resolved%%/.eagle-worktrees/*}"
-            worktree_tail="${resolved#"$worktree_parent/.eagle-worktrees/"}"
-            worktree_repo="${worktree_tail%%/*}"
-            worktree_project="$worktree_parent/$worktree_repo"
-            if [ -n "$worktree_repo" ] && [ -d "$worktree_project" ]; then
-                echo "${worktree_project#$HOME/}"
-                return
-            fi
-            ;;
-    esac
+    return 1
+}
 
-    local target_dir
-    local git_root
-    git_root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
-    if [ -n "$git_root" ]; then
-        target_dir="$git_root"
-    else
-        target_dir="$cwd"
-    fi
+eagle_project_key_from_target_dir() {
+    local target_dir="${1:-}"
+    [ -z "$target_dir" ] && return 1
 
     local name
     name=$(basename "$target_dir")
     if [ ${#name} -le 1 ]; then
-        echo ""; return
+        echo ""
+        return 0
     fi
 
     if [[ "$target_dir" == "$HOME/"* ]]; then
@@ -131,6 +112,172 @@ eagle_project_from_cwd() {
     else
         echo "${target_dir#/}"
     fi
+}
+
+eagle_project_key_for_worktree_path() {
+    local resolved="${1:-}"
+
+    case "$resolved" in
+        "$HOME"/*/.eagle-worktrees/*)
+            local worktree_parent worktree_tail worktree_repo worktree_project
+            worktree_parent="${resolved%%/.eagle-worktrees/*}"
+            worktree_tail="${resolved#"$worktree_parent/.eagle-worktrees/"}"
+            worktree_repo="${worktree_tail%%/*}"
+            worktree_project="$worktree_parent/$worktree_repo"
+            if [ -n "$worktree_repo" ] && [ -d "$worktree_project" ]; then
+                eagle_project_key_from_target_dir "$worktree_project"
+                return 0
+            fi
+            ;;
+    esac
+
+    return 1
+}
+
+eagle_project_from_path_no_git() {
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        echo "$EAGLE_MEM_PROJECT"
+        return
+    fi
+
+    local path="${1:-$(pwd)}"
+    local resolved
+    resolved=$(eagle_normalize_project_path "$path")
+
+    if eagle_is_ephemeral_project_path "$resolved"; then
+        echo ""
+        return
+    fi
+
+    local worktree_project
+    if worktree_project=$(eagle_project_key_for_worktree_path "$resolved"); then
+        echo "$worktree_project"
+        return
+    fi
+
+    eagle_project_key_from_target_dir "$resolved"
+}
+
+eagle_project_from_cwd() {
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        echo "$EAGLE_MEM_PROJECT"
+        return
+    fi
+
+    local cwd="${1:-$(pwd)}"
+    local resolved
+    resolved=$(eagle_normalize_project_path "$cwd")
+
+    # Skip ephemeral directories — return empty so hooks early-exit.
+    if eagle_is_ephemeral_project_path "$resolved"; then
+        echo ""
+        return
+    fi
+
+    # Eagle Mem worker lanes run in sibling git worktrees under
+    # <parent>/.eagle-worktrees/<repo>/<lane>. Keep their observations attached
+    # to the real project, not to the disposable worktree path.
+    local worktree_project
+    if worktree_project=$(eagle_project_key_for_worktree_path "$resolved"); then
+        echo "$worktree_project"
+        return
+    fi
+
+    local target_dir
+    local git_root
+    git_root=$(git -C "$resolved" rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$git_root" ]; then
+        target_dir="$git_root"
+    else
+        target_dir="$resolved"
+    fi
+
+    eagle_project_key_from_target_dir "$target_dir"
+}
+
+eagle_path_is_same_or_child() {
+    local parent child
+    parent=$(eagle_normalize_project_path "${1:-}")
+    child=$(eagle_normalize_project_path "${2:-}")
+
+    [ -z "$parent" ] || [ -z "$child" ] && return 1
+    [ "$child" = "$parent" ] && return 0
+    case "$child" in "$parent"/*) return 0 ;; esac
+    return 1
+}
+
+eagle_transcript_first_cwd() {
+    local transcript_path="${1:-}"
+    [ -f "$transcript_path" ] || return 1
+
+    local sample
+    sample=$(dd if="$transcript_path" bs=65536 count=4 2>/dev/null)
+    [ -n "$sample" ] || return 1
+
+    printf '%s\n' "$sample" | sed -nE '/"cwd"[[:space:]]*:/ {
+        s/.*"cwd"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/
+        p
+        q
+    }'
+}
+
+eagle_project_from_claude_project_dir() {
+    local project_dir="${1:-}"
+    project_dir="${project_dir%/}"
+    [ -d "$project_dir" ] || return 1
+
+    local jsonl cwd project
+    for jsonl in "$project_dir"/*.jsonl; do
+        [ -f "$jsonl" ] || continue
+        cwd=$(eagle_transcript_first_cwd "$jsonl")
+        [ -z "$cwd" ] && continue
+        project=$(eagle_project_from_path_no_git "$cwd")
+        [ -n "$project" ] && { printf '%s\n' "$project"; return 0; }
+    done
+
+    return 1
+}
+
+eagle_project_from_claude_transcript() {
+    local transcript_path="${1:-}"
+    local cwd="${2:-}"
+
+    case "$transcript_path" in
+        "$EAGLE_CLAUDE_PROJECTS_DIR"/*/*.jsonl) ;;
+        *) return 1 ;;
+    esac
+
+    local transcript_cwd project
+    transcript_cwd=$(eagle_transcript_first_cwd "$transcript_path")
+    [ -n "$transcript_cwd" ] || return 1
+
+    if [ -n "$cwd" ] && ! eagle_path_is_same_or_child "$transcript_cwd" "$cwd"; then
+        return 1
+    fi
+
+    project=$(eagle_project_from_path_no_git "$transcript_cwd")
+    [ -n "$project" ] || return 1
+    printf '%s\n' "$project"
+}
+
+eagle_project_from_hook_input() {
+    local input="${1:-}"
+
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        echo "$EAGLE_MEM_PROJECT"
+        return
+    fi
+
+    local cwd transcript_path project
+    cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
+    transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+
+    if project=$(eagle_project_from_claude_transcript "$transcript_path" "$cwd"); then
+        printf '%s\n' "$project"
+        return
+    fi
+
+    eagle_project_from_cwd "$cwd"
 }
 
 eagle_project_file_path() {
@@ -761,6 +908,7 @@ Eagle Mem hooks are active for Codex in this project. SessionStart and UserPromp
 - Attribute recalled context as "Eagle Mem recalls:" when it is injected
 - Use the Eagle Mem skills when relevant: `eagle-mem-search`, `eagle-mem-overview`, `eagle-mem-memories`, `eagle-mem-tasks`, and `eagle-mem-orchestrate`
 - For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
+- Codex does not currently expose a persistent custom statusline like Claude Code; if the user asks for Eagle Mem status, run `eagle-mem statusline`
 - For important decisions, preferences, gotchas, or durable project facts, include them briefly in normal prose. Eagle Mem will extract them from the transcript.
 - Do not revert Eagle Mem-surfaced decisions without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
@@ -779,7 +927,8 @@ eagle_patch_codex_agents_md() {
             || grep -qF 'emit an <eagle-summary> block' "$agents_md" 2>/dev/null \
             || grep -qF 'explicitly include them in the `<eagle-summary>` block' "$agents_md" 2>/dev/null \
             || grep -qF 'explicitly include them in the <eagle-summary> block' "$agents_md" 2>/dev/null \
-            || ! grep -qF 'Keep Codex final answers clean' "$agents_md" 2>/dev/null; then
+            || ! grep -qF 'Keep Codex final answers clean' "$agents_md" 2>/dev/null \
+            || ! grep -qF 'eagle-mem statusline' "$agents_md" 2>/dev/null; then
             local tmp_md
             tmp_md=$(mktemp)
             awk -v marker="$marker" '

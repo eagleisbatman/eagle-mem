@@ -52,6 +52,26 @@ install_package() {
     esac
 }
 
+ensure_rtk() {
+    if command -v rtk &>/dev/null; then
+        rtk_version=$(rtk --version 2>/dev/null | head -1)
+        eagle_ok "RTK ${DIM}(${rtk_version:-installed})${RESET}"
+        return 0
+    fi
+
+    eagle_warn "RTK not found ${DIM}(token guard will be advisory until installed)${RESET}"
+    if command -v cargo &>/dev/null; then
+        eagle_info "Installing RTK with Cargo: cargo install rtk"
+        if cargo install rtk; then
+            eagle_ok "RTK installed"
+        else
+            eagle_warn "RTK install failed ${DIM}(continuing; run 'cargo install rtk' later)${RESET}"
+        fi
+    else
+        eagle_dim "Install Rust/Cargo, then run: cargo install rtk"
+    fi
+}
+
 # ─── Check prerequisites ───────────────────────────────────
 
 echo -e "  ${BOLD}Checking prerequisites...${RESET}"
@@ -117,6 +137,10 @@ else
         prereqs_ok=false
     fi
 fi
+
+# RTK is optional, but Eagle Mem can use it for both Claude Code and Codex
+# token-guard behavior when it is available on PATH.
+ensure_rtk
 
 # Claude Code / Codex
 claude_found=false
@@ -283,8 +307,9 @@ if [ "$claude_found" = true ]; then
 #!/usr/bin/env bash
 input=$(cat)
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
+session_id=$(echo "$input" | jq -r '.session_id // .session.id // ""' 2>/dev/null)
 source "$HOME/.eagle-mem/scripts/statusline-em.sh"
-eagle_mem_statusline "$project_dir"
+eagle_mem_statusline "$project_dir" "$session_id"
 WRAPPER
         chmod +x "$wrapper"
         tmp=$(mktemp)
@@ -303,7 +328,7 @@ WRAPPER
             eagle_dim "    em_section=\"\""
             eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
             eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
-            eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\")"
+            eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\" \"\$session_id\")"
             eagle_dim "    fi"
             echo ""
             eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"

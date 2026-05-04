@@ -455,17 +455,20 @@ memories_sync() {
             base=$(basename "$memfile")
             [ "$base" = "MEMORY.md" ] && continue
 
-            local existing_hash
-            existing_hash=$(eagle_db "SELECT content_hash FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            local mem_project mem_project_dir existing_row existing_hash existing_project
+            mem_project_dir="${memfile%/memory/*}"
+            mem_project=$(eagle_project_from_claude_project_dir "$mem_project_dir" 2>/dev/null || true)
+            existing_row=$(eagle_db "SELECT content_hash, project FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            IFS='|' read -r existing_hash existing_project <<< "$existing_row"
             local new_hash
             new_hash=$(shasum -a 256 "$memfile" | awk '{print $1}')
 
-            if [ "$existing_hash" = "$new_hash" ]; then
+            if [ "$existing_hash" = "$new_hash" ] && { [ -z "$mem_project" ] || [ "$existing_project" = "$mem_project" ]; }; then
                 mem_skipped=$((mem_skipped + 1))
                 continue
             fi
 
-            eagle_capture_agent_memory "$memfile" "" ""
+            eagle_capture_agent_memory "$memfile" "" "$mem_project" "claude-code"
             mem_synced=$((mem_synced + 1))
             eagle_ok "Memory: $base"
         done < <(find "$claude_mem_root" -path "*/memory/*.md" -print0 2>/dev/null)
@@ -478,12 +481,13 @@ memories_sync() {
         for memfile in "$codex_mem_root/MEMORY.md" "$codex_mem_root/memory_summary.md"; do
             [ ! -f "$memfile" ] && continue
 
-            local existing_hash
-            existing_hash=$(eagle_db "SELECT content_hash FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            local existing_row existing_hash existing_project
+            existing_row=$(eagle_db "SELECT content_hash, project FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            IFS='|' read -r existing_hash existing_project <<< "$existing_row"
             local new_hash
             new_hash=$(shasum -a 256 "$memfile" | awk '{print $1}')
 
-            if [ "$existing_hash" = "$new_hash" ]; then
+            if [ "$existing_hash" = "$new_hash" ] && [ "$existing_project" = "$codex_project" ]; then
                 mem_skipped=$((mem_skipped + 1))
                 continue
             fi

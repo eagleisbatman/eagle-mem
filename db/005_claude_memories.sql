@@ -41,7 +41,9 @@ CREATE TRIGGER IF NOT EXISTS claude_memories_ad AFTER DELETE ON claude_memories 
     VALUES ('delete', old.id, old.memory_name, old.description, old.content);
 END;
 
-CREATE TRIGGER IF NOT EXISTS claude_memories_au AFTER UPDATE ON claude_memories BEGIN
+CREATE TRIGGER IF NOT EXISTS claude_memories_au
+AFTER UPDATE OF memory_name, description, content ON claude_memories
+BEGIN
     INSERT INTO claude_memories_fts(claude_memories_fts, rowid, memory_name, description, content)
     VALUES ('delete', old.id, old.memory_name, old.description, old.content);
     INSERT INTO claude_memories_fts(rowid, memory_name, description, content)

@@ -37,7 +37,9 @@ CREATE TRIGGER IF NOT EXISTS claude_plans_ad AFTER DELETE ON claude_plans BEGIN
     VALUES ('delete', old.id, old.title, old.content);
 END;
 
-CREATE TRIGGER IF NOT EXISTS claude_plans_au AFTER UPDATE ON claude_plans BEGIN
+CREATE TRIGGER IF NOT EXISTS claude_plans_au
+AFTER UPDATE OF title, content ON claude_plans
+BEGIN
     INSERT INTO claude_plans_fts(claude_plans_fts, rowid, title, content)
     VALUES ('delete', old.id, old.title, old.content);
     INSERT INTO claude_plans_fts(rowid, title, content)

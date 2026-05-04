@@ -152,6 +152,12 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
 
+### v4.9.2 Patch
+
+Nested-repo Claude Code projects now use one stable project key. When a Claude workspace contains a git repo subdirectory, hooks prefer the Claude transcript workspace root while repo-local CLI commands can still use git-root keys where appropriate. Memory sync and backfill also repair unchanged memory rows whose content hash stayed the same but whose project key was stale. FTS5 update triggers now ignore metadata-only project rekeys, avoiding SQLite virtual-table errors during safe repairs.
+
+Installer parity also improved: first-time install now auto-provisions RTK when Cargo is available, the Eagle Mem statusline shows version/session/memory/turn counts, `eagle-mem statusline` is available as a CLI command, and Codex instructions explicitly call out that Codex currently has hook recall plus the statusline command rather than Claude Code's persistent custom statusline UI.
+
 ### v4.9.1 Patch
 
 `eagle-mem updates status` now refreshes the npm version live, and install/update seed the local latest-version cache with the installed version. This avoids confusing status output immediately after an update.

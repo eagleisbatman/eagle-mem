@@ -33,7 +33,7 @@ codex_compact=0
 
 [ -z "$session_id" ] && exit 0
 
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 p_esc=$(eagle_sql_escape "$project")

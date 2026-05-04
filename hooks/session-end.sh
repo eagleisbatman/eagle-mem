@@ -22,7 +22,7 @@ agent=$(eagle_agent_source_from_json "$input")
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
 
 cwd=$(echo "$input" | jq -r '.cwd // empty')
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 # Final sweep: re-capture all task files to catch status changes

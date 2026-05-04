@@ -25,7 +25,7 @@ agent=$(eagle_agent_source_from_json "$input")
 
 [ -z "$user_prompt" ] && exit 0
 
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 codex_compact=0
 [ "$agent" = "codex" ] && codex_compact=1
 

@@ -143,6 +143,22 @@ if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
     eagle_ok "Codex skills updated"
 fi
 
+# ─── Refresh generated Claude statusline wrapper ───────────
+
+statusline_wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
+if [ -f "$statusline_wrapper" ]; then
+    cat > "$statusline_wrapper" << 'WRAPPER'
+#!/usr/bin/env bash
+input=$(cat)
+project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
+session_id=$(echo "$input" | jq -r '.session_id // .session.id // ""' 2>/dev/null)
+source "$HOME/.eagle-mem/scripts/statusline-em.sh"
+eagle_mem_statusline "$project_dir" "$session_id"
+WRAPPER
+    chmod +x "$statusline_wrapper"
+    eagle_ok "Statusline wrapper updated"
+fi
+
 # ─── Backfill project names ───────────────────────────────
 
 backfilled=$(eagle_backfill_projects 2>/dev/null)

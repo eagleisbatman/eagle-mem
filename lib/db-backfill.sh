@@ -6,22 +6,41 @@
 _EAGLE_DB_BACKFILL_LOADED=1
 
 eagle_build_session_project_map() {
+    local session_filter_file="${1:-}"
     local claude_projects_dir="$EAGLE_CLAUDE_PROJECTS_DIR"
     [ ! -d "$claude_projects_dir" ] && return 0
+
+    if [ -n "$session_filter_file" ] && [ -s "$session_filter_file" ]; then
+        local transcript_index project_cache
+        transcript_index=$(mktemp)
+        project_cache=$(mktemp)
+        find "$claude_projects_dir" -mindepth 2 -maxdepth 2 -name "*.jsonl" -print > "$transcript_index" 2>/dev/null || true
+
+        local sid jsonl proj_dir project cached
+        while IFS= read -r sid; do
+            [ -z "$sid" ] && continue
+            jsonl=$(grep -m 1 "/$sid.jsonl\$" "$transcript_index" 2>/dev/null || true)
+            [ -f "$jsonl" ] || continue
+
+            proj_dir=$(dirname "$jsonl")
+            cached=$(grep -m 1 "^$proj_dir|" "$project_cache" 2>/dev/null || true)
+            if [ -n "$cached" ]; then
+                project="${cached#*|}"
+            else
+                project=$(eagle_project_from_claude_project_dir "$proj_dir" 2>/dev/null || true)
+                printf '%s|%s\n' "$proj_dir" "$project" >> "$project_cache"
+            fi
+            [ -n "$project" ] && echo "$sid|$project"
+        done < "$session_filter_file"
+        rm -f "$transcript_index" "$project_cache"
+        return 0
+    fi
 
     for proj_dir in "$claude_projects_dir"/*/; do
         [ ! -d "$proj_dir" ] && continue
 
         local project=""
-        local sample_jsonl
-        sample_jsonl=$(ls "$proj_dir"*.jsonl 2>/dev/null | head -1)
-        if [ -n "$sample_jsonl" ] && [ -f "$sample_jsonl" ]; then
-            local cwd
-            cwd=$(head -10 "$sample_jsonl" | jq -r 'select(.cwd != null) | .cwd' 2>/dev/null | head -1)
-            if [ -n "$cwd" ]; then
-                project=$(eagle_project_from_cwd "$cwd")
-            fi
-        fi
+        project=$(eagle_project_from_claude_project_dir "$proj_dir" 2>/dev/null || true)
         [ -z "$project" ] && continue
 
         for jsonl in "$proj_dir"*.jsonl; do
@@ -33,36 +52,55 @@ eagle_build_session_project_map() {
     done
 }
 
+eagle_build_claude_project_dir_map() {
+    local claude_projects_dir="$EAGLE_CLAUDE_PROJECTS_DIR"
+    [ ! -d "$claude_projects_dir" ] && return 0
+
+    for proj_dir in "$claude_projects_dir"/*/; do
+        [ ! -d "$proj_dir" ] && continue
+
+        local project
+        project=$(eagle_project_from_claude_project_dir "$proj_dir" 2>/dev/null || true)
+        [ -z "$project" ] && continue
+
+        printf '%s|%s\n' "${proj_dir%/}" "$project"
+    done
+}
+
 eagle_backfill_projects() {
     local updated=0
-    local map
-    map=$(eagle_build_session_project_map)
-    [ -z "$map" ] && echo "0" && return 0
+    local session_filter_file map
+    session_filter_file=$(mktemp)
+    eagle_db "SELECT id FROM sessions;" > "$session_filter_file" 2>/dev/null || true
+    map=$(eagle_build_session_project_map "$session_filter_file")
 
     # Phase 1: Build old→new project mapping BEFORE mutating any rows.
     # Collect from sessions table so non-session tables can be migrated.
     local rename_map_file
     rename_map_file=$(mktemp)
-    while IFS='|' read -r sid project; do
-        [ -z "$sid" ] || [ -z "$project" ] && continue
-        local sid_sql
-        sid_sql=$(eagle_sql_escape "$sid")
-        local old_project
-        old_project=$(eagle_db "SELECT project FROM sessions WHERE id = '$sid_sql';")
-        if [ -n "$old_project" ] && [ "$old_project" != "$project" ]; then
-            echo "$old_project|$project" >> "$rename_map_file"
-        fi
-    done <<< "$map"
+    if [ -n "$map" ]; then
+        while IFS='|' read -r sid project; do
+            [ -z "$sid" ] || [ -z "$project" ] && continue
+            local sid_sql
+            sid_sql=$(eagle_sql_escape "$sid")
+            local old_project
+            old_project=$(eagle_db "SELECT project FROM sessions WHERE id = '$sid_sql';")
+            if [ -n "$old_project" ] && [ "$old_project" != "$project" ]; then
+                echo "$old_project|$project" >> "$rename_map_file"
+            fi
+        done <<< "$map"
+    fi
 
     # Phase 2: Update session-linked tables
-    while IFS='|' read -r sid project; do
-        [ -z "$sid" ] || [ -z "$project" ] && continue
-        local sid_sql proj_sql
-        sid_sql=$(eagle_sql_escape "$sid")
-        proj_sql=$(eagle_sql_escape "$project")
+    if [ -n "$map" ]; then
+        while IFS='|' read -r sid project; do
+            [ -z "$sid" ] || [ -z "$project" ] && continue
+            local sid_sql proj_sql
+            sid_sql=$(eagle_sql_escape "$sid")
+            proj_sql=$(eagle_sql_escape "$project")
 
-        local ch
-        ch=$(eagle_db_pipe <<SQL
+            local ch
+            ch=$(eagle_db_pipe <<SQL
 BEGIN;
 UPDATE sessions SET project = '$proj_sql' WHERE id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
 UPDATE agent_tasks SET project = '$proj_sql' WHERE source_session_id = '$sid_sql' AND (project = '' OR project != '$proj_sql');
@@ -74,10 +112,37 @@ SELECT total_changes();
 COMMIT;
 SQL
 )
-        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
-    done <<< "$map"
+            [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+        done <<< "$map"
+    fi
 
-    # Phase 3: Update non-session tables using the old→new mapping.
+    # Phase 3: Repair Claude memory rows that have no session id but live under
+    # a Claude project directory. These rows used to keep stale project keys
+    # when their file content did not change.
+    local dir_map
+    dir_map=$(eagle_build_claude_project_dir_map)
+    while IFS='|' read -r proj_dir project; do
+        [ -z "$proj_dir" ] || [ -z "$project" ] && continue
+        local proj_sql prefix_sql
+        proj_sql=$(eagle_sql_escape "$project")
+        prefix_sql=$(eagle_sql_escape "$proj_dir/memory/")
+
+        local ch
+        ch=$(eagle_db_pipe <<SQL
+BEGIN;
+UPDATE agent_memories
+SET project = '$proj_sql'
+WHERE file_path >= '$prefix_sql'
+  AND file_path < ('$prefix_sql' || char(0x10ffff))
+  AND (project = '' OR project != '$proj_sql');
+SELECT total_changes();
+COMMIT;
+SQL
+)
+        [ "${ch:-0}" -gt 0 ] && updated=$((updated + ch))
+    done <<< "$dir_map"
+
+    # Phase 4: Update non-session tables using the old→new mapping.
     # Skip ambiguous mappings (one old name → multiple new names).
     if [ -s "$rename_map_file" ]; then
         local uniq_map
@@ -121,7 +186,7 @@ COMMIT;
 SQL
         done <<< "$uniq_map"
     fi
-    rm -f "$rename_map_file"
+    rm -f "$rename_map_file" "$session_filter_file"
 
     echo "$updated"
 }

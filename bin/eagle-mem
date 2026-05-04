@@ -23,6 +23,7 @@ case "$command" in
     health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     updates)    bash "$SCRIPTS_DIR/updates.sh" "$@" ;;
+    statusline) "$SCRIPTS_DIR/statusline-em.sh" "$@" ;;
     guard)      bash "$SCRIPTS_DIR/guard.sh" "$@" ;;
     overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
     session|sessions)

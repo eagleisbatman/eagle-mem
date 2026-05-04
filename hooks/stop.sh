@@ -33,7 +33,7 @@ agent=$(eagle_agent_source_from_json "$input")
 agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 [ -n "$agent_type" ] && [ "$agent_type" != "main" ] && exit 0
 
-project=$(eagle_project_from_cwd "$cwd")
+project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path agent=$agent"

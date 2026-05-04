@@ -38,7 +38,9 @@ CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON code_chunks BEGIN
     VALUES ('delete', old.id, old.file_path, old.content);
 END;
 
-CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON code_chunks BEGIN
+CREATE TRIGGER IF NOT EXISTS chunks_au
+AFTER UPDATE OF file_path, content ON code_chunks
+BEGIN
     INSERT INTO code_chunks_fts(code_chunks_fts, rowid, file_path, content)
     VALUES ('delete', old.id, old.file_path, old.content);
     INSERT INTO code_chunks_fts(rowid, file_path, content)

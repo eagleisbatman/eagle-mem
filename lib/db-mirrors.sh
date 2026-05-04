@@ -71,10 +71,14 @@ ON CONFLICT(file_path) DO UPDATE SET
     memory_type     = excluded.memory_type,
     content         = excluded.content,
     content_hash    = excluded.content_hash,
-    origin_session_id = excluded.origin_session_id,
-    origin_agent    = excluded.origin_agent,
+    origin_session_id = COALESCE(NULLIF(excluded.origin_session_id, ''), agent_memories.origin_session_id),
+    origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), agent_memories.origin_agent),
+    project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_memories.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_memories.content_hash != excluded.content_hash;
+WHERE agent_memories.content_hash != excluded.content_hash
+   OR (excluded.project != '' AND agent_memories.project != excluded.project)
+   OR (excluded.origin_session_id != '' AND agent_memories.origin_session_id != excluded.origin_session_id)
+   OR (excluded.origin_agent != '' AND agent_memories.origin_agent != excluded.origin_agent);
 SQL
 }
 
@@ -157,7 +161,10 @@ ON CONFLICT(file_path) DO UPDATE SET
     origin_agent    = COALESCE(NULLIF(excluded.origin_agent, ''), agent_plans.origin_agent),
     project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_plans.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_plans.content_hash != excluded.content_hash;
+WHERE agent_plans.content_hash != excluded.content_hash
+   OR (excluded.project != '' AND agent_plans.project != excluded.project)
+   OR (excluded.origin_session_id != '' AND agent_plans.origin_session_id != excluded.origin_session_id)
+   OR (excluded.origin_agent != '' AND agent_plans.origin_agent != excluded.origin_agent);
 SQL
 }
 
@@ -258,7 +265,9 @@ ON CONFLICT(file_path) DO UPDATE SET
     origin_agent    = excluded.origin_agent,
     project         = CASE WHEN excluded.project != '' THEN excluded.project ELSE agent_tasks.project END,
     updated_at      = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-WHERE agent_tasks.content_hash != excluded.content_hash;
+WHERE agent_tasks.content_hash != excluded.content_hash
+   OR (excluded.project != '' AND agent_tasks.project != excluded.project)
+   OR (excluded.origin_agent != '' AND agent_tasks.origin_agent != excluded.origin_agent);
 SQL
 }
 
