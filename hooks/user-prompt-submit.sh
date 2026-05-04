@@ -44,18 +44,32 @@ if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
     eagle_log "INFO" "UserPromptSubmit: turn=$turn_count session=$session_id"
 
     if [ "$turn_count" -ge 30 ]; then
-        context+="
+        if [ "$codex_compact" -eq 1 ]; then
+            context+="
+=== Eagle Mem: Context Pressure Critical ($turn_count turns since compact) ===
+Keep the next Codex reply user-clean. Do not print Eagle Mem summary capture blocks or other internals. Include a short normal handoff note if useful, then ask the user to run /compact.
+"
+        else
+            context+="
 === Eagle Mem: Context Pressure Critical ($turn_count turns since compact) ===
 IMMEDIATELY emit a detailed <eagle-summary> covering ALL work this session.
 Tell the user to run /compact NOW to avoid losing context.
 "
+        fi
         echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
     elif [ "$turn_count" -ge 20 ]; then
-        context+="
+        if [ "$codex_compact" -eq 1 ]; then
+            context+="
+=== Eagle Mem: Context Pressure High ($turn_count turns since compact) ===
+Keep the next Codex reply clean. Do not print Eagle Mem summary capture blocks or other internals. Summarize any durable decisions in normal prose only.
+"
+        else
+            context+="
 === Eagle Mem: Context Pressure High ($turn_count turns since compact) ===
 Include a thorough <eagle-summary> in your next response — capture all decisions, gotchas, and learned context before compaction.
 Suggest the user run /compact to free context for continued work.
 "
+        fi
         echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
     else
         rm -f "$EAGLE_MEM_DIR/.context-pressure" 2>/dev/null

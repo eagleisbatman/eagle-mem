@@ -659,10 +659,7 @@ eagle_patch_claude_md() {
                 skip && /^## / { skip=0 }
                 !skip { print }
             ' "$claude_md" > "$tmp_md"
-            # Remove trailing blank lines left by section removal
-            sed -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }' "$tmp_md" > "${tmp_md}.clean"
-            mv "${tmp_md}.clean" "$claude_md"
-            rm -f "$tmp_md"
+            mv "$tmp_md" "$claude_md"
             _eagle_claude_md_section >> "$claude_md"
             return 0
         fi
@@ -692,30 +689,13 @@ _eagle_codex_agents_section() {
 
 Eagle Mem hooks are active for Codex in this project. SessionStart and UserPromptSubmit inject project recall from the shared Eagle Mem database at `~/.eagle-mem/memory.db`. PostToolUse records observations and marks affected features for verification.
 
-**Rule:** Before your final response in every session, emit an `<eagle-summary>` block so the Stop hook can capture a rich summary.
-
-```
-<eagle-summary>
-request: [what user asked]
-completed: [what shipped]
-learned: [non-obvious discoveries]
-decisions: [choice — why]
-gotchas: [what surprised]
-next_steps: [concrete actions]
-key_files: [path — role]
-files_read: [path, ...]
-files_modified: [path, ...]
-affected_features: [feature, ...]
-verified_features: [feature, ...]
-regression_risks: [risk, ...]
-</eagle-summary>
-```
+**User-visible output rule:** Keep Codex final answers clean. Do not print Eagle Mem summary capture blocks, XML, JSON hook payloads, or internal templates to the user unless the user explicitly asks for raw Eagle Mem internals. The Stop hook captures Codex summaries from the transcript automatically.
 
 **How to apply:**
 - Attribute recalled context as "Eagle Mem recalls:" when it is injected
 - Use the Eagle Mem skills when relevant: `eagle-mem-search`, `eagle-mem-overview`, `eagle-mem-memories`, `eagle-mem-tasks`, and `eagle-mem-orchestrate`
 - For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
-- For important decisions, preferences, gotchas, or durable project facts, explicitly include them in the `<eagle-summary>` block so Codex-originated memories become available to future Claude Code and Codex sessions
+- For important decisions, preferences, gotchas, or durable project facts, include them briefly in normal prose. Eagle Mem will extract them from the transcript.
 - Do not revert Eagle Mem-surfaced decisions without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
 - Never put raw secrets in summaries
@@ -729,6 +709,23 @@ eagle_patch_codex_agents_md() {
     mkdir -p "$(dirname "$agents_md")"
 
     if [ -f "$agents_md" ] && grep -qF "$marker" "$agents_md" 2>/dev/null; then
+        if grep -qF 'emit an `<eagle-summary>` block' "$agents_md" 2>/dev/null \
+            || grep -qF 'emit an <eagle-summary> block' "$agents_md" 2>/dev/null \
+            || grep -qF 'explicitly include them in the `<eagle-summary>` block' "$agents_md" 2>/dev/null \
+            || grep -qF 'explicitly include them in the <eagle-summary> block' "$agents_md" 2>/dev/null \
+            || ! grep -qF 'Keep Codex final answers clean' "$agents_md" 2>/dev/null; then
+            local tmp_md
+            tmp_md=$(mktemp)
+            awk -v marker="$marker" '
+                $0 ~ marker { skip=1; next }
+                skip && /^---$/ { skip=0; next }
+                skip && /^## / { skip=0 }
+                !skip { print }
+            ' "$agents_md" > "$tmp_md"
+            mv "$tmp_md" "$agents_md"
+            _eagle_codex_agents_section >> "$agents_md"
+            return 0
+        fi
         if ! grep -qF 'eagle-mem orchestrate' "$agents_md" 2>/dev/null; then
             local tmp_md
             tmp_md=$(mktemp)

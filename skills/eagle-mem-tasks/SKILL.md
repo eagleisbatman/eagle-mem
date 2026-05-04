@@ -66,7 +66,7 @@ Mark the current task in progress (`TaskUpdate(in_progress)` in Claude Code, or 
 
 ### 4. Complete — record what happened
 
-Mark the task completed (`TaskUpdate(completed)` in Claude Code, or `eagle-mem tasks complete <id> --agent codex` in Codex). Emit `<eagle-summary>` so Eagle Mem captures what was accomplished.
+Mark the task completed (`TaskUpdate(completed)` in Claude Code, or `eagle-mem tasks complete <id> --agent codex` in Codex). In Claude Code, use the Eagle Mem summary block when that UI handles it cleanly. In Codex, keep the final reply clean and record durable decisions in normal prose; Eagle Mem captures the transcript automatically.
 
 If the task produced decisions that downstream tasks need, update those task descriptions now:
 ```

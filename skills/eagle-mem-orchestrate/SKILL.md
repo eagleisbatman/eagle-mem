@@ -129,8 +129,10 @@ ending a broad session.
 - Every lane should have a validation command when one is obvious.
 - If a lane is blocked, update the lane with a concrete note rather than
   silently stopping.
-- After completing a lane, emit an `<eagle-summary>` so Eagle Mem captures the
-  decision and files touched.
+- After completing a lane, keep the user-facing final response clean. Claude Code
+  may use the Eagle Mem summary block when that UI handles it cleanly; Codex
+  should record durable decisions in normal prose and let the Stop hook capture
+  the transcript.
 
 ## Reference
 

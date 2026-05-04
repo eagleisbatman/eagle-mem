@@ -171,7 +171,7 @@ fi
 if [ "$agent" = "codex" ] && [ "${stat_with_summaries:-0}" -eq 0 ] 2>/dev/null; then
     context+="
 === Eagle Mem: Codex Capture Warming Up ===
-Codex hooks are active. End important turns with an <eagle-summary> block so future Claude Code and Codex sessions can recall decisions, gotchas, key files, and next steps from this project.
+Codex hooks are active. Keep final replies clean; Eagle Mem will capture decisions, gotchas, key files, and next steps from the transcript automatically.
 "
 fi
 
@@ -439,7 +439,7 @@ fi
 if [ "$agent" = "codex" ]; then
     context+="
 === Eagle Mem: Active ===
-Memory active for '$project'. Emit <eagle-summary> in final responses with request, completed, learned, decisions, gotchas, next_steps, key_files, files_read, files_modified, affected_features, verified_features, and regression_risks.
+Memory active for '$project'. Keep user-facing Codex replies clean: do not print Eagle Mem summary capture blocks, XML, JSON hook payloads, or internal templates unless the user explicitly asks. The Stop hook captures summaries from the transcript automatically.
 "
 elif [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     context+="

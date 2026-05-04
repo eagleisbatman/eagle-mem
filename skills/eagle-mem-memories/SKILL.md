@@ -68,7 +68,7 @@ eagle-mem memories tasks show <file_path>
 
 Two paths feed the mirror:
 
-**Real-time hooks.** Claude Code memory/plan/task files are mirrored when written. Codex sessions are captured through SessionStart/UserPromptSubmit/PostToolUse/Stop hooks, and important durable facts should be placed in `<eagle-summary>` so they become shared recall.
+**Real-time hooks.** Claude Code memory/plan/task files are mirrored when written. Codex sessions are captured through SessionStart/UserPromptSubmit/PostToolUse/Stop hooks. In Codex, keep user-facing replies clean and put important durable facts in normal prose; Eagle Mem extracts them from the transcript.
 
 **Backfill (sync command).** For memories, plans, and tasks that existed before Eagle Mem was installed, or that were written outside a hooked session:
 ```bash

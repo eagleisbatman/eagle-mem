@@ -301,7 +301,7 @@ Rules:
 - If blocked, run: eagle-mem orchestrate lane --project "$project" --name "$name" block "$lane_key" --notes "<concrete blocker>"
 - If you finish manually before the wrapper updates status, run: eagle-mem orchestrate lane --project "$project" --name "$name" complete "$lane_key" --notes "<validation result>"
 - Run the validation command when one is provided and it is safe for the lane.
-- Before final response, emit an <eagle-summary> with request, completed, learned, decisions, gotchas, next_steps, key_files, files_read, files_modified, affected_features, verified_features, and regression_risks.
+- Keep user-facing final responses clean. Claude Code workers may emit an Eagle Mem summary block when their UI handles it cleanly; Codex workers should not print XML, JSON, or internal capture blocks unless the user explicitly asks. Eagle Mem Stop hooks capture Codex summaries from the transcript automatically.
 PROMPT
 }
 

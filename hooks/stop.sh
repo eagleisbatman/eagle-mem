@@ -238,7 +238,7 @@ if [ "$needs_enrichment" -eq 1 ]; then
     if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 3000)
 
-        enrich_prompt="Extract facts from this Claude Code session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
+        enrich_prompt="Extract facts from this AI coding session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
 
 Respond with EXACTLY these sections (omit sections with no evidence):
 
@@ -263,7 +263,7 @@ Each as: <filepath>
 SESSION TEXT:
 $excerpt"
 
-        enrich_system="You extract structured facts from development sessions. Output format for decisions: '- Did X — why: Y'. Output format for gotchas: '- Gotcha description'. Be concise. Only include items with clear evidence in the session text. Never fabricate content."
+        enrich_system="You extract structured facts from Claude Code and Codex development sessions. Output format for decisions: '- Did X — why: Y'. Output format for gotchas: '- Gotcha description'. Be concise. Only include items with clear evidence in the session text. Never fabricate content."
         enrich_result=$(eagle_llm_call "$enrich_prompt" "$enrich_system" 768 2>/dev/null)
         llm_rc=$?
 

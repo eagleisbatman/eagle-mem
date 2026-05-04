@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.8.1 ships the communication refresh for the new architecture:** cross-agent orchestration, compact Codex hook recall, enforced anti-regression checks, configurable RTK token guardrails, and a memory-sync fix for large memory files.
+**v4.8.2 ships Codex output polish:** Codex final replies now stay clean by default instead of printing large `<eagle-summary>` capture blocks. Eagle Mem still captures summaries from the Stop transcript, while Claude Code can keep using the richer explicit summary path where it behaves cleanly.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -148,6 +148,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.8.2 Patch
+
+Codex no longer gets instructed to print large user-visible `<eagle-summary>` XML blocks. The installer/update path rewrites existing `~/.codex/AGENTS.md` Eagle Mem instructions to the clean-output contract, context-pressure nudges use normal prose, and Codex-oriented skills/worker prompts avoid raw capture templates.
 
 ### v4.8.1 Patch
 
