@@ -210,12 +210,229 @@ eagle_transcript_first_cwd() {
     local transcript_path="${1:-}"
     [ -f "$transcript_path" ] || return 1
 
+    local head_lines
+    head_lines=$(sed -n '1,200p' "$transcript_path" 2>/dev/null || true)
+    [ -n "$head_lines" ] || return 1
+
     local cwd
-    cwd=$(sed -n '1,200p' "$transcript_path" 2>/dev/null \
-        | jq -r 'select((.cwd? // "") != "") | .cwd' 2>/dev/null \
+    cwd=$(printf '%s\n' "$head_lines" \
+        | jq -r '
+            [
+                (.payload? | objects | .workspace? | objects | .project_dir? | strings),
+                (.workspace? | objects | .project_dir? | strings),
+                (.payload? | objects | .workspace? | objects | .current_dir? | strings),
+                (.workspace? | objects | .current_dir? | strings),
+                (.cwd? | strings),
+                (.payload? | objects | .cwd? | strings),
+                (.payload? | objects | .current_dir? | strings)
+            ]
+            | .[0] // empty
+        ' 2>/dev/null \
         | awk 'NF { print; exit }' || true)
+
     [ -n "$cwd" ] || return 1
     printf '%s\n' "$cwd"
+}
+
+eagle_session_project_marker_file() {
+    local session_id="${1:-}"
+    eagle_validate_session_id "$session_id" || return 1
+    mkdir -p "$EAGLE_MEM_DIR/session-projects" 2>/dev/null || return 1
+    printf '%s/session-projects/%s\n' "$EAGLE_MEM_DIR" "$session_id"
+}
+
+eagle_get_session_project_marker() {
+    local marker
+    marker=$(eagle_session_project_marker_file "$1") || return 1
+    [ -s "$marker" ] || return 1
+    awk 'NF { print; exit }' "$marker"
+}
+
+eagle_remember_session_project() {
+    local session_id="${1:-}"
+    local project="${2:-}"
+    local force="${3:-0}"
+    [ -n "$project" ] || return 1
+
+    local marker
+    marker=$(eagle_session_project_marker_file "$session_id") || return 1
+    if [ "$force" = "1" ] || [ ! -s "$marker" ]; then
+        printf '%s\n' "$project" > "$marker" 2>/dev/null || return 1
+    fi
+}
+
+eagle_get_session_project_light() {
+    local session_id="${1:-}"
+    eagle_validate_session_id "$session_id" || return 1
+    command -v sqlite3 >/dev/null 2>&1 || return 1
+    [ -f "$EAGLE_MEM_DB" ] || return 1
+
+    local sid_sql project
+    sid_sql=$(eagle_sql_escape "$session_id")
+    project=$(sqlite3 "$EAGLE_MEM_DB" "SELECT project FROM sessions WHERE id = '$sid_sql' AND project != '' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    [ -n "$project" ] || return 1
+    printf '%s\n' "$project"
+}
+
+eagle_project_has_table_row() {
+    local table="${1:-}"
+    local project="${2:-}"
+    [ -n "$table" ] && [ -n "$project" ] || return 1
+    command -v sqlite3 >/dev/null 2>&1 || return 1
+    [ -f "$EAGLE_MEM_DB" ] || return 1
+
+    local project_sql found
+    project_sql=$(eagle_sql_escape "$project")
+    found=$(sqlite3 "$EAGLE_MEM_DB" "SELECT 1 FROM $table WHERE project = '$project_sql' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    [ "$found" = "1" ]
+}
+
+eagle_project_from_existing_ancestor() {
+    local path="${1:-}"
+    [ -n "$path" ] || return 1
+
+    local current key
+    current=$(eagle_normalize_project_path "$path")
+    eagle_is_ephemeral_project_path "$current" && return 1
+
+    while [ -n "$current" ] && [ "$current" != "/" ]; do
+        key=$(eagle_project_key_from_target_dir "$current")
+        if [ -n "$key" ]; then
+            # Prefer ancestors with durable memory/summary content. Session-only
+            # rows can be created by the very folder drift this helper repairs.
+            if eagle_project_has_table_row "agent_memories" "$key" \
+                || eagle_project_has_table_row "summaries" "$key"; then
+                printf '%s\n' "$key"
+                return 0
+            fi
+        fi
+
+        [ "$current" = "$HOME" ] && break
+        current=$(dirname "$current")
+    done
+
+    return 1
+}
+
+eagle_project_from_workspace_path() {
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        printf '%s\n' "$EAGLE_MEM_PROJECT"
+        return 0
+    fi
+
+    local path="${1:-}"
+    [ -n "$path" ] || return 1
+
+    local resolved worktree_project git_root project
+    resolved=$(eagle_normalize_project_path "$path")
+    eagle_is_ephemeral_project_path "$resolved" && return 1
+
+    if worktree_project=$(eagle_project_key_for_worktree_path "$resolved"); then
+        printf '%s\n' "$worktree_project"
+        return 0
+    fi
+
+    git_root=$(git -C "$resolved" rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$git_root" ]; then
+        project=$(eagle_project_key_from_target_dir "$git_root")
+        [ -n "$project" ] && { printf '%s\n' "$project"; return 0; }
+    fi
+
+    if project=$(eagle_project_from_existing_ancestor "$path"); then
+        printf '%s\n' "$project"
+        return 0
+    fi
+
+    project=$(eagle_project_from_path_no_git "$path")
+    [ -n "$project" ] || return 1
+    printf '%s\n' "$project"
+}
+
+eagle_project_from_transcript_start() {
+    local transcript_path="${1:-}"
+    local cwd="${2:-}"
+    [ -f "$transcript_path" ] || return 1
+
+    local transcript_cwd project
+    if project=$(eagle_project_from_claude_transcript "$transcript_path" "$cwd"); then
+        printf '%s\n' "$project"
+        return 0
+    fi
+
+    transcript_cwd=$(eagle_transcript_first_cwd "$transcript_path") || return 1
+    if [ -n "$cwd" ] && ! eagle_path_is_same_or_child "$transcript_cwd" "$cwd"; then
+        return 1
+    fi
+
+    project=$(eagle_project_from_workspace_path "$transcript_cwd")
+    [ -n "$project" ] || return 1
+    printf '%s\n' "$project"
+}
+
+eagle_project_from_statusline_input() {
+    local input="${1:-}"
+    local project_dir="${2:-}"
+    local cwd="${3:-}"
+    local session_id="${4:-}"
+    local project workspace_project_dir transcript_path
+
+    if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
+        printf '%s\n' "$EAGLE_MEM_PROJECT"
+        return
+    fi
+
+    if [ -z "$session_id" ] && [ -n "$input" ]; then
+        session_id=$(printf '%s' "$input" | jq -r '.session_id // .session.id // empty' 2>/dev/null)
+    fi
+
+    if [ -n "$input" ]; then
+        workspace_project_dir=$(printf '%s' "$input" | jq -r '.workspace.project_dir // empty' 2>/dev/null)
+        transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
+        [ -z "$cwd" ] && cwd=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)
+    fi
+
+    # Explicit workspace project and transcript start are stronger than older
+    # cached session rows because they repair pre-fix sessions that were stored
+    # under a nested folder key.
+    if [ -n "$workspace_project_dir" ]; then
+        project=$(eagle_project_from_workspace_path "$workspace_project_dir")
+        [ -n "$project" ] && { printf '%s\n' "$project"; return; }
+    fi
+
+    if [ -n "$transcript_path" ]; then
+        if project=$(eagle_project_from_transcript_start "$transcript_path" "${cwd:-$project_dir}"); then
+            printf '%s\n' "$project"
+            return
+        fi
+    fi
+
+    if [ -n "$session_id" ]; then
+        if project=$(eagle_get_session_project_light "$session_id"); then
+            printf '%s\n' "$project"
+            return
+        fi
+        if project=$(eagle_get_session_project_marker "$session_id"); then
+            printf '%s\n' "$project"
+            return
+        fi
+    fi
+
+    if [ -z "$project_dir" ] && [ -n "$input" ]; then
+        project_dir=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)
+    fi
+    if [ -n "$project_dir" ]; then
+        project=$(eagle_project_from_workspace_path "$project_dir")
+        [ -n "$project" ] && { printf '%s\n' "$project"; return; }
+    fi
+
+    if [ -z "$cwd" ] && [ -n "$input" ]; then
+        cwd=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)
+    fi
+    if [ -n "$cwd" ]; then
+        project=$(eagle_project_from_workspace_path "$cwd")
+        [ -n "$project" ] && { printf '%s\n' "$project"; return; }
+    fi
+    eagle_project_from_cwd "$cwd"
 }
 
 eagle_project_from_claude_project_dir() {
@@ -228,7 +445,7 @@ eagle_project_from_claude_project_dir() {
         [ -f "$jsonl" ] || continue
         cwd=$(eagle_transcript_first_cwd "$jsonl")
         [ -z "$cwd" ] && continue
-        project=$(eagle_project_from_path_no_git "$cwd")
+        project=$(eagle_project_from_workspace_path "$cwd")
         [ -n "$project" ] && { printf '%s\n' "$project"; return 0; }
     done
 
@@ -252,7 +469,7 @@ eagle_project_from_claude_transcript() {
         return 1
     fi
 
-    project=$(eagle_project_from_path_no_git "$transcript_cwd")
+    project=$(eagle_project_from_workspace_path "$transcript_cwd")
     [ -n "$project" ] || return 1
     printf '%s\n' "$project"
 }
@@ -265,16 +482,54 @@ eagle_project_from_hook_input() {
         return
     fi
 
-    local cwd transcript_path project
+    local session_id cwd transcript_path workspace_project project
+    session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
     cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
     transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
 
+    workspace_project=$(printf '%s' "$input" | jq -r '.workspace.project_dir // empty' 2>/dev/null)
+    if [ -n "$workspace_project" ]; then
+        project=$(eagle_project_from_workspace_path "$workspace_project")
+        if [ -n "$project" ]; then
+            [ -n "$session_id" ] && eagle_remember_session_project "$session_id" "$project" 1 >/dev/null 2>&1
+            printf '%s\n' "$project"
+            return
+        fi
+    fi
+
     if project=$(eagle_project_from_claude_transcript "$transcript_path" "$cwd"); then
+        [ -n "$session_id" ] && eagle_remember_session_project "$session_id" "$project" 1 >/dev/null 2>&1
         printf '%s\n' "$project"
         return
     fi
 
-    eagle_project_from_cwd "$cwd"
+    if [ -n "$transcript_path" ] && [ -f "$transcript_path" ]; then
+        local transcript_cwd
+        transcript_cwd=$(eagle_transcript_first_cwd "$transcript_path")
+        if [ -n "$transcript_cwd" ]; then
+            project=$(eagle_project_from_workspace_path "$transcript_cwd")
+            if [ -n "$project" ]; then
+                [ -n "$session_id" ] && eagle_remember_session_project "$session_id" "$project" 1 >/dev/null 2>&1
+                printf '%s\n' "$project"
+                return
+            fi
+        fi
+    fi
+
+    if [ -n "$session_id" ]; then
+        if project=$(eagle_get_session_project_light "$session_id"); then
+            printf '%s\n' "$project"
+            return
+        fi
+        if project=$(eagle_get_session_project_marker "$session_id"); then
+            printf '%s\n' "$project"
+            return
+        fi
+    fi
+
+    project=$(eagle_project_from_cwd "$cwd")
+    [ -n "$session_id" ] && [ -n "$project" ] && eagle_remember_session_project "$session_id" "$project" 0 >/dev/null 2>&1
+    printf '%s\n' "$project"
 }
 
 eagle_project_file_path() {
@@ -808,6 +1063,114 @@ eagle_collect_files() {
             -not -name 'pnpm-lock.yaml' \
             | sed 's|^\./||') > "$output_file"
     fi
+}
+
+eagle_statusline_script_from_command() {
+    local cmd="${1:-}"
+    [ -z "$cmd" ] && return 1
+
+    cmd="${cmd#sh }"
+    cmd="${cmd#bash }"
+    cmd="${cmd#/bin/sh }"
+    cmd="${cmd#/bin/bash }"
+    cmd="${cmd#zsh }"
+    cmd="${cmd#/bin/zsh }"
+    cmd="${cmd%\"}"
+    cmd="${cmd#\"}"
+    cmd="${cmd%\'}"
+    cmd="${cmd#\'}"
+
+    case "$cmd" in
+        "~/"*) cmd="$HOME/${cmd#\~/}" ;;
+        "\$HOME/"*) cmd="$HOME/${cmd#\$HOME/}" ;;
+        "\${HOME}/"*) cmd="$HOME/${cmd#\$\{HOME\}/}" ;;
+    esac
+
+    if [ -L "$cmd" ]; then
+        local link_target link_dir
+        link_target=$(readlink "$cmd" 2>/dev/null || true)
+        if [ -n "$link_target" ]; then
+            case "$link_target" in
+                /*) cmd="$link_target" ;;
+                *)
+                    link_dir=$(cd "$(dirname "$cmd")" && pwd -P) || return 1
+                    cmd="$link_dir/$link_target"
+                    ;;
+            esac
+        fi
+    fi
+
+    [ -f "$cmd" ] || return 1
+    printf '%s\n' "$cmd"
+}
+
+eagle_statusline_script_uses_input() {
+    local sl_file="${1:-}"
+    [ -f "$sl_file" ] || return 1
+    grep -Eq 'eagle_project_from_statusline_input|eagle_mem_statusline.*(\$\{input:-\}|\$input)' "$sl_file"
+}
+
+eagle_patch_statusline_script() {
+    local sl_file="${1:-}"
+    [ -f "$sl_file" ] || return 1
+    command -v perl >/dev/null 2>&1 || return 1
+
+    if [ -L "$sl_file" ]; then
+        local link_target link_dir
+        link_target=$(readlink "$sl_file" 2>/dev/null || true)
+        if [ -n "$link_target" ]; then
+            case "$link_target" in
+                /*) sl_file="$link_target" ;;
+                *)
+                    link_dir=$(cd "$(dirname "$sl_file")" && pwd -P) || return 1
+                    sl_file="$link_dir/$link_target"
+                    ;;
+            esac
+        fi
+    fi
+
+    local tmp backup mode
+    tmp=$(mktemp) || return 1
+    cp "$sl_file" "$tmp" || { rm -f "$tmp"; return 1; }
+
+    if ! grep -Eq 'eagle_mem_statusline|eagle_project_from_cwd|claude_memories|agent_memories|\.eagle-mem/scripts/statusline-em' "$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    perl -0pi -e '
+        s/(project_dir=\$\(echo "\$input" \| jq -r \x27)\.workspace\.current_dir \/\/ \.cwd/$1.workspace.project_dir \/\/ .workspace.current_dir \/\/ .cwd/g;
+        s/(project_dir=\$\(echo "\$input" \| jq -r ")\.workspace\.current_dir \/\/ \.cwd/$1.workspace.project_dir \/\/ .workspace.current_dir \/\/ .cwd/g;
+        s/eagle_mem_statusline "\$project_dir" "\$session_id" "\$\{input\}"/eagle_mem_statusline "\$project_dir" "\$session_id" "\${input:-}"/g;
+        s/eagle_mem_statusline "\$project_dir" "\$session_id"(?=[\)\n;])/eagle_mem_statusline "\$project_dir" "\$session_id" "\${input:-}"/g;
+        s/eagle_mem_statusline "\$project_dir"(?=[\)\n;])/eagle_mem_statusline "\$project_dir" "\${session_id:-}" "\${input:-}"/g;
+        s/eagle_project_from_cwd "\$cwd"/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd "\$project_dir"/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd "\${project_dir:-\$cwd}"/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd "\${project_dir:-\$(pwd)}"/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd "\${eagle_mem_project_dir:-\${project_dir:-\$cwd}}"/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd\("\$cwd"\)/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd\("\$project_dir"\)/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd\("\${project_dir:-\$cwd}"\)/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd\("\${project_dir:-\$(pwd)}"\)/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/eagle_project_from_cwd\("\${eagle_mem_project_dir:-\${project_dir:-\$cwd}}"\)/eagle_project_from_statusline_input "\${input:-}" "\${project_dir:-}" "\${cwd:-}" "\${session_id:-}"/g;
+        s/FROM claude_memories WHERE project/FROM agent_memories WHERE project/g;
+    ' "$tmp" || { rm -f "$tmp"; return 1; }
+
+    if cmp -s "$sl_file" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    backup="${sl_file}.eagle-mem.bak-$(date -u +%Y%m%dT%H%M%SZ)"
+    cp "$sl_file" "$backup" 2>/dev/null || true
+    mode=$(stat -f %Lp "$sl_file" 2>/dev/null || stat -c %a "$sl_file" 2>/dev/null || echo "")
+    if ! mv "$tmp" "$sl_file"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    [ -n "$mode" ] && chmod "$mode" "$sl_file" 2>/dev/null || chmod +x "$sl_file" 2>/dev/null || true
+    return 0
 }
 
 _eagle_claude_md_section() {

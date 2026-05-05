@@ -6,6 +6,7 @@
 eagle_mem_statusline() {
     local project_dir="${1:-}"
     local session_id="${2:-}"
+    local statusline_input="${3:-}"
     local em_db="$HOME/.eagle-mem/memory.db"
     [ -f "$em_db" ] || return
 
@@ -14,7 +15,7 @@ eagle_mem_statusline() {
 
     local proj
     [ -z "$project_dir" ] && project_dir="$(pwd)"
-    proj=$(eagle_project_from_cwd "$project_dir")
+    proj=$(eagle_project_from_statusline_input "$statusline_input" "$project_dir" "$project_dir" "$session_id")
     [ -z "$proj" ] && return
 
     proj=$(eagle_sql_escape "$proj")
@@ -57,5 +58,5 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     fi
     project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // empty' 2>/dev/null)
     session_id=$(echo "$input" | jq -r '.session_id // .session.id // empty' 2>/dev/null)
-    eagle_mem_statusline "${project_dir:-$(pwd)}" "$session_id"
+    eagle_mem_statusline "${project_dir:-$(pwd)}" "$session_id" "$input"
 fi

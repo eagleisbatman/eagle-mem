@@ -153,10 +153,20 @@ input=$(cat)
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
 session_id=$(echo "$input" | jq -r '.session_id // .session.id // ""' 2>/dev/null)
 source "$HOME/.eagle-mem/scripts/statusline-em.sh"
-eagle_mem_statusline "$project_dir" "$session_id"
+eagle_mem_statusline "$project_dir" "$session_id" "$input"
 WRAPPER
     chmod +x "$statusline_wrapper"
     eagle_ok "Statusline wrapper updated"
+fi
+
+if [ "$claude_found" = true ] && [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+    existing_sl=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+    existing_sl_file=$(eagle_statusline_script_from_command "$existing_sl" 2>/dev/null || true)
+    if eagle_patch_statusline_script "$existing_sl_file"; then
+        eagle_ok "Statusline custom Eagle Mem block patched"
+    elif [ -n "$existing_sl_file" ] && [ -f "$existing_sl_file" ] && grep -q "eagle-mem" "$existing_sl_file" && ! eagle_statusline_script_uses_input "$existing_sl_file"; then
+        eagle_warn "Statusline custom Eagle Mem block needs manual input-aware update"
+    fi
 fi
 
 # ─── Backfill project names ───────────────────────────────

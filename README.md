@@ -152,6 +152,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
 
+### v4.9.4 Patch
+
+Project-key hardening for agents that move between folders: hooks now keep a per-session project identity instead of recalculating from every new cwd, and statuslines prefer the stored session project before falling back to folder paths. Install/update also repairs older embedded Eagle Mem statusline blocks so nested-repo projects stop showing `Memories: 0` when the session belongs to the parent workspace.
+
 ### v4.9.3 Patch
 
 Follow-up hardening for the v4.9.2 project-key repair: Claude transcript workspace detection now reads complete early JSONL records instead of a fixed byte slice, so large SessionStart hook context cannot hide the first `cwd`. Metadata-only memory/plan/task repairs also avoid touching FTS-indexed columns, preventing SQLite FTS update triggers from firing during safe project/source rekeys.

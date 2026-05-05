@@ -299,6 +299,7 @@ fi
 if [ "$claude_found" = true ]; then
     EM_STATUSLINE="$EAGLE_MEM_DIR/scripts/statusline-em.sh"
     existing_sl=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+    existing_sl_file=$(eagle_statusline_script_from_command "$existing_sl" 2>/dev/null || true)
 
     if [ -z "$existing_sl" ]; then
         # No statusline configured — set up a minimal one that shows Eagle Mem
@@ -309,29 +310,37 @@ input=$(cat)
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
 session_id=$(echo "$input" | jq -r '.session_id // .session.id // ""' 2>/dev/null)
 source "$HOME/.eagle-mem/scripts/statusline-em.sh"
-eagle_mem_statusline "$project_dir" "$session_id"
+eagle_mem_statusline "$project_dir" "$session_id" "$input"
 WRAPPER
         chmod +x "$wrapper"
         tmp=$(mktemp)
         jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
         eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
-    elif echo "$existing_sl" | grep -q "eagle-mem"; then
-        eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
     else
-        # Existing statusline — check if it's a .sh file we can patch
-        sl_file=$(echo "$existing_sl" | sed 's/^sh //')
-        if [ -f "$sl_file" ] && ! grep -q "eagle-mem" "$sl_file"; then
-            eagle_dim "  Statusline detected: $sl_file"
-            eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
-            echo ""
-            eagle_dim "    # ── Eagle Mem ──"
-            eagle_dim "    em_section=\"\""
-            eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
-            eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
-            eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\" \"\$session_id\")"
-            eagle_dim "    fi"
-            echo ""
-            eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+        # Existing statusline — if it points at a shell script, inspect the
+        # target file. Custom HUD commands often do not include "eagle-mem" in
+        # the command string even when the script contains an embedded block.
+        sl_file="$existing_sl_file"
+        if [ -n "$sl_file" ] && [ -f "$sl_file" ]; then
+            if eagle_patch_statusline_script "$sl_file"; then
+                eagle_ok "Statusline ${DIM}(patched existing Eagle Mem block)${RESET}"
+            elif eagle_statusline_script_uses_input "$sl_file"; then
+                eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+            else
+                eagle_dim "  Statusline detected: $sl_file"
+                eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
+                echo ""
+                eagle_dim "    # ── Eagle Mem ──"
+                eagle_dim "    em_section=\"\""
+                eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
+                eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
+                eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\" \"\$session_id\" \"\$input\")"
+                eagle_dim "    fi"
+                echo ""
+                eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+            fi
+        elif echo "$existing_sl" | grep -q "eagle-mem"; then
+            eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
         else
             eagle_ok "Statusline ${DIM}(existing — cannot auto-patch; add Eagle Mem manually)${RESET}"
         fi
