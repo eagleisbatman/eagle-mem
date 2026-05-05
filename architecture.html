@@ -80,7 +80,8 @@
             <h3>Project memory</h3>
             <p>
               Summaries, decisions, gotchas, memories, plans, tasks, and project overview
-              all land in one project namespace.
+              all land in one project namespace, even when agents move through nested
+              folders in a monorepo.
             </p>
           </article>
           <article class="step">
@@ -117,7 +118,7 @@
         <div class="data-table" role="table" aria-label="Key Eagle Mem tables">
           <div role="row">
             <strong role="cell">sessions</strong>
-            <span role="cell">Tracks active and completed Claude Code or Codex sessions.</span>
+            <span role="cell">Tracks active and completed Claude Code or Codex sessions with the stable project key.</span>
           </div>
           <div role="row">
             <strong role="cell">summaries</strong>
@@ -139,6 +140,39 @@
             <strong role="cell">code_chunks</strong>
             <span role="cell">FTS5-indexed source chunks for lightweight code recall.</span>
           </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-kicker">Project identity</div>
+            <h2>The workspace wins over the current folder.</h2>
+          </div>
+          <p>
+            Coding agents often `cd` into apps, packages, and shared folders. Eagle Mem now
+            resolves memory through the session workspace first, then repairs older
+            session-linked rows so statusline counts and recall stay attached to one project.
+          </p>
+        </div>
+
+        <div class="page-grid">
+          <article class="wide-panel">
+            <h3>Resolver order</h3>
+            <p>
+              Explicit project override, workspace project directory, transcript start,
+              session marker/database row, then folder fallback. That order prevents a
+              nested folder from becoming a second project by accident.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Repair path</h3>
+            <p>
+              When a session is re-keyed, Eagle Mem moves linked summaries, observations,
+              memories, plans, tasks, and pending feature verifications into the canonical
+              project, including duplicate stale feature rows.
+            </p>
+          </article>
         </div>
       </section>
 

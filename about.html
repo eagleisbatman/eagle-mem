@@ -125,6 +125,14 @@
             </p>
           </article>
           <article class="wide-panel">
+            <h3>No folder drift</h3>
+            <p>
+              Monorepos are treated as one workspace when the session belongs to one
+              workspace. Moving between apps or shared folders should not make memory counts
+              drop to zero.
+            </p>
+          </article>
+          <article class="wide-panel">
             <h3>Agents run the workflow</h3>
             <p>
               Orchestration commands are designed to be invoked by the active agent. Users
@@ -148,15 +156,15 @@
             <h2>Install it where the agents work.</h2>
             <p class="lead">
               Run the install once, then open Claude Code or Codex in a project. Eagle Mem
-              will create the project memory layer automatically.
+              will create the project memory layer automatically and apply patch updates by
+              default when new bug fixes are published.
             </p>
           </div>
           <pre class="command"><code>npm install -g eagle-mem
 eagle-mem install
 
-# after upgrades
-npm install -g eagle-mem@latest
-eagle-mem update</code></pre>
+# patch updates apply automatically by default
+eagle-mem updates status</code></pre>
         </div>
       </section>
     </main>

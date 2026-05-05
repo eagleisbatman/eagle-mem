@@ -89,8 +89,8 @@ handoff      | captured back into the same project memory
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.8.4</strong>
-            <span>Real Codex-to-Claude worker proof, RTK guardrails, and clean Codex output.</span>
+            <strong>v4.9.4</strong>
+            <span>Folder-stable memory for monorepos, RTK guardrails, and worker lanes.</span>
           </div>
         </div>
       </section>
@@ -142,13 +142,14 @@ handoff      | captured back into the same project memory
             <h2>One command, then open your agent.</h2>
             <p class="lead">
               Eagle Mem installs hooks for Claude Code and Codex, runs schema migrations,
-              links skills, and keeps the local database under your home directory.
+              links skills, enables patch auto-updates, and keeps the local database under
+              your home directory.
             </p>
             <pre class="command"><code>npm install -g eagle-mem
 eagle-mem install</code></pre>
           </div>
-          <div class="terminal-shot"><span class="cyan">What users see now</span>
-Eagle Mem v4.8.4
+<div class="terminal-shot"><span class="cyan">What users see now</span>
+Eagle Mem v4.9.4
 Shared memory, guardrails, and worker lanes
 
 Core
@@ -218,6 +219,14 @@ Coordination
 
         <div class="page-grid">
           <article class="wide-panel">
+            <h3>Stable project identity</h3>
+            <p>
+              In monorepos and multi-app workspaces, agents can move between nested folders
+              without splitting memory into separate projects. Hooks and statuslines resolve
+              back to the session workspace, then repair stale rows safely.
+            </p>
+          </article>
+          <article class="wide-panel">
             <h3>Opposite-agent defaults</h3>
             <p>
               Codex coordinators default to Claude Code workers. Claude Code coordinators default
@@ -280,12 +289,12 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.8.4 proves the worker lane.</h2>
+            <h2>v4.9.4 keeps memory attached to the workspace.</h2>
           </div>
           <p>
-            The product surface now matches the system: cross-agent memory, enforced
-            anti-regression, RTK protection, clean Codex output, and worker orchestration
-            are first-class and testable.
+            The product surface now matches the runtime: cross-agent memory, enforced
+            anti-regression, RTK protection, clean Codex output, worker orchestration, and
+            folder-stable project identity are first-class and testable.
           </p>
         </div>
 
@@ -308,11 +317,10 @@ Coordination
           <article class="wide-panel">
             <h3>For proof</h3>
             <p>
-              `orchestrate handoff` now works cleanly on Bash 3.2, so worker status, worktree,
-              model, effort, validation, and log path can be shown without sending users into
-              raw database queries. Eagle Mem's own `feature verify` and `feature waive`
-              commands are also ignored by release-boundary detection, so verification notes
-              can mention dry-run checks without blocking themselves.
+              Project keys now follow the workspace/session root instead of whichever
+              subfolder the agent last entered. Existing session-linked summaries, memories,
+              plans, tasks, feature checks, and statusline counts can be repaired into the
+              same project namespace during normal hook/update flow.
             </p>
           </article>
         </div>
@@ -320,7 +328,7 @@ Coordination
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.8.4</span>
+      <span>Eagle Mem v4.9.4</span>
       <span>Local-first memory and release safety for Claude Code and Codex.</span>
     </footer>
   </body>
