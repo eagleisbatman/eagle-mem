@@ -15,10 +15,13 @@ PRAGMA trusted_schema=ON;
 .output stdout"
 
 eagle_db() {
+    local _eagle_sqlite_bin
+    _eagle_sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$_eagle_sqlite_bin" ] || return 1
     local _eagle_db_err
     _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_err.$$")
     local _eagle_db_out
-    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo "$*"; } | "$_eagle_sqlite_bin" "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
     local _eagle_db_rc=$?
     if [ -s "$_eagle_db_err" ]; then
         cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null
@@ -29,10 +32,13 @@ eagle_db() {
 }
 
 eagle_db_pipe() {
+    local _eagle_sqlite_bin
+    _eagle_sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$_eagle_sqlite_bin" ] || return 1
     local _eagle_db_err
     _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_pipe_err.$$")
     local _eagle_db_out
-    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".bail on"; cat; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".bail on"; cat; } | "$_eagle_sqlite_bin" "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
     local _eagle_db_rc=$?
     if [ -s "$_eagle_db_err" ]; then
         cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null
@@ -43,10 +49,13 @@ eagle_db_pipe() {
 }
 
 eagle_db_json() {
+    local _eagle_sqlite_bin
+    _eagle_sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$_eagle_sqlite_bin" ] || return 1
     local _eagle_db_err
     _eagle_db_err=$(mktemp 2>/dev/null || echo "/tmp/_eagle_db_json_err.$$")
     local _eagle_db_out
-    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | sqlite3 "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
+    _eagle_db_out=$({ echo "$EAGLE_DB_SETUP"; echo ".mode json"; echo "$*"; } | "$_eagle_sqlite_bin" "$EAGLE_MEM_DB" 2>"$_eagle_db_err")
     local _eagle_db_rc=$?
     if [ -s "$_eagle_db_err" ]; then
         cat "$_eagle_db_err" >> "$EAGLE_MEM_LOG" 2>/dev/null

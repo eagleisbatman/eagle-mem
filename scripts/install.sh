@@ -80,16 +80,18 @@ echo ""
 prereqs_ok=true
 
 # sqlite3
-if command -v sqlite3 &>/dev/null; then
-    sqlite_version=$(sqlite3 --version 2>/dev/null | awk '{print $1}')
-    eagle_ok "sqlite3 ${DIM}($sqlite_version)${RESET}"
+sqlite_path=$(eagle_sqlite_path)
+if [ -n "$sqlite_path" ]; then
+    sqlite_version=$(eagle_sqlite_version)
+    eagle_ok "sqlite3 ${DIM}($sqlite_version at $sqlite_path)${RESET}"
 else
     eagle_fail "sqlite3 not found"
     if eagle_confirm "Install sqlite3?"; then
         install_package sqlite3
-        if command -v sqlite3 &>/dev/null; then
-            sqlite_version=$(sqlite3 --version 2>/dev/null | awk '{print $1}')
-            eagle_ok "sqlite3 installed ${DIM}($sqlite_version)${RESET}"
+        sqlite_path=$(eagle_sqlite_path)
+        if [ -n "$sqlite_path" ]; then
+            sqlite_version=$("$sqlite_path" --version 2>/dev/null | awk '{print $1}')
+            eagle_ok "sqlite3 installed ${DIM}($sqlite_version at $sqlite_path)${RESET}"
         else
             eagle_fail "sqlite3 installation failed"
             prereqs_ok=false
@@ -100,8 +102,7 @@ else
 fi
 
 # FTS5 support
-if command -v sqlite3 &>/dev/null; then
-    sqlite_path=$(eagle_sqlite_path)
+if [ -n "$sqlite_path" ]; then
     if eagle_sqlite_supports_fts5; then
         eagle_ok "FTS5 support ${DIM}($sqlite_path)${RESET}"
     else
@@ -109,9 +110,9 @@ if command -v sqlite3 &>/dev/null; then
         eagle_dim "Detected sqlite3: $sqlite_path"
         sqlite_version=$(eagle_sqlite_version)
         [ -n "$sqlite_version" ] && eagle_dim "SQLite version: $sqlite_version"
-        eagle_dim "Run: command -v sqlite3"
-        eagle_dim "Fix PATH so an FTS5-capable sqlite3 is first."
-        eagle_dim "macOS: /usr/bin/sqlite3 usually has FTS5; move Android SDK platform-tools later if it shadows sqlite3."
+        eagle_dim "Run: eagle-mem health, or set EAGLE_SQLITE_BIN=/absolute/path/to/sqlite3."
+        eagle_dim "Eagle Mem prefers known system/Homebrew SQLite paths before PATH shims."
+        eagle_dim "macOS: /usr/bin/sqlite3 usually has FTS5; Android SDK sqlite3 shims are ignored when a better binary exists."
         eagle_dim "Homebrew: brew install sqlite, then prepend /opt/homebrew/opt/sqlite/bin or /usr/local/opt/sqlite/bin."
         eagle_dim "Linux: install a sqlite3 package compiled with ENABLE_FTS5."
         prereqs_ok=false

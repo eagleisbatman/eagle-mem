@@ -12,6 +12,9 @@ eagle_mem_statusline() {
 
     local SCRIPT_DIR; SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     . "$SCRIPT_DIR/../lib/common.sh"
+    local sqlite_bin
+    sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$sqlite_bin" ] || return
 
     local proj
     [ -z "$project_dir" ] && project_dir="$(pwd)"
@@ -24,9 +27,9 @@ eagle_mem_statusline() {
     version=$(tr -d '[:space:]' < "$HOME/.eagle-mem/.version" 2>/dev/null)
     [ -z "$version" ] && version="?"
     cnt=$(echo ".headers off
-SELECT COUNT(*) FROM sessions WHERE project = '${proj}';" | sqlite3 "$em_db" 2>/dev/null | tr -d '[:space:]')
+SELECT COUNT(*) FROM sessions WHERE project = '${proj}';" | "$sqlite_bin" "$em_db" 2>/dev/null | tr -d '[:space:]')
     mem=$(echo ".headers off
-SELECT COUNT(*) FROM agent_memories WHERE project = '${proj}';" | sqlite3 "$em_db" 2>/dev/null | tr -d '[:space:]')
+SELECT COUNT(*) FROM agent_memories WHERE project = '${proj}';" | "$sqlite_bin" "$em_db" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$session_id" ] && [ -f "$HOME/.eagle-mem/.turn-counter.${session_id}" ]; then
         turns=$(tr -d '[:space:]' < "$HOME/.eagle-mem/.turn-counter.${session_id}" 2>/dev/null)
     else

@@ -20,24 +20,63 @@ EAGLE_CODEX_SKILLS_DIR="${EAGLE_CODEX_SKILLS_DIR:-$EAGLE_CODEX_DIR/skills}"
 EAGLE_CODEX_MEMORIES_DIR="${EAGLE_CODEX_MEMORIES_DIR:-$EAGLE_CODEX_DIR/memories}"
 EAGLE_RAW_BASH_UNLOCK="${EAGLE_RAW_BASH_UNLOCK:-/tmp/eagle-mem-raw-bash-unlock}"
 
+_eagle_sqlite_candidate_paths() {
+    [ -n "${EAGLE_SQLITE_BIN:-}" ] && printf '%s\n' "$EAGLE_SQLITE_BIN"
+    [ -f "$EAGLE_MEM_DIR/.sqlite-bin" ] && sed -n '1p' "$EAGLE_MEM_DIR/.sqlite-bin" 2>/dev/null
+    printf '%s\n' \
+        "/opt/homebrew/opt/sqlite/bin/sqlite3" \
+        "/usr/local/opt/sqlite/bin/sqlite3" \
+        "/usr/bin/sqlite3" \
+        "/opt/homebrew/bin/sqlite3" \
+        "/usr/local/bin/sqlite3"
+    command -v sqlite3 2>/dev/null || true
+}
+
+_eagle_sqlite_bin_supports_fts5() {
+    local bin="$1"
+    [ -n "$bin" ] && [ -x "$bin" ] || return 1
+    "$bin" :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" >/dev/null 2>&1
+}
+
 eagle_sqlite_path() {
+    local seen="" candidate
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        case "|$seen|" in *"|$candidate|"*) continue ;; esac
+        seen="${seen}|${candidate}"
+        if _eagle_sqlite_bin_supports_fts5 "$candidate"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done <<EOF
+$(_eagle_sqlite_candidate_paths)
+EOF
+
     command -v sqlite3 2>/dev/null || true
 }
 
 eagle_sqlite_version() {
-    sqlite3 --version 2>/dev/null | awk '{print $1}'
+    local sqlite_bin
+    sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$sqlite_bin" ] || return 0
+    "$sqlite_bin" --version 2>/dev/null | awk '{print $1}'
 }
 
 eagle_sqlite_supports_fts5() {
-    command -v sqlite3 >/dev/null 2>&1 || return 1
-    sqlite3 :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" >/dev/null 2>&1
+    local sqlite_bin
+    sqlite_bin=$(eagle_sqlite_path)
+    _eagle_sqlite_bin_supports_fts5 "$sqlite_bin"
 }
 
 eagle_print_sqlite_fts5_error() {
     local sqlite_path sqlite_version probe_error
     sqlite_path=$(eagle_sqlite_path)
     sqlite_version=$(eagle_sqlite_version)
-    probe_error=$(sqlite3 :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" 2>&1 >/dev/null || true)
+    if [ -n "$sqlite_path" ]; then
+        probe_error=$("$sqlite_path" :memory: "CREATE VIRTUAL TABLE eagle_mem_fts5_probe USING fts5(value);" 2>&1 >/dev/null || true)
+    else
+        probe_error=""
+    fi
 
     printf '%s\n' "Eagle Mem requires SQLite FTS5, but the active sqlite3 does not support it." >&2
     if [ -n "$sqlite_path" ]; then
@@ -47,8 +86,8 @@ eagle_print_sqlite_fts5_error() {
     fi
     [ -n "$sqlite_version" ] && printf '%s\n' "SQLite version: $sqlite_version" >&2
     [ -n "$probe_error" ] && printf '%s\n' "SQLite error: $probe_error" >&2
-    printf '%s\n' "Fix: put an FTS5-capable sqlite3 earlier in PATH, then re-run the command." >&2
-    printf '%s\n' "macOS: check 'command -v sqlite3'; /usr/bin/sqlite3 usually has FTS5. If Android SDK platform-tools is first, move it later in PATH." >&2
+    printf '%s\n' "Fix: install an FTS5-capable sqlite3, or set EAGLE_SQLITE_BIN to its absolute path." >&2
+    printf '%s\n' "macOS: /usr/bin/sqlite3 usually has FTS5. Eagle Mem now prefers known system/Homebrew sqlite3 paths over Android SDK shims." >&2
     printf '%s\n' "Homebrew: install sqlite and prepend its bin directory, for example: export PATH=\"/opt/homebrew/opt/sqlite/bin:\$PATH\"" >&2
     printf '%s\n' "Linux: install a sqlite3 package compiled with ENABLE_FTS5." >&2
 }

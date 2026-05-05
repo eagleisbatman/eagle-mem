@@ -223,6 +223,7 @@ if echo "$request" | grep -qE '<(local-command-caveat|system-reminder|command-na
 fi
 
 needs_enrichment=0
+defer_enrichment=0
 if [ "$has_rich_data" -eq 0 ]; then
     needs_enrichment=1
 elif [ "$context_pressure" -eq 1 ]; then
@@ -235,7 +236,13 @@ fi
 
 if [ "$needs_enrichment" -eq 1 ]; then
     provider=$(eagle_config_get "provider" "type" "none" 2>/dev/null)
-    if [ "$provider" != "none" ] && [ -n "$text_content" ]; then
+    # Stop hooks must stay fast. Expensive LLM enrichment belongs in curate or
+    # another background path; nested agent_cli calls can exceed Codex/Claude
+    # lifecycle timeouts and make the hook look broken to users.
+    if [ "${EAGLE_MEM_STOP_ENRICH:-0}" != "1" ]; then
+        defer_enrichment=1
+        eagle_log "INFO" "Stop: LLM enrichment skipped — fast hook path (provider=$provider)"
+    elif [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 3000)
 
         enrich_prompt="Extract facts from this AI coding session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
@@ -398,6 +405,28 @@ if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
         eagle_log "INFO" "Stop: summary saved for session=$session_id"
     else
         eagle_log "ERROR" "Stop: summary insert FAILED for session=$session_id — check DB constraints"
+    fi
+fi
+
+if [ "$defer_enrichment" -eq 1 ] && [ "${EAGLE_MEM_STOP_BACKGROUND_ENRICH:-1}" = "1" ] && [ -n "$text_content" ]; then
+    mkdir -p "$EAGLE_MEM_DIR/tmp" 2>/dev/null || true
+    enrich_job=$(mktemp "$EAGLE_MEM_DIR/tmp/summary-enrich.XXXXXX.json" 2>/dev/null)
+    if [ -n "$enrich_job" ]; then
+        jq -cn \
+            --arg session_id "$session_id" \
+            --arg project "$project" \
+            --arg agent "$agent" \
+            --arg text "$text_content" \
+            '{session_id:$session_id, project:$project, agent:$agent, text:$text}' > "$enrich_job"
+
+        enrich_script="$SCRIPT_DIR/../scripts/enrich-summary.sh"
+        if [ -x "$enrich_script" ]; then
+            nohup env EAGLE_MEM_DISABLE_HOOKS=1 EAGLE_AGENT_SOURCE="$agent" EAGLE_AGENT_CWD="$cwd" bash "$enrich_script" "$enrich_job" >/dev/null 2>&1 &
+            eagle_log "INFO" "Stop: queued background summary enrichment for session=$session_id"
+        else
+            rm -f "$enrich_job" 2>/dev/null || true
+            eagle_log "WARN" "Stop: background enrichment script missing: $enrich_script"
+        fi
     fi
 fi
 

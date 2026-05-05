@@ -186,8 +186,10 @@ eagle_update_backup_runtime() {
     done
 
     if [ -f "$EAGLE_MEM_DB" ]; then
-        if command -v sqlite3 >/dev/null 2>&1; then
-            sqlite3 "$EAGLE_MEM_DB" ".backup '$backup_dir/memory.db'" >/dev/null 2>&1 || cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null || true
+        local sqlite_bin
+        sqlite_bin=$(eagle_sqlite_path)
+        if [ -n "$sqlite_bin" ]; then
+            "$sqlite_bin" "$EAGLE_MEM_DB" ".backup '$backup_dir/memory.db'" >/dev/null 2>&1 || cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null || true
         else
             cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null || true
         fi

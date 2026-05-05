@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.8.5 hardens first-run setup:** `eagle-mem config init` now falls through cleanly when Ollama is not running, and DB-backed commands fail loudly when the active `sqlite3` lacks FTS5 support.
+**v4.9.5 hardens hooks and SQLite:** Stop hooks save immediately and queue LLM enrichment in the background instead of launching nested agents during turn shutdown. SQLite calls also resolve through one FTS5-capable binary selector, so Android SDK or other PATH shims do not accidentally break Eagle Mem.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -73,7 +73,7 @@ For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, regist
 
 ### Prerequisites
 
-- `sqlite3` with FTS5 support (ships with macOS; the installer offers to install if missing)
+- `sqlite3` with FTS5 support (ships with macOS; Eagle Mem prefers known system/Homebrew SQLite binaries before PATH shims)
 - `jq` (the installer offers to install if missing)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, or both installed
 
@@ -87,7 +87,7 @@ Hooks fire automatically at different points in the agent lifecycle:
 | **PreToolUse** | before Bash/shell, Read, Edit, Write, apply_patch | Surfaces guardrails and decisions before edits. Blocks release-boundary commands while feature verification is pending. Rewrites noisy commands through RTK when available. Detects redundant reads, nudges co-edit partners, detects stuck loops. |
 | **UserPromptSubmit** | user sends a message | FTS5 search across past sessions and indexed code for relevant context |
 | **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, surfaces decision history and feature impacts on reads, stale memory warnings on edits |
-| **Stop** | agent turn ends | Extracts `<eagle-summary>` blocks for rich session summaries from Claude Code and Codex transcripts |
+| **Stop** | agent turn ends | Saves fast heuristic summaries and extracts `<eagle-summary>` blocks when present. LLM enrichment runs later in the background so the agent lifecycle is not blocked. |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
 
 Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths.
@@ -151,6 +151,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.9.5 Patch
+
+Stop hooks now use a fast path: they save heuristic summaries immediately, extract explicit summary blocks when present, and queue LLM enrichment in the background so Codex/Claude lifecycle hooks do not time out. SQLite access now goes through a shared FTS5-capable binary resolver used by migrations, DB helpers, updater backups, install checks, and the statusline, avoiding Android SDK or other PATH shims that shadow working SQLite builds.
 
 ### v4.9.4 Patch
 

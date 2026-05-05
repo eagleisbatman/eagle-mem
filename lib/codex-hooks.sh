@@ -163,7 +163,7 @@ eagle_register_codex_hooks() {
         "EAGLE_AGENT_SOURCE=codex bash \"$EAGLE_MEM_DIR/hooks/stop.sh\"" \
         "Codex Stop hook" \
         "Saving Eagle Mem summary" \
-        "30"
+        "60"
 }
 
 eagle_remove_codex_hooks() {
