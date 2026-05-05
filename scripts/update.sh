@@ -171,11 +171,19 @@ fi
 
 # ─── Backfill project names ───────────────────────────────
 
-backfilled=$(eagle_backfill_projects 2>/dev/null)
-if [ "${backfilled:-0}" -gt 0 ]; then
-    eagle_ok "Project names: $backfilled rows corrected"
+if [ "${EAGLE_MEM_UPDATE_BACKFILL:-background}" = "sync" ]; then
+    backfilled=$(eagle_backfill_projects 2>/dev/null)
+    if [ "${backfilled:-0}" -gt 0 ]; then
+        eagle_ok "Project names: $backfilled rows corrected"
+    else
+        eagle_ok "Project names up to date"
+    fi
 else
-    eagle_ok "Project names up to date"
+    (
+        backfilled=$(eagle_backfill_projects 2>/dev/null || echo 0)
+        eagle_log "INFO" "Update: background project backfill corrected ${backfilled:-0} rows"
+    ) >/dev/null 2>&1 &
+    eagle_ok "Project names backfill queued"
 fi
 
 # ─── Ensure auto-update defaults exist ─────────────────────

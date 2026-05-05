@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.9.5 hardens hooks and SQLite:** Stop hooks save immediately and queue LLM enrichment in the background instead of launching nested agents during turn shutdown. SQLite calls also resolve through one FTS5-capable binary selector, so Android SDK or other PATH shims do not accidentally break Eagle Mem.
+**v4.9.6 hardens hooks, updates, and SQLite:** Stop hooks save immediately and queue LLM enrichment in the background instead of launching nested agents during turn shutdown. Updates also queue slow project backfills instead of blocking install completion. SQLite calls resolve through one FTS5-capable binary selector, so Android SDK or other PATH shims do not accidentally break Eagle Mem.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -151,6 +151,10 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### v4.9.6 Patch
+
+`eagle-mem update` now queues project-key backfill in the background by default, so install/update can finish, write the installed version marker, and return control to the user. Use `EAGLE_MEM_UPDATE_BACKFILL=sync eagle-mem update` only when you intentionally want to wait for a full backfill.
 
 ### v4.9.5 Patch
 
