@@ -303,12 +303,14 @@ eagle_remember_session_project() {
 eagle_get_session_project_light() {
     local session_id="${1:-}"
     eagle_validate_session_id "$session_id" || return 1
-    command -v sqlite3 >/dev/null 2>&1 || return 1
+    local sqlite_bin
+    sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$sqlite_bin" ] || return 1
     [ -f "$EAGLE_MEM_DB" ] || return 1
 
     local sid_sql project
     sid_sql=$(eagle_sql_escape "$session_id")
-    project=$(sqlite3 "$EAGLE_MEM_DB" "SELECT project FROM sessions WHERE id = '$sid_sql' AND project != '' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    project=$("$sqlite_bin" "$EAGLE_MEM_DB" "SELECT project FROM sessions WHERE id = '$sid_sql' AND project != '' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
     [ -n "$project" ] || return 1
     printf '%s\n' "$project"
 }
@@ -317,12 +319,14 @@ eagle_project_has_table_row() {
     local table="${1:-}"
     local project="${2:-}"
     [ -n "$table" ] && [ -n "$project" ] || return 1
-    command -v sqlite3 >/dev/null 2>&1 || return 1
+    local sqlite_bin
+    sqlite_bin=$(eagle_sqlite_path)
+    [ -n "$sqlite_bin" ] || return 1
     [ -f "$EAGLE_MEM_DB" ] || return 1
 
     local project_sql found
     project_sql=$(eagle_sql_escape "$project")
-    found=$(sqlite3 "$EAGLE_MEM_DB" "SELECT 1 FROM $table WHERE project = '$project_sql' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    found=$("$sqlite_bin" "$EAGLE_MEM_DB" "SELECT 1 FROM $table WHERE project = '$project_sql' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
     [ "$found" = "1" ]
 }
 
@@ -330,11 +334,16 @@ eagle_project_from_existing_ancestor() {
     local path="${1:-}"
     [ -n "$path" ] || return 1
 
-    local current key
+    local start current key
     current=$(eagle_normalize_project_path "$path")
+    start="$current"
     eagle_is_ephemeral_project_path "$current" && return 1
 
     while [ -n "$current" ] && [ "$current" != "/" ]; do
+        if [ "$current" = "$HOME" ] && [ "$start" != "$HOME" ]; then
+            break
+        fi
+
         key=$(eagle_project_key_from_target_dir "$current")
         if [ -n "$key" ]; then
             # Prefer ancestors with durable memory/summary content. Session-only
@@ -351,6 +360,121 @@ eagle_project_from_existing_ancestor() {
     done
 
     return 1
+}
+
+eagle_project_has_recall_rows() {
+    local project="${1:-}"
+    [ -n "$project" ] || return 1
+
+    eagle_project_has_table_row "agent_memories" "$project" \
+        || eagle_project_has_table_row "agent_plans" "$project" \
+        || eagle_project_has_table_row "agent_tasks" "$project" \
+        || eagle_project_has_table_row "summaries" "$project"
+}
+
+eagle_recall_ancestor_project_from_cwd() {
+    local path="${1:-$(pwd)}"
+    local current_project="${2:-}"
+    local current key
+
+    current=$(eagle_normalize_project_path "$path")
+    eagle_is_ephemeral_project_path "$current" && return 1
+
+    [ -d "$current" ] || current=$(dirname "$current")
+    current=$(dirname "$current")
+
+    while [ -n "$current" ] && [ "$current" != "/" ]; do
+        if [ "$current" = "$HOME" ]; then
+            break
+        fi
+
+        key=$(eagle_project_key_from_target_dir "$current")
+        if [ -n "$key" ] && [ "$key" != "$current_project" ]; then
+            if eagle_project_has_recall_rows "$key"; then
+                printf '%s\n' "$key"
+                return 0
+            fi
+        fi
+
+        current=$(dirname "$current")
+    done
+
+    return 1
+}
+
+eagle_recall_project_scope_from_cwd() {
+    local path="${1:-$(pwd)}"
+    local project="${2:-}"
+    local ancestor
+
+    [ -z "$project" ] && project=$(eagle_project_from_cwd "$path")
+    if ancestor=$(eagle_recall_ancestor_project_from_cwd "$path" "$project"); then
+        if [ -n "$project" ] && [ "$ancestor" != "$project" ]; then
+            printf '%s|%s\n' "$project" "$ancestor"
+            return 0
+        fi
+        printf '%s\n' "$ancestor"
+        return 0
+    fi
+
+    printf '%s\n' "$project"
+}
+
+eagle_sql_project_scope_condition() {
+    local column="${1:-project}"
+    local scope="${2:-}"
+    local values="" count=0 item escaped
+
+    while IFS= read -r item; do
+        [ -n "$item" ] || continue
+        escaped=$(eagle_sql_escape "$item")
+        values="${values},'${escaped}'"
+        count=$((count + 1))
+    done <<EOF
+$(printf '%s' "$scope" | tr '|' '\n')
+EOF
+
+    if [ "$count" -eq 0 ]; then
+        printf '1 = 0\n'
+    elif [ "$count" -eq 1 ]; then
+        printf "%s = %s\n" "$column" "${values#,}"
+    else
+        printf "%s IN (%s)\n" "$column" "${values#,}"
+    fi
+}
+
+eagle_project_scope_label() {
+    local scope="${1:-}"
+    printf '%s\n' "$scope" | tr '|' ','
+}
+
+eagle_project_scope_contains() {
+    local scope="${1:-}"
+    local target="${2:-}"
+    local item
+    [ -n "$target" ] || return 1
+
+    while IFS= read -r item; do
+        [ -z "$item" ] && continue
+        [ "$item" = "$target" ] && return 0
+    done <<EOF
+$(printf '%s' "$scope" | tr '|' '\n')
+EOF
+
+    return 1
+}
+
+eagle_claude_project_dir_for_key() {
+    local project="${1:-}"
+    [ -n "$project" ] || return 1
+
+    local abs slug
+    case "$project" in
+        /*) abs="$project" ;;
+        *)  abs="$HOME/$project" ;;
+    esac
+    slug=$(printf '%s' "$abs" | sed -E 's#[^[:alnum:].]+#-#g')
+    printf '%s/%s\n' "$EAGLE_CLAUDE_PROJECTS_DIR" "$slug"
 }
 
 eagle_project_from_workspace_path() {
@@ -413,7 +537,7 @@ eagle_project_from_statusline_input() {
     local project_dir="${2:-}"
     local cwd="${3:-}"
     local session_id="${4:-}"
-    local project workspace_project_dir transcript_path
+    local project session_project workspace_project workspace_project_dir transcript_path
 
     if [ -n "${EAGLE_MEM_PROJECT:-}" ]; then
         printf '%s\n' "$EAGLE_MEM_PROJECT"
@@ -430,27 +554,49 @@ eagle_project_from_statusline_input() {
         [ -z "$cwd" ] && cwd=$(printf '%s' "$input" | jq -r '.workspace.current_dir // .cwd // empty' 2>/dev/null)
     fi
 
-    # Explicit workspace project and transcript start are stronger than older
-    # cached session rows because they repair pre-fix sessions that were stored
-    # under a nested folder key.
+    # Claude can report $HOME as workspace.project_dir for a child project before
+    # the project is fully initialized. Treat that as too broad for statusline
+    # stats; the current working directory is the more useful project boundary.
+    if [ -n "$workspace_project_dir" ] && [ -n "$cwd" ]; then
+        local workspace_resolved cwd_resolved
+        workspace_resolved=$(eagle_normalize_project_path "$workspace_project_dir")
+        cwd_resolved=$(eagle_normalize_project_path "$cwd")
+        if [ "$workspace_resolved" = "$HOME" ] && [ "$cwd_resolved" != "$HOME" ]; then
+            workspace_project_dir="$cwd_resolved"
+        fi
+    fi
+
     if [ -n "$workspace_project_dir" ]; then
-        project=$(eagle_project_from_workspace_path "$workspace_project_dir")
-        [ -n "$project" ] && { printf '%s\n' "$project"; return; }
+        workspace_project=$(eagle_project_from_workspace_path "$workspace_project_dir" || true)
+    fi
+
+    if [ -n "$session_id" ]; then
+        session_project=$(eagle_get_session_project_light "$session_id" || true)
+        if [ -n "$session_project" ]; then
+            # If an older row was captured under a nested folder key, a current
+            # workspace root should still be allowed to repair the display.
+            if [ -n "$workspace_project" ] && [ "$session_project" != "$workspace_project" ]; then
+                case "$session_project" in
+                    "$workspace_project"/*)
+                        printf '%s\n' "$workspace_project"
+                        return
+                        ;;
+                esac
+            fi
+            printf '%s\n' "$session_project"
+            return
+        fi
+    fi
+
+    # Explicit workspace project and transcript start are stronger than generic
+    # path fallback because they repair pre-fix sessions that were stored under
+    # a nested folder key.
+    if [ -n "$workspace_project_dir" ]; then
+        [ -n "$workspace_project" ] && { printf '%s\n' "$workspace_project"; return; }
     fi
 
     if [ -n "$transcript_path" ]; then
         if project=$(eagle_project_from_transcript_start "$transcript_path" "${cwd:-$project_dir}"); then
-            printf '%s\n' "$project"
-            return
-        fi
-    fi
-
-    if [ -n "$session_id" ]; then
-        if project=$(eagle_get_session_project_light "$session_id"); then
-            printf '%s\n' "$project"
-            return
-        fi
-        if project=$(eagle_get_session_project_marker "$session_id"); then
             printf '%s\n' "$project"
             return
         fi
@@ -697,20 +843,15 @@ eagle_emit_context_for_agent() {
 
     [ -z "$context" ] && return 0
 
-    if [ "$agent" = "codex" ]; then
-        jq -cn \
-            --arg event "$hook_event" \
-            --arg context "$context" \
-            '{
-                hookSpecificOutput: {
-                    hookEventName: $event,
-                    additionalContext: $context
-                }
-            }'
-        return 0
-    fi
-
-    printf '%s\n' "$context"
+    jq -cn \
+        --arg event "$hook_event" \
+        --arg context "$context" \
+        '{
+            hookSpecificOutput: {
+                hookEventName: $event,
+                additionalContext: $context
+            }
+        }'
 }
 
 eagle_config_get_light() {
@@ -1146,7 +1287,7 @@ eagle_statusline_script_from_command() {
 eagle_statusline_script_uses_input() {
     local sl_file="${1:-}"
     [ -f "$sl_file" ] || return 1
-    grep -Eq 'eagle_project_from_statusline_input|eagle_mem_statusline.*(\$\{input:-\}|\$input)' "$sl_file"
+    grep -Eq 'eagle_project_from_statusline_input|eagle_mem_statusline.*(\$\{input:-\}|\$input)|statusline-em\.sh.*--hud' "$sl_file"
 }
 
 eagle_patch_statusline_script() {
@@ -1178,6 +1319,14 @@ eagle_patch_statusline_script() {
     fi
 
     perl -0pi -e '
+        s{# [^\n]*EAGLE MEM[^\n]*\n.*?\n# [^\n]*CLOCK[^\n]*\n}{q~# -- EAGLE MEM (second line - branded) --------------------------------------
+em_line=""
+if [ -n "$cwd" ] && [ -f "$HOME/.eagle-mem/scripts/statusline-em.sh" ]; then
+  em_line=$(printf "%s" "$input" | bash "$HOME/.eagle-mem/scripts/statusline-em.sh" --hud 2>/dev/null)
+fi
+
+# -- CLOCK ---------------------------------------------------------------------
+~}ems;
         s/(project_dir=\$\(echo "\$input" \| jq -r \x27)\.workspace\.current_dir \/\/ \.cwd/$1.workspace.project_dir \/\/ .workspace.current_dir \/\/ .cwd/g;
         s/(project_dir=\$\(echo "\$input" \| jq -r ")\.workspace\.current_dir \/\/ \.cwd/$1.workspace.project_dir \/\/ .workspace.current_dir \/\/ .cwd/g;
         s/eagle_mem_statusline "\$project_dir" "\$session_id" "\$\{input\}"/eagle_mem_statusline "\$project_dir" "\$session_id" "\${input:-}"/g;
@@ -1210,6 +1359,307 @@ eagle_patch_statusline_script() {
     fi
     [ -n "$mode" ] && chmod "$mode" "$sl_file" 2>/dev/null || chmod +x "$sl_file" 2>/dev/null || true
     return 0
+}
+
+eagle_runtime_change_plan() {
+    local action="${1:-install}"
+    local package_dir="${2:-}"
+    local claude_found="${3:-false}"
+    local codex_found="${4:-false}"
+
+    echo ""
+    echo -e "  ${BOLD:-}What will change${RESET:-}"
+    echo -e "  ${DIM:-}Eagle Mem shows this before touching runtime files or agent configs.${RESET:-}"
+    echo ""
+    echo -e "    ${CYAN:-}->${RESET:-} Copy runtime files"
+    echo -e "       ${DIM:-}from:${RESET:-} ${package_dir:-current package}"
+    echo -e "       ${DIM:-}to:  ${RESET:-} $EAGLE_MEM_DIR/{hooks,lib,db,scripts}"
+    echo -e "    ${CYAN:-}->${RESET:-} Open database"
+    echo -e "       ${DIM:-}path:${RESET:-} $EAGLE_MEM_DB"
+    echo -e "       ${DIM:-}mode:${RESET:-} migrate only when needed; existing memories are preserved"
+
+    if [ "$claude_found" = true ]; then
+        echo -e "    ${CYAN:-}->${RESET:-} Update Claude Code"
+        echo -e "       ${DIM:-}settings:${RESET:-} $EAGLE_SETTINGS"
+        echo -e "       ${DIM:-}hooks:   ${RESET:-} SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionEnd"
+        echo -e "       ${DIM:-}status:  ${RESET:-} patch Eagle Mem statusline block when auto-detectable; backup first"
+        echo -e "       ${DIM:-}skills:  ${RESET:-} $EAGLE_SKILLS_DIR/eagle-mem-*"
+        echo -e "       ${DIM:-}guide:   ${RESET:-} $HOME/.claude/CLAUDE.md Eagle Mem section"
+    else
+        echo -e "    ${DIM:-}-> Claude Code not detected; Claude hooks/skills skipped${RESET:-}"
+    fi
+
+    if [ "$codex_found" = true ]; then
+        echo -e "    ${CYAN:-}->${RESET:-} Update Codex"
+        echo -e "       ${DIM:-}config:${RESET:-} $EAGLE_CODEX_CONFIG"
+        echo -e "       ${DIM:-}hooks: ${RESET:-} $EAGLE_CODEX_HOOKS"
+        echo -e "       ${DIM:-}skills:${RESET:-} $EAGLE_CODEX_SKILLS_DIR/eagle-mem-*"
+        echo -e "       ${DIM:-}guide: ${RESET:-} $EAGLE_CODEX_AGENTS_MD Eagle Mem section"
+    else
+        echo -e "    ${DIM:-}-> Codex not detected; Codex hooks/skills skipped${RESET:-}"
+    fi
+
+    if [ "$action" = "update" ]; then
+        echo -e "    ${CYAN:-}->${RESET:-} Refresh installed version metadata"
+    fi
+    echo ""
+}
+
+eagle_uninstall_change_plan() {
+    echo ""
+    echo -e "  ${BOLD:-}What will change${RESET:-}"
+    echo -e "  ${DIM:-}Uninstall removes Eagle Mem-owned integration points. Runtime data is deleted only if you confirm later.${RESET:-}"
+    echo ""
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Claude hooks from $EAGLE_SETTINGS"
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Codex hooks from $EAGLE_CODEX_HOOKS"
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem skill links from:"
+    echo -e "       ${DIM:-}$EAGLE_SKILLS_DIR${RESET:-}"
+    echo -e "       ${DIM:-}$EAGLE_CODEX_SKILLS_DIR${RESET:-}"
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem instruction blocks from:"
+    echo -e "       ${DIM:-}$HOME/.claude/CLAUDE.md${RESET:-}"
+    echo -e "       ${DIM:-}$EAGLE_CODEX_AGENTS_MD${RESET:-}"
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem statusline integration when auto-detectable"
+    echo -e "    ${DIM:-}-> Backups are written next to edited user config files.${RESET:-}"
+    echo ""
+}
+
+eagle_backup_user_file() {
+    local file="${1:-}"
+    [ -f "$file" ] || return 1
+    local backup
+    backup="${file}.eagle-mem.uninstall-bak-$(date -u +%Y%m%dT%H%M%SZ)"
+    cp "$file" "$backup" 2>/dev/null || return 1
+    printf '%s\n' "$backup"
+}
+
+eagle_remove_marked_markdown_section() {
+    local file="${1:-}"
+    local marker="${2:-## Eagle Mem — Persistent Memory}"
+    [ -f "$file" ] || return 1
+    grep -qF "$marker" "$file" 2>/dev/null || return 1
+
+    local tmp
+    tmp=$(mktemp) || return 1
+    awk -v marker="$marker" '
+        BEGIN { skip=0; pending_sep="" }
+        $0 == "---" && !skip {
+            pending_sep=$0 ORS
+            next
+        }
+        index($0, marker) {
+            skip=1
+            pending_sep=""
+            next
+        }
+        skip {
+            if ($0 == "---") {
+                skip=0
+                pending_sep=""
+                next
+            }
+            if ($0 ~ /^## /) {
+                skip=0
+                if (pending_sep != "") {
+                    printf "%s", pending_sep
+                    pending_sep=""
+                }
+                print
+            }
+            next
+        }
+        {
+            if (pending_sep != "") {
+                printf "%s", pending_sep
+                pending_sep=""
+            }
+            print
+        }
+        END {
+            if (!skip && pending_sep != "") {
+                printf "%s", pending_sep
+            }
+        }
+    ' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+
+    if cmp -s "$file" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv "$tmp" "$file"
+}
+
+eagle_remove_statusline_block() {
+    local sl_file="${1:-}"
+    [ -f "$sl_file" ] || return 1
+    command -v perl >/dev/null 2>&1 || return 1
+    grep -Eq 'EAGLE MEM|Eagle Mem|eagle_mem_statusline|statusline-em\.sh|agent_memories|claude_memories' "$sl_file" 2>/dev/null || return 1
+    grep -Eq '\.eagle-mem|eagle_mem_statusline|statusline-em\.sh|agent_memories|claude_memories' "$sl_file" 2>/dev/null || return 1
+
+    local tmp backup mode
+    tmp=$(mktemp) || return 1
+    cp "$sl_file" "$tmp" || { rm -f "$tmp"; return 1; }
+
+    perl -0pi -e '
+        s{\n?# [^\n]*(?:EAGLE MEM|Eagle Mem)[^\n]*\n.*?\n(# [^\n]*CLOCK[^\n]*\n)}{\n$1}is;
+    ' "$tmp" || { rm -f "$tmp"; return 1; }
+
+    if cmp -s "$sl_file" "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+
+    backup=$(eagle_backup_user_file "$sl_file" 2>/dev/null || true)
+    mode=$(stat -f %Lp "$sl_file" 2>/dev/null || stat -c %a "$sl_file" 2>/dev/null || echo "")
+    mv "$tmp" "$sl_file"
+    [ -n "$mode" ] && chmod "$mode" "$sl_file" 2>/dev/null || chmod +x "$sl_file" 2>/dev/null || true
+    [ -n "$backup" ] && printf '%s\n' "$backup"
+}
+
+eagle_remove_statusline_integration() {
+    local settings="${1:-$EAGLE_SETTINGS}"
+    [ -f "$settings" ] || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+
+    local command sl_file wrapper tmp changed=1
+    command=$(jq -r '.statusLine.command // .statusline.command // empty' "$settings" 2>/dev/null)
+    [ -n "$command" ] || return 1
+    sl_file=$(eagle_statusline_script_from_command "$command" 2>/dev/null || true)
+    wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
+
+    if printf '%s' "$command" | grep -q "$wrapper"; then
+        eagle_backup_user_file "$settings" >/dev/null 2>&1 || true
+        tmp=$(mktemp) || return 1
+        jq 'del(.statusLine) | del(.statusline)' "$settings" > "$tmp" && mv "$tmp" "$settings"
+        return 0
+    fi
+
+    if [ -n "$sl_file" ] && [ -f "$sl_file" ]; then
+        if eagle_remove_statusline_block "$sl_file" >/dev/null; then
+            changed=0
+        fi
+    fi
+    return "$changed"
+}
+
+eagle_runtime_manifest_path() {
+    printf '%s/install-manifest.json\n' "$EAGLE_MEM_DIR"
+}
+
+eagle_file_sha256() {
+    local file="${1:-}"
+    [ -f "$file" ] || return 1
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" 2>/dev/null | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" 2>/dev/null | awk '{print $1}'
+    else
+        return 1
+    fi
+}
+
+eagle_runtime_manifest_write() {
+    local package_dir="${1:-}"
+    local action="${2:-update}"
+    local manifest tmp_files tmp_json
+    manifest=$(eagle_runtime_manifest_path)
+    mkdir -p "$EAGLE_MEM_DIR"
+    tmp_files=$(mktemp) || return 1
+    tmp_json=$(mktemp) || { rm -f "$tmp_files"; return 1; }
+
+    local group rel file sha size mode package_version sqlite_bin sqlite_version files_json
+    for group in hooks lib db scripts; do
+        [ -d "$EAGLE_MEM_DIR/$group" ] || continue
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            file="$EAGLE_MEM_DIR/$rel"
+            [ -f "$file" ] || continue
+            sha=$(eagle_file_sha256 "$file" 2>/dev/null || true)
+            size=$(wc -c < "$file" 2>/dev/null | tr -d ' ')
+            mode=$(stat -f %Lp "$file" 2>/dev/null || stat -c %a "$file" 2>/dev/null || echo "")
+            printf '%s\t%s\t%s\t%s\n' "$rel" "${sha:-unknown}" "${size:-0}" "$mode"
+        done < <(cd "$EAGLE_MEM_DIR" && find "$group" -type f | sort 2>/dev/null)
+    done > "$tmp_files"
+
+    package_version=$(jq -r .version "$package_dir/package.json" 2>/dev/null || tr -d '[:space:]' < "$EAGLE_MEM_DIR/.version" 2>/dev/null || echo "unknown")
+    sqlite_bin=$(eagle_sqlite_path)
+    sqlite_version=$(eagle_sqlite_version)
+    files_json=$(jq -R -s '
+        split("\n")
+        | map(select(length > 0)
+            | split("\t")
+            | {
+                path: .[0],
+                sha256: .[1],
+                size: ((.[2] // "0") | tonumber),
+                mode: (.[3] // "")
+              })
+    ' "$tmp_files")
+
+    jq -nc \
+        --arg schema "1" \
+        --arg action "$action" \
+        --arg package_name "eagle-mem" \
+        --arg package_version "$package_version" \
+        --arg package_dir "$package_dir" \
+        --arg runtime_dir "$EAGLE_MEM_DIR" \
+        --arg db "$EAGLE_MEM_DB" \
+        --arg sqlite_bin "${sqlite_bin:-}" \
+        --arg sqlite_version "${sqlite_version:-}" \
+        --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --argjson files "$files_json" \
+        '{schema:$schema,
+          generated_at:$generated_at,
+          action:$action,
+          package:{name:$package_name, version:$package_version, dir:$package_dir},
+          runtime:{dir:$runtime_dir, db:$db},
+          sqlite:{path:$sqlite_bin, version:$sqlite_version},
+          files:$files}' > "$tmp_json" || { rm -f "$tmp_files" "$tmp_json"; return 1; }
+
+    mv "$tmp_json" "$manifest"
+    chmod 600 "$manifest" 2>/dev/null || true
+    rm -f "$tmp_files"
+}
+
+eagle_runtime_manifest_check() {
+    local manifest
+    manifest=$(eagle_runtime_manifest_path)
+    if [ ! -f "$manifest" ]; then
+        printf 'missing|0|0|0\n'
+        return 0
+    fi
+    command -v jq >/dev/null 2>&1 || {
+        printf 'unreadable|0|0|0\n'
+        return 0
+    }
+
+    local checked=0 missing=0 drift=0 rel expected file actual
+    while IFS=$'\t' read -r rel expected; do
+        [ -n "$rel" ] || continue
+        checked=$((checked + 1))
+        file="$EAGLE_MEM_DIR/$rel"
+        if [ ! -f "$file" ]; then
+            missing=$((missing + 1))
+            continue
+        fi
+        actual=$(eagle_file_sha256 "$file" 2>/dev/null || true)
+        if [ -z "$actual" ] || [ "$actual" != "$expected" ]; then
+            drift=$((drift + 1))
+        fi
+    done < <(jq -r '.files[]? | [.path, .sha256] | @tsv' "$manifest" 2>/dev/null)
+
+    if [ "$missing" -eq 0 ] && [ "$drift" -eq 0 ]; then
+        printf 'ok|%s|0|0\n' "$checked"
+    else
+        printf 'drift|%s|%s|%s\n' "$checked" "$missing" "$drift"
+    fi
+}
+
+eagle_runtime_manifest_field() {
+    local field="${1:-}"
+    local manifest
+    manifest=$(eagle_runtime_manifest_path)
+    [ -f "$manifest" ] || return 1
+    jq -r "$field // empty" "$manifest" 2>/dev/null
 }
 
 _eagle_claude_md_section() {

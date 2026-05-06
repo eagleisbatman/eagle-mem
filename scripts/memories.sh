@@ -24,8 +24,11 @@ case "${1:-}" in
 esac
 
 project=""
+project_was_explicit=false
 limit=20
 query=""
+raw_output=false
+cross_project=false
 
 show_help() {
     echo -e "  ${BOLD}eagle-mem memories${RESET} — Agent memory, plan & task mirror"
@@ -44,8 +47,10 @@ show_help() {
     echo -e "    eagle-mem memories sync                     ${DIM}# backfill memories + plans + tasks${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
-    echo -e "    ${CYAN}-p, --project${RESET} <name>  Filter by project"
+    echo -e "    ${CYAN}-p, --project${RESET} <name>  Filter by project (default: current project)"
     echo -e "    ${CYAN}-l, --limit${RESET} <N>       Max results (default: 20)"
+    echo -e "    ${CYAN}-a, --all${RESET}             Show all projects"
+    echo -e "    ${CYAN}--raw, --debug${RESET}        Show source paths, sessions, and raw backing data"
     echo ""
     echo -e "  ${BOLD}How it works:${RESET}"
     echo -e "    ${DOT} Eagle Mem mirrors agent memory, plan, and task writes"
@@ -72,8 +77,10 @@ esac
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --project|-p)   project="$2"; shift 2 ;;
+        --project|-p)   project="$2"; project_was_explicit=true; shift 2 ;;
         --limit|-l)     limit="$2"; shift 2 ;;
+        --all|-a)       cross_project=true; shift ;;
+        --raw|--debug)  raw_output=true; shift ;;
         --help|-h)      show_help ;;
         *)
             if [ -z "$query" ]; then
@@ -85,6 +92,42 @@ while [ $# -gt 0 ]; do
             ;;
     esac
 done
+
+if [ -z "$project" ] && [ "$cross_project" = false ]; then
+    project=$(eagle_project_from_cwd "$(pwd)")
+fi
+if [ "$cross_project" = false ] && [ "$project_was_explicit" = false ]; then
+    project=$(eagle_recall_project_scope_from_cwd "$(pwd)" "$project")
+fi
+
+eagle_age_label() {
+    local updated="${1:-}"
+    [ -z "$updated" ] && { printf 'unknown'; return; }
+    local days
+    days=$(eagle_db "SELECT CAST(julianday('now') - julianday('$(eagle_sql_escape "$updated")') AS INTEGER);" 2>/dev/null | awk 'NF {print; exit}')
+    if [ -z "$days" ]; then
+        printf 'unknown'
+    elif [ "$days" -le 0 ] 2>/dev/null; then
+        printf 'Fresh'
+    elif [ "$days" -le 14 ] 2>/dev/null; then
+        printf '%sd old' "$days"
+    elif [ "$days" -le 45 ] 2>/dev/null; then
+        printf 'Recent'
+    else
+        printf 'Older'
+    fi
+}
+
+eagle_print_wrapped_block() {
+    local text="${1:-}" indent="${2:-    }" max_chars="${3:-1200}"
+    [ -z "$text" ] && return
+    printf '%s' "$text" | head -c "$max_chars" | while IFS= read -r line; do
+        printf '%s%s\n' "$indent" "$line"
+    done
+    if [ "${#text}" -gt "$max_chars" ] 2>/dev/null; then
+        printf '%s%s\n' "$indent" "..."
+    fi
+}
 
 # ─── Actions ─────────────────────────────────────────────
 
@@ -116,9 +159,14 @@ memories_list() {
             reference) type_color="$BLUE" ;;
         esac
 
-        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
         [ -n "$desc" ] && echo -e "    ${DIM}${desc}${RESET}"
-        echo -e "    ${DIM}updated: ${updated}${RESET}"
+        if [ "$raw_output" = true ]; then
+            echo -e "    ${DIM}file: $_fp${RESET}"
+            echo -e "    ${DIM}updated: ${updated}${RESET}"
+        fi
         echo ""
     done <<< "$result"
 
@@ -158,12 +206,17 @@ memories_search() {
             reference) type_color="$BLUE" ;;
         esac
 
-        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${name}${RESET}  ${type_color}[${mtype}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
         [ -n "$desc" ] && echo -e "    ${DIM}${desc}${RESET}"
         local snippet
         snippet=$(printf '%s' "$content" | head -c 200)
         [ -n "$snippet" ] && echo -e "    ${snippet}"
-        echo -e "    ${DIM}updated: ${updated}${RESET}"
+        if [ "$raw_output" = true ]; then
+            echo -e "    ${DIM}file: $_fp${RESET}"
+            echo -e "    ${DIM}updated: ${updated}${RESET}"
+        fi
         echo ""
     done <<< "$result"
 
@@ -177,37 +230,63 @@ memories_show() {
         exit 1
     fi
 
-    local meta
-    meta=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_session_id, origin_agent
-                     FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$query")';")
+    local query_sql project_filter meta_json
+    query_sql=$(eagle_sql_escape "$query")
+    project_filter=""
+    if [ -n "$project" ]; then
+        project_filter="AND $(eagle_sql_project_scope_condition "project" "$project")"
+    fi
 
-    if [ -z "$meta" ]; then
+    meta_json=$(eagle_db_json "SELECT memory_name, memory_type, description, content, file_path, updated_at, origin_session_id, origin_agent
+                     FROM agent_memories
+                     WHERE (file_path = '$query_sql' OR memory_name = '$query_sql')
+                     $project_filter
+                     ORDER BY updated_at DESC
+                     LIMIT 1;")
+
+    if [ -z "$meta_json" ] || [ "$(printf '%s' "$meta_json" | jq 'length' 2>/dev/null)" = "0" ]; then
         eagle_err "Memory not found: $query"
         exit 1
     fi
 
-    IFS='|' read -r name mtype desc fp updated origin origin_agent <<< "$meta"
+    name=$(printf '%s' "$meta_json" | jq -r '.[0].memory_name // ""')
+    mtype=$(printf '%s' "$meta_json" | jq -r '.[0].memory_type // ""')
+    desc=$(printf '%s' "$meta_json" | jq -r '.[0].description // ""')
+    content=$(printf '%s' "$meta_json" | jq -r '.[0].content // ""')
+    fp=$(printf '%s' "$meta_json" | jq -r '.[0].file_path // ""')
+    updated=$(printf '%s' "$meta_json" | jq -r '.[0].updated_at // ""')
+    origin=$(printf '%s' "$meta_json" | jq -r '.[0].origin_session_id // ""')
+    origin_agent=$(printf '%s' "$meta_json" | jq -r '.[0].origin_agent // ""')
 
     eagle_header "Memory Detail"
 
     eagle_kv "Name:" "$name"
     eagle_kv "Type:" "$mtype"
-    eagle_kv "File:" "$fp"
-    eagle_kv "Updated:" "$updated"
     eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
-    [ -n "$origin" ] && eagle_kv "Session:" "$origin"
+    eagle_kv "Freshness:" "$(eagle_age_label "$updated")"
+    if [ "$raw_output" = true ]; then
+        eagle_kv "File:" "$fp"
+        eagle_kv "Updated:" "$updated"
+        [ -n "$origin" ] && eagle_kv "Session:" "$origin"
+    fi
     echo ""
 
     [ -n "$desc" ] && echo -e "  ${BOLD}Description:${RESET} $desc"
     echo ""
 
-    if [ -f "$fp" ]; then
+    if [ -n "$content" ]; then
         echo -e "  ${BOLD}Content:${RESET}"
-        awk '/^---$/{c++; next} c>=2' "$fp" | while IFS= read -r line; do
-            echo "    $line"
-        done
-    else
-        eagle_dim "Source file no longer exists on disk."
+        eagle_print_wrapped_block "$content" "    " 1600
+    fi
+
+    if [ "$raw_output" = true ]; then
+        echo ""
+        if [ -f "$fp" ]; then
+            echo -e "  ${BOLD}Source file:${RESET}"
+            eagle_print_wrapped_block "$(cat "$fp")" "    " 4000
+        else
+            eagle_dim "Source file no longer exists on disk."
+        fi
     fi
     echo ""
 }
@@ -235,8 +314,10 @@ plans_list() {
         local proj_label=""
         [ -n "$proj" ] && proj_label="  ${DIM}[${proj}]${RESET}"
 
-        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
-        echo -e "    ${DIM}updated: ${updated}${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
+        [ "$raw_output" = true ] && echo -e "    ${DIM}updated: ${updated}${RESET}"
         echo ""
     done <<< "$result"
 
@@ -271,9 +352,11 @@ plans_search() {
         local proj_label=""
         [ -n "$proj" ] && proj_label="  ${DIM}[${proj}]${RESET}"
 
-        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${title}${RESET}${proj_label} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
         [ -n "$snippet" ] && echo -e "    ${snippet}"
-        echo -e "    ${DIM}updated: ${updated}${RESET}"
+        [ "$raw_output" = true ] && echo -e "    ${DIM}updated: ${updated}${RESET}"
         echo ""
     done <<< "$result"
 
@@ -287,34 +370,58 @@ plans_show() {
         exit 1
     fi
 
-    local meta
-    meta=$(eagle_db "SELECT title, project, file_path, updated_at, origin_session_id, origin_agent
-                     FROM agent_plans WHERE file_path = '$(eagle_sql_escape "$query")';")
+    local query_sql project_filter meta_json
+    query_sql=$(eagle_sql_escape "$query")
+    project_filter=""
+    if [ -n "$project" ]; then
+        project_filter="AND $(eagle_sql_project_scope_condition "project" "$project")"
+    fi
+    meta_json=$(eagle_db_json "SELECT title, project, content, file_path, updated_at, origin_session_id, origin_agent
+                     FROM agent_plans
+                     WHERE (file_path = '$query_sql' OR title = '$query_sql')
+                     $project_filter
+                     ORDER BY updated_at DESC
+                     LIMIT 1;")
 
-    if [ -z "$meta" ]; then
+    if [ -z "$meta_json" ] || [ "$(printf '%s' "$meta_json" | jq 'length' 2>/dev/null)" = "0" ]; then
         eagle_err "Plan not found: $query"
         exit 1
     fi
 
-    IFS='|' read -r title proj fp updated origin origin_agent <<< "$meta"
+    title=$(printf '%s' "$meta_json" | jq -r '.[0].title // ""')
+    proj=$(printf '%s' "$meta_json" | jq -r '.[0].project // ""')
+    content=$(printf '%s' "$meta_json" | jq -r '.[0].content // ""')
+    fp=$(printf '%s' "$meta_json" | jq -r '.[0].file_path // ""')
+    updated=$(printf '%s' "$meta_json" | jq -r '.[0].updated_at // ""')
+    origin=$(printf '%s' "$meta_json" | jq -r '.[0].origin_session_id // ""')
+    origin_agent=$(printf '%s' "$meta_json" | jq -r '.[0].origin_agent // ""')
 
     eagle_header "Plan Detail"
 
     eagle_kv "Title:" "$title"
     [ -n "$proj" ] && eagle_kv "Project:" "$proj"
-    eagle_kv "File:" "$fp"
-    eagle_kv "Updated:" "$updated"
     eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
-    [ -n "$origin" ] && eagle_kv "Session:" "$origin"
+    eagle_kv "Freshness:" "$(eagle_age_label "$updated")"
+    if [ "$raw_output" = true ]; then
+        eagle_kv "File:" "$fp"
+        eagle_kv "Updated:" "$updated"
+        [ -n "$origin" ] && eagle_kv "Session:" "$origin"
+    fi
     echo ""
 
-    if [ -f "$fp" ]; then
+    if [ -n "$content" ]; then
         echo -e "  ${BOLD}Content:${RESET}"
-        cat "$fp" | while IFS= read -r line; do
-            echo "    $line"
-        done
-    else
-        eagle_dim "Source file no longer exists on disk."
+        eagle_print_wrapped_block "$content" "    " 2000
+    fi
+
+    if [ "$raw_output" = true ]; then
+        echo ""
+        if [ -f "$fp" ]; then
+            echo -e "  ${BOLD}Source file:${RESET}"
+            eagle_print_wrapped_block "$(cat "$fp")" "    " 4000
+        else
+            eagle_dim "Source file no longer exists on disk."
+        fi
     fi
     echo ""
 }
@@ -346,8 +453,12 @@ tasks_list() {
             completed)   status_color="$GREEN" ;;
         esac
 
-        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
-        echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
+        if [ "$raw_output" = true ]; then
+            echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
+        fi
         echo ""
     done <<< "$result"
 
@@ -386,9 +497,13 @@ tasks_search() {
             completed)   status_color="$GREEN" ;;
         esac
 
-        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")]${RESET}"
+        local age_label
+        age_label=$(eagle_age_label "$updated")
+        echo -e "  ${BOLD}${subject}${RESET}  ${status_color}[${status}]${RESET} ${DIM}[$(eagle_agent_label "$origin_agent")][$age_label]${RESET}"
         [ -n "$desc" ] && echo -e "    ${desc}"
-        echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
+        if [ "$raw_output" = true ]; then
+            echo -e "    ${DIM}session: ${sid:0:8}…  task: #${tid}  updated: ${updated}${RESET}"
+        fi
         echo ""
     done <<< "$result"
 
@@ -402,44 +517,94 @@ tasks_show() {
         exit 1
     fi
 
-    local meta
-    meta=$(eagle_db "SELECT subject, status, description, active_form, source_session_id, source_task_id, file_path, updated_at, origin_agent
-                     FROM agent_tasks WHERE file_path = '$(eagle_sql_escape "$query")';")
+    local query_sql project_filter meta_json
+    query_sql=$(eagle_sql_escape "$query")
+    project_filter=""
+    if [ -n "$project" ]; then
+        project_filter="AND $(eagle_sql_project_scope_condition "project" "$project")"
+    fi
+    meta_json=$(eagle_db_json "SELECT subject, status, description, active_form, source_session_id, source_task_id, file_path, updated_at, origin_agent
+                     FROM agent_tasks
+                     WHERE (file_path = '$query_sql' OR source_task_id = '$query_sql' OR subject = '$query_sql')
+                     $project_filter
+                     ORDER BY updated_at DESC
+                     LIMIT 1;")
 
-    if [ -z "$meta" ]; then
+    if [ -z "$meta_json" ] || [ "$(printf '%s' "$meta_json" | jq 'length' 2>/dev/null)" = "0" ]; then
         eagle_err "Task not found: $query"
         exit 1
     fi
 
-    IFS='|' read -r subject status desc af sid tid fp updated origin_agent <<< "$meta"
+    subject=$(printf '%s' "$meta_json" | jq -r '.[0].subject // ""')
+    status=$(printf '%s' "$meta_json" | jq -r '.[0].status // ""')
+    desc=$(printf '%s' "$meta_json" | jq -r '.[0].description // ""')
+    af=$(printf '%s' "$meta_json" | jq -r '.[0].active_form // ""')
+    sid=$(printf '%s' "$meta_json" | jq -r '.[0].source_session_id // ""')
+    tid=$(printf '%s' "$meta_json" | jq -r '.[0].source_task_id // ""')
+    fp=$(printf '%s' "$meta_json" | jq -r '.[0].file_path // ""')
+    updated=$(printf '%s' "$meta_json" | jq -r '.[0].updated_at // ""')
+    origin_agent=$(printf '%s' "$meta_json" | jq -r '.[0].origin_agent // ""')
 
     eagle_header "Task Detail"
 
     eagle_kv "Subject:" "$subject"
     eagle_kv "Status:" "$status"
-    eagle_kv "Task ID:" "$tid"
-    eagle_kv "Session:" "$sid"
-    eagle_kv "File:" "$fp"
-    eagle_kv "Updated:" "$updated"
     eagle_kv "Source:" "$(eagle_agent_label "$origin_agent")"
+    eagle_kv "Freshness:" "$(eagle_age_label "$updated")"
+    if [ "$raw_output" = true ]; then
+        eagle_kv "Task ID:" "$tid"
+        eagle_kv "Session:" "$sid"
+        eagle_kv "File:" "$fp"
+        eagle_kv "Updated:" "$updated"
+    fi
     echo ""
 
     [ -n "$desc" ] && echo -e "  ${BOLD}Description:${RESET} $desc" && echo ""
     [ -n "$af" ] && echo -e "  ${BOLD}Active Form:${RESET} $af" && echo ""
 
-    if [ -f "$fp" ]; then
+    if [ "$raw_output" = true ]; then
+        echo ""
+        if [ -f "$fp" ]; then
         echo -e "  ${BOLD}Raw JSON:${RESET}"
         jq '.' "$fp" 2>/dev/null | while IFS= read -r line; do
             echo "    $line"
         done
-    else
-        eagle_dim "Source file no longer exists on disk."
+        else
+            eagle_dim "Source file no longer exists on disk."
+        fi
     fi
     echo ""
 }
 
 memories_sync() {
     eagle_header "Memory, Plan & Task Sync"
+
+    local lock_root="$EAGLE_MEM_DIR/locks"
+    local lock_dir="$lock_root/memories-sync.lock"
+    mkdir -p "$lock_root" 2>/dev/null || true
+    if mkdir "$lock_dir" 2>/dev/null; then
+        printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null || true
+        _EAGLE_MEMORIES_SYNC_LOCK_DIR="$lock_dir"
+        trap 'rm -rf "${_EAGLE_MEMORIES_SYNC_LOCK_DIR:-}" 2>/dev/null || true' EXIT
+    else
+        local lock_pid=""
+        [ -f "$lock_dir/pid" ] && lock_pid=$(cat "$lock_dir/pid" 2>/dev/null | tr -cd '0-9')
+        if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+            eagle_info "Sync already running (pid $lock_pid). Skipping this duplicate run."
+            echo ""
+            eagle_footer "Sync skipped."
+            return 0
+        fi
+        rm -rf "$lock_dir" 2>/dev/null || true
+        if mkdir "$lock_dir" 2>/dev/null; then
+            printf '%s\n' "$$" > "$lock_dir/pid" 2>/dev/null || true
+            _EAGLE_MEMORIES_SYNC_LOCK_DIR="$lock_dir"
+            trap 'rm -rf "${_EAGLE_MEMORIES_SYNC_LOCK_DIR:-}" 2>/dev/null || true' EXIT
+        else
+            eagle_err "Could not acquire memories sync lock."
+            return 1
+        fi
+    fi
 
     # ─── Sync memories ───────────────────────────────────
     eagle_info "Scanning for agent memory files..."
@@ -449,15 +614,21 @@ memories_sync() {
     local mem_synced=0
     local mem_skipped=0
 
-    if [ -d "$claude_mem_root" ]; then
-        while IFS= read -r -d '' memfile; do
+    sync_one_memory_file() {
+        local memfile="$1"
+        [ -f "$memfile" ] || return 0
+
             local base
             base=$(basename "$memfile")
-            [ "$base" = "MEMORY.md" ] && continue
+            [ "$base" = "MEMORY.md" ] && return 0
 
             local mem_project mem_project_dir existing_row existing_hash existing_project
             mem_project_dir="${memfile%/memory/*}"
             mem_project=$(eagle_project_from_claude_project_dir "$mem_project_dir" 2>/dev/null || true)
+            if [ "$cross_project" = false ] && [ -n "$project" ]; then
+                eagle_project_scope_contains "$project" "$mem_project" || return 0
+            fi
+
             existing_row=$(eagle_db "SELECT content_hash, project FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
             IFS='|' read -r existing_hash existing_project <<< "$existing_row"
             local new_hash
@@ -471,7 +642,25 @@ memories_sync() {
             eagle_capture_agent_memory "$memfile" "" "$mem_project" "claude-code"
             mem_synced=$((mem_synced + 1))
             eagle_ok "Memory: $base"
-        done < <(find "$claude_mem_root" -path "*/memory/*.md" -print0 2>/dev/null)
+    }
+
+    if [ -d "$claude_mem_root" ]; then
+        if [ "$cross_project" = true ] || [ -z "$project" ]; then
+            while IFS= read -r -d '' memfile; do
+                sync_one_memory_file "$memfile"
+            done < <(find "$claude_mem_root" -path "*/memory/*.md" -print0 2>/dev/null)
+        else
+            while IFS= read -r scope_project; do
+                [ -z "$scope_project" ] && continue
+                scope_dir=$(eagle_claude_project_dir_for_key "$scope_project")
+                [ -d "$scope_dir/memory" ] || continue
+                while IFS= read -r -d '' memfile; do
+                    sync_one_memory_file "$memfile"
+                done < <(find "$scope_dir/memory" -maxdepth 1 -type f -name "*.md" -print0 2>/dev/null)
+            done <<EOF
+$(printf '%s' "$project" | tr '|' '\n')
+EOF
+        fi
     fi
 
     local codex_mem_root="$EAGLE_CODEX_MEMORIES_DIR"
@@ -576,12 +765,16 @@ memories_sync() {
     # ─── Backfill project names ──────────────────────────
     eagle_info "Resolving project names from agent transcripts..."
 
-    local backfilled
-    backfilled=$(eagle_backfill_projects)
-    if [ "${backfilled:-0}" -gt 0 ]; then
-        eagle_ok "$backfilled rows updated with correct project names"
+    if [ "$cross_project" = true ]; then
+        local backfilled
+        backfilled=$(eagle_backfill_projects)
+        if [ "${backfilled:-0}" -gt 0 ]; then
+            eagle_ok "$backfilled rows updated with correct project names"
+        else
+            eagle_ok "All project names up to date"
+        fi
     else
-        eagle_ok "All project names up to date"
+        eagle_ok "Scoped sync complete; use --all for global transcript backfill"
     fi
 
     eagle_footer "Sync complete."

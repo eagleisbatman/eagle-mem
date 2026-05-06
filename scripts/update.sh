@@ -40,6 +40,8 @@ if [ -d "$EAGLE_CODEX_DIR" ] || command -v codex &>/dev/null; then
     codex_found=true
 fi
 
+eagle_runtime_change_plan "update" "$PACKAGE_DIR" "$claude_found" "$codex_found"
+
 # ─── Update files ──────────────────────────────────────────
 
 mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts}
@@ -195,7 +197,7 @@ eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_up
 
 if [ "$claude_found" = true ]; then
     if eagle_patch_claude_md; then
-        eagle_ok "CLAUDE.md updated ${DIM}(eagle-summary instructions added)${RESET}"
+  eagle_ok "CLAUDE.md updated ${DIM}(Eagle Mem guidance refreshed)${RESET}"
     else
         eagle_ok "CLAUDE.md up to date"
     fi
@@ -214,5 +216,10 @@ fi
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
 echo "$version" > "$EAGLE_MEM_DIR/.version"
 echo "$version" > "$EAGLE_MEM_DIR/.latest-version"
+if eagle_runtime_manifest_write "$PACKAGE_DIR" "update"; then
+    eagle_ok "Install manifest refreshed"
+else
+    eagle_warn "Install manifest could not be refreshed"
+fi
 
 eagle_footer "Eagle Mem updated to v${version}."

@@ -180,6 +180,8 @@ if [ "$prereqs_ok" = false ]; then
     exit 1
 fi
 
+eagle_runtime_change_plan "install" "$PACKAGE_DIR" "$claude_found" "$codex_found"
+
 echo ""
 
 # ─── Copy files to ~/.eagle-mem/ ───────────────────────────
@@ -334,8 +336,7 @@ WRAPPER
                 eagle_dim "    # ── Eagle Mem ──"
                 eagle_dim "    em_section=\"\""
                 eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
-                eagle_dim "      source \"\$HOME/.eagle-mem/scripts/statusline-em.sh\""
-                eagle_dim "      em_section=\$(eagle_mem_statusline \"\$project_dir\" \"\$session_id\" \"\$input\")"
+                eagle_dim "      em_section=\$(printf '%s' \"\$input\" | bash \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" --hud)"
                 eagle_dim "    fi"
                 echo ""
                 eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
@@ -365,7 +366,7 @@ eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_up
 
 if [ "$claude_found" = true ]; then
     if eagle_patch_claude_md; then
-        eagle_ok "CLAUDE.md ${DIM}(eagle-summary instructions added)${RESET}"
+  eagle_ok "CLAUDE.md ${DIM}(Eagle Mem guidance added)${RESET}"
     else
         eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
     fi
@@ -384,6 +385,11 @@ fi
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
 echo "$version" > "$EAGLE_MEM_DIR/.version"
 echo "$version" > "$EAGLE_MEM_DIR/.latest-version"
+if eagle_runtime_manifest_write "$PACKAGE_DIR" "install"; then
+    eagle_ok "Install manifest written"
+else
+    eagle_warn "Install manifest could not be written"
+fi
 
 # ─── Summary ───────────────────────────────────────────────
 

@@ -1,0 +1,1791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eagle Mem Architecture Tutorial</title>
+  <style>
+    :root {
+      --ink: #111111;
+      --paper: #f7f7f2;
+      --white: #ffffff;
+      --muted: #5f6368;
+      --line: #111111;
+      --soft: #e7e7df;
+      --cyan: #00bfd8;
+      --green: #18a058;
+      --yellow: #d6a300;
+      --red: #cf3d32;
+      --code: #f0f0e8;
+      --shadow: 8px 8px 0 #111111;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    a {
+      color: inherit;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+    }
+
+    code,
+    pre,
+    kbd {
+      font-family: var(--mono);
+    }
+
+    code {
+      padding: 0.1rem 0.28rem;
+      background: var(--code);
+      border: 1px solid var(--line);
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 18px;
+      margin: 20px 0;
+      background: var(--ink);
+      color: var(--white);
+      border: 3px solid var(--line);
+      box-shadow: var(--shadow);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    pre code {
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      border: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 24px 0;
+      background: var(--white);
+      border: 3px solid var(--line);
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      vertical-align: top;
+      border: 2px solid var(--line);
+      text-align: left;
+    }
+
+    th {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--ink);
+      color: var(--white);
+    }
+
+    td {
+      background: var(--white);
+    }
+
+    ul,
+    ol {
+      padding-left: 1.4rem;
+    }
+
+    li + li {
+      margin-top: 0.45rem;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 16px;
+      top: -80px;
+      z-index: 20;
+      padding: 10px 14px;
+      background: var(--cyan);
+      border: 3px solid var(--line);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+
+    .skip-link:focus {
+      top: 16px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 28px 24px;
+      background: var(--white);
+      border-right: 4px solid var(--line);
+    }
+
+    .brand {
+      padding-bottom: 22px;
+      margin-bottom: 22px;
+      border-bottom: 4px solid var(--line);
+    }
+
+    .brand-label {
+      display: inline-block;
+      padding: 4px 8px;
+      margin-bottom: 12px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: var(--cyan);
+      border: 2px solid var(--line);
+    }
+
+    .brand h1 {
+      margin: 0 0 10px;
+      font-family: var(--mono);
+      font-size: 1.38rem;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .nav-title {
+      margin: 20px 0 8px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .nav-list {
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .nav-list a {
+      display: block;
+      padding: 8px 9px;
+      margin-bottom: 4px;
+      border: 2px solid transparent;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.35;
+      text-decoration: none;
+    }
+
+    .nav-list a:hover,
+    .nav-list a:focus-visible {
+      border-color: var(--line);
+      background: var(--soft);
+      outline: none;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .hero,
+    .section {
+      min-height: 100vh;
+      padding: 72px clamp(28px, 6vw, 88px);
+      border-bottom: 4px solid var(--line);
+    }
+
+    .hero {
+      display: grid;
+      align-content: center;
+      background:
+        linear-gradient(90deg, rgba(0, 191, 216, 0.14) 0 32%, transparent 32% 100%),
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(17, 17, 17, 0.06) 23px 24px),
+        var(--paper);
+    }
+
+    .hero-inner,
+    .section-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .hero h2 {
+      max-width: 980px;
+      margin: 0;
+      font-family: var(--mono);
+      font-size: clamp(2.3rem, 6vw, 5.2rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hero-summary {
+      max-width: 860px;
+      margin: 28px 0 0;
+      font-size: 1.24rem;
+      line-height: 1.55;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 44px;
+    }
+
+    .meta-box,
+    .concept,
+    .callout,
+    .source-box,
+    .step,
+    .principle,
+    .surface,
+    .adapter-rule {
+      background: var(--white);
+      border: 3px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .meta-box {
+      padding: 16px;
+      min-height: 104px;
+    }
+
+    .meta-box strong {
+      display: block;
+      margin-bottom: 10px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .meta-box span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .section:nth-child(even) {
+      background: var(--white);
+    }
+
+    .section-number {
+      margin: 0 0 8px;
+      font-family: var(--mono);
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .section h2 {
+      margin: 0 0 28px;
+      padding-bottom: 14px;
+      border-bottom: 4px solid var(--line);
+      font-family: var(--mono);
+      font-size: clamp(1.9rem, 4vw, 3.25rem);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .section h3 {
+      margin: 36px 0 12px;
+      font-family: var(--mono);
+      font-size: 1.28rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 920px;
+      margin: 0 0 28px;
+      font-size: 1.12rem;
+    }
+
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+      display: grid;
+      gap: 18px;
+      margin: 24px 0;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .grid-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .concept,
+    .source-box,
+    .principle,
+    .surface,
+    .adapter-rule {
+      padding: 20px;
+    }
+
+    .concept h3,
+    .source-box h3,
+    .principle h3,
+    .surface h3,
+    .adapter-rule h3 {
+      margin-top: 0;
+    }
+
+    .concept p,
+    .source-box p,
+    .principle p,
+    .surface p,
+    .adapter-rule p {
+      margin-bottom: 0;
+    }
+
+    .callout {
+      padding: 22px;
+      margin: 28px 0;
+      background: var(--cyan);
+    }
+
+    .callout h3 {
+      margin-top: 0;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .diagram-frame {
+      margin: 28px 0;
+      padding: 18px;
+      overflow-x: auto;
+      background: var(--white);
+      border: 3px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .diagram {
+      width: 100%;
+      min-width: 920px;
+      height: auto;
+      display: block;
+    }
+
+    .box {
+      fill: #ffffff;
+      stroke: #111111;
+      stroke-width: 3;
+    }
+
+    .box-cyan {
+      fill: #b9f5ff;
+      stroke: #111111;
+      stroke-width: 3;
+    }
+
+    .box-soft {
+      fill: #f0f0e8;
+      stroke: #111111;
+      stroke-width: 3;
+    }
+
+    .box-green {
+      fill: #d7f4df;
+      stroke: #111111;
+      stroke-width: 3;
+    }
+
+    .box-yellow {
+      fill: #fff1b8;
+      stroke: #111111;
+      stroke-width: 3;
+    }
+
+    .diagram text {
+      font-family: var(--mono);
+      font-size: 13px;
+      fill: #111111;
+    }
+
+    .diagram .small {
+      font-family: var(--sans);
+      font-size: 11px;
+      fill: #333333;
+    }
+
+    .diagram .label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .arrow {
+      stroke: #111111;
+      stroke-width: 3;
+      fill: none;
+      marker-end: url(#arrow);
+    }
+
+    .step-list {
+      display: grid;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 78px minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+      box-shadow: none;
+    }
+
+    .step-num {
+      display: grid;
+      place-items: center;
+      width: 58px;
+      height: 58px;
+      background: var(--ink);
+      color: var(--white);
+      border: 3px solid var(--line);
+      font-family: var(--mono);
+      font-size: 1.2rem;
+      font-weight: 800;
+    }
+
+    .step h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .step p {
+      margin-top: 0;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 8px;
+      border: 2px solid var(--line);
+      background: var(--soft);
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .tag.cyan {
+      background: var(--cyan);
+    }
+
+    .tag.green {
+      background: #d7f4df;
+    }
+
+    .tag.yellow {
+      background: #fff1b8;
+    }
+
+    .tag.red {
+      background: #ffd9d6;
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      margin: 24px 0;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      gap: 18px;
+      padding: 16px;
+      background: var(--white);
+      border: 3px solid var(--line);
+    }
+
+    .timeline-time {
+      font-family: var(--mono);
+      font-weight: 800;
+    }
+
+    .timeline-body h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+    }
+
+    .timeline-body p {
+      margin: 0;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      margin-right: 4px;
+      border: 2px solid var(--line);
+      background: var(--soft);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 14px;
+      margin: 24px 0;
+    }
+
+    .source-box {
+      box-shadow: none;
+    }
+
+    .source-box h3 {
+      font-size: 1rem;
+    }
+
+    .source-box ul {
+      margin-bottom: 0;
+    }
+
+    .footer-note {
+      padding: 28px clamp(28px, 6vw, 88px);
+      background: var(--ink);
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 0.9rem;
+    }
+
+    .footer-note a {
+      color: var(--cyan);
+    }
+
+    .kbd-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    kbd {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 3px 8px;
+      background: var(--white);
+      border: 2px solid var(--line);
+      box-shadow: 3px 3px 0 var(--line);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    @media (max-width: 980px) {
+      .layout {
+        display: block;
+      }
+
+      .sidebar {
+        position: relative;
+        height: auto;
+        border-right: 0;
+        border-bottom: 4px solid var(--line);
+      }
+
+      .hero,
+      .section {
+        min-height: auto;
+        padding: 44px 22px;
+      }
+
+      .hero-meta,
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .timeline-item {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+
+      .diagram {
+        min-width: 760px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to architecture tutorial</a>
+  <div class="layout">
+    <aside class="sidebar" aria-label="Architecture navigation">
+      <div class="brand">
+        <span class="brand-label">Eagle Mem</span>
+        <h1>Agent Architecture Tutorial</h1>
+        <p>Technical architecture plus UX architecture for Claude Code, Codex, and future coding agents.</p>
+      </div>
+
+      <p class="nav-title">Start Here</p>
+      <nav>
+        <ul class="nav-list">
+          <li><a href="#purpose">01. Purpose</a></li>
+          <li><a href="#basics">02. Basics</a></li>
+          <li><a href="#system-map">03. System Map</a></li>
+          <li><a href="#install">04. Install Runtime</a></li>
+          <li><a href="#lifecycle">05. Hook Lifecycle</a></li>
+        </ul>
+
+        <p class="nav-title">Technical</p>
+        <ul class="nav-list">
+          <li><a href="#agent-adapter">06. Agent Adapter</a></li>
+          <li><a href="#database">07. Database Layer</a></li>
+          <li><a href="#recall">08. Recall Flow</a></li>
+          <li><a href="#guardrails">09. Guardrail Flow</a></li>
+          <li><a href="#lanes">10. Worker Lanes</a></li>
+        </ul>
+
+        <p class="nav-title">UX</p>
+        <ul class="nav-list">
+          <li><a href="#ux-principles">11. UX Principles</a></li>
+          <li><a href="#ux-surfaces">12. UX Surfaces</a></li>
+          <li><a href="#tutorial">13. Beginner Tutorial</a></li>
+          <li><a href="#future-agents">14. Future Agents</a></li>
+          <li><a href="#source-map">15. Source Map</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main">
+      <section class="hero" id="purpose">
+        <div class="hero-inner">
+          <p class="eyebrow">Architecture guide - technical + UX - updated 2026-05-05</p>
+          <h2>Eagle Mem is a local memory and safety layer that makes AI coding agents start warmer, ship safer, and coordinate better.</h2>
+          <p class="hero-summary">
+            This tutorial explains the project from first principles. You do not need to know the codebase first. Read it like a guided tour: what problem Eagle Mem solves, how hooks move data through the system, how SQLite stores shared memory, and why the user experience is intentionally quiet until the agent needs help.
+          </p>
+
+          <div class="hero-meta">
+            <div class="meta-box">
+              <strong>Runtime</strong>
+              <span>Bash hooks, CLI scripts, SQLite/FTS5, jq, optional RTK.</span>
+            </div>
+            <div class="meta-box">
+              <strong>Agents</strong>
+              <span>Claude Code and Codex today; adapter contract for more agents later.</span>
+            </div>
+            <div class="meta-box">
+              <strong>Core Promise</strong>
+              <span>Recall, guardrails, token savings, worker lanes.</span>
+            </div>
+            <div class="meta-box">
+              <strong>UX Shape</strong>
+              <span>Small contextual messages inside the agent flow, not a separate app.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="basics">
+        <div class="section-inner">
+          <p class="section-number">02 / Basics</p>
+          <h2>The Mental Model</h2>
+          <p class="lead">
+            Eagle Mem exists because coding agents are powerful but forgetful. A normal agent session has short-lived context. Eagle Mem adds a local layer around that session so important history, decisions, tasks, and feature risks survive between turns, compactions, and even different agents.
+          </p>
+
+          <div class="grid-3">
+            <article class="concept">
+              <h3>1. Recall</h3>
+              <p>Recall means the next agent can see useful project history without rereading everything. Eagle Mem stores session summaries, project overviews, agent memories, task state, and indexed source chunks in one local SQLite database.</p>
+              <div class="tag-row">
+                <span class="tag cyan">SessionStart</span>
+                <span class="tag cyan">UserPromptSubmit</span>
+                <span class="tag">FTS5</span>
+              </div>
+            </article>
+
+            <article class="concept">
+              <h3>2. Guardrails</h3>
+              <p>Guardrails mean the agent gets warned before it repeats known mistakes, reverts decisions, edits sensitive files, or tries to release code before impacted features have been verified.</p>
+              <div class="tag-row">
+                <span class="tag yellow">PreToolUse</span>
+                <span class="tag yellow">PostToolUse</span>
+                <span class="tag">Feature verification</span>
+              </div>
+            </article>
+
+            <article class="concept">
+              <h3>3. Lanes</h3>
+              <p>Lanes let broad work split across agents. A coordinator can create durable worker lanes with owners, worktrees, validation commands, status notes, and handoffs that survive compaction.</p>
+              <div class="tag-row">
+                <span class="tag green">orchestrate</span>
+                <span class="tag green">agent_tasks</span>
+                <span class="tag">Worktrees</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="callout">
+            <h3>The simplest explanation</h3>
+            <p>Eagle Mem is not a hosted memory service. It is not a vector database. It is a local runtime made of hook scripts, CLI commands, and a SQLite database. Agents keep working in their normal terminal UI, while Eagle Mem quietly injects context, records what happened, and blocks risky release boundaries when verification is still pending.</p>
+          </div>
+
+          <h3>Vocabulary</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Term</th>
+                <th>Plain-English Meaning</th>
+                <th>Where It Lives</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Session</code></td>
+                <td>One agent conversation or run in a project.</td>
+                <td><code>sessions</code> table</td>
+              </tr>
+              <tr>
+                <td><code>Hook</code></td>
+                <td>A script the agent calls at a specific lifecycle moment, such as startup or before a tool call.</td>
+                <td><code>hooks/*.sh</code></td>
+              </tr>
+              <tr>
+                <td><code>Observation</code></td>
+                <td>A lightweight record of one tool action: read, edit, shell command, output size, and touched files.</td>
+                <td><code>observations</code> table</td>
+              </tr>
+              <tr>
+                <td><code>Summary</code></td>
+                <td>The durable lesson from a session: request, completed work, learned context, decisions, gotchas, and files.</td>
+                <td><code>summaries</code> and <code>summaries_fts</code></td>
+              </tr>
+              <tr>
+                <td><code>Feature</code></td>
+                <td>A user-facing or system behavior mapped to files, dependencies, and smoke tests.</td>
+                <td><code>features</code>, <code>feature_files</code>, <code>feature_smoke_tests</code></td>
+              </tr>
+              <tr>
+                <td><code>Lane</code></td>
+                <td>An isolated workstream assigned to an agent, usually in a git worktree.</td>
+                <td><code>orchestrations</code>, <code>orchestration_lanes</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="system-map">
+        <div class="section-inner">
+          <p class="section-number">03 / System Map</p>
+          <h2>The Whole System At Once</h2>
+          <p class="lead">
+            Think of Eagle Mem as five layers. The user interacts with an agent. The agent fires hooks. The hooks call shared library functions. The library reads and writes SQLite. CLI commands and skills expose the same state to humans and agents.
+          </p>
+
+          <div class="diagram-frame" role="img" aria-labelledby="system-map-title system-map-desc">
+            <svg class="diagram" viewBox="0 0 1100 620" xmlns="http://www.w3.org/2000/svg">
+              <title id="system-map-title">Eagle Mem technical system map</title>
+              <desc id="system-map-desc">A layered architecture showing user, agents, hooks, shared libraries, SQLite, CLI commands, and skills.</desc>
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#111111"></path>
+                </marker>
+              </defs>
+
+              <text x="40" y="42" class="label">User Layer</text>
+              <rect x="40" y="58" width="220" height="72" class="box-cyan"></rect>
+              <text x="62" y="90">Developer</text>
+              <text x="62" y="112" class="small">Works in Claude Code or Codex</text>
+
+              <text x="40" y="178" class="label">Agent Layer</text>
+              <rect x="40" y="194" width="220" height="78" class="box"></rect>
+              <text x="62" y="225">Claude Code</text>
+              <text x="62" y="247" class="small">settings.json, CLAUDE.md, skills</text>
+              <rect x="300" y="194" width="220" height="78" class="box"></rect>
+              <text x="322" y="225">Codex</text>
+              <text x="322" y="247" class="small">config.toml, hooks.json, AGENTS.md</text>
+
+              <text x="40" y="320" class="label">Hook Runtime</text>
+              <rect x="40" y="336" width="160" height="68" class="box-soft"></rect>
+              <text x="58" y="365">SessionStart</text>
+              <text x="58" y="386" class="small">inject recall</text>
+              <rect x="220" y="336" width="160" height="68" class="box-soft"></rect>
+              <text x="238" y="365">Prompt</text>
+              <text x="238" y="386" class="small">search memory</text>
+              <rect x="400" y="336" width="160" height="68" class="box-soft"></rect>
+              <text x="418" y="365">PreToolUse</text>
+              <text x="418" y="386" class="small">guard, block, rewrite</text>
+              <rect x="580" y="336" width="160" height="68" class="box-soft"></rect>
+              <text x="598" y="365">PostToolUse</text>
+              <text x="598" y="386" class="small">record observations</text>
+              <rect x="760" y="336" width="160" height="68" class="box-soft"></rect>
+              <text x="778" y="365">Stop/End</text>
+              <text x="778" y="386" class="small">save summary</text>
+
+              <text x="40" y="452" class="label">Shared Runtime + Data</text>
+              <rect x="40" y="468" width="245" height="80" class="box-yellow"></rect>
+              <text x="62" y="498">lib/*.sh</text>
+              <text x="62" y="520" class="small">agent detection, project keys, DB helpers</text>
+              <rect x="325" y="468" width="245" height="80" class="box-green"></rect>
+              <text x="347" y="498">~/.eagle-mem/memory.db</text>
+              <text x="347" y="520" class="small">SQLite WAL + FTS5 tables</text>
+              <rect x="610" y="468" width="245" height="80" class="box-cyan"></rect>
+              <text x="632" y="498">CLI + Skills</text>
+              <text x="632" y="520" class="small">search, feature, guard, orchestrate</text>
+
+              <path d="M150,130 L150,190" class="arrow"></path>
+              <path d="M260,232 L300,232" class="arrow"></path>
+              <path d="M150,272 L150,330" class="arrow"></path>
+              <path d="M410,272 L410,330" class="arrow"></path>
+              <path d="M840,404 L735,462" class="arrow"></path>
+              <path d="M660,404 L452,462" class="arrow"></path>
+              <path d="M300,404 L182,462" class="arrow"></path>
+              <path d="M285,508 L320,508" class="arrow"></path>
+              <path d="M570,508 L605,508" class="arrow"></path>
+            </svg>
+          </div>
+
+          <h3>Key architectural decision</h3>
+          <p>
+            Eagle Mem does not make every agent learn a new API. Instead, each agent gets a thin adapter that registers its native hook format and points those hooks at the same installed scripts under <code>~/.eagle-mem</code>. Once a hook script starts, it normalizes the agent source and uses the same library and database functions as every other agent.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="install">
+        <div class="section-inner">
+          <p class="section-number">04 / Install Runtime</p>
+          <h2>What Happens During Install</h2>
+          <p class="lead">
+            Installation converts the source package into a local runtime. The source repo stays the product code. The installed runtime under <code>~/.eagle-mem</code> is what the agents actually execute from hooks.
+          </p>
+
+          <div class="step-list">
+            <article class="step">
+              <div class="step-num">1</div>
+              <div>
+                <h3>User installs the CLI</h3>
+                <p>The user runs <code>npm install -g eagle-mem</code>, then <code>eagle-mem install</code>. The bin entry dispatches to scripts such as <code>install.sh</code>, <code>search.sh</code>, <code>feature.sh</code>, and <code>orchestrate.sh</code>.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">2</div>
+              <div>
+                <h3>Prerequisites are checked</h3>
+                <p>The installer checks for an FTS5-capable <code>sqlite3</code>, <code>jq</code>, optional <code>rtk</code>, and at least one supported agent installation. FTS5 matters because summaries, code chunks, and mirrored artifacts are searched with SQLite full-text search.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">3</div>
+              <div>
+                <h3>Runtime files are copied</h3>
+                <p>The hook scripts, shared libraries, migrations, and CLI support scripts are copied into <code>~/.eagle-mem</code>. This makes the runtime independent of the current checkout location.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">4</div>
+              <div>
+                <h3>Database migrations run</h3>
+                <p><code>db/migrate.sh</code> creates or updates <code>~/.eagle-mem/memory.db</code>. Runtime connections enable WAL mode, foreign keys, and a busy timeout so hook writes can coexist during active agent sessions.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">5</div>
+              <div>
+                <h3>Agent hooks are registered</h3>
+                <p>Claude Code hooks are patched into <code>~/.claude/settings.json</code>. Codex hooks are registered in <code>~/.codex/hooks.json</code>, and <code>codex_hooks = true</code> is enabled in <code>~/.codex/config.toml</code>.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">6</div>
+              <div>
+                <h3>Skills and instructions are linked</h3>
+                <p>Eagle Mem skills are symlinked into each agent's skill directory. Claude receives <code>CLAUDE.md</code> summary instructions. Codex receives <code>AGENTS.md</code> clean-output memory instructions.</p>
+              </div>
+            </article>
+          </div>
+
+          <h3>Install topology</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Role</th>
+                <th>Why It Exists</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>bin/eagle-mem</code></td>
+                <td>Command dispatcher</td>
+                <td>Maps CLI subcommands to scripts under <code>scripts/</code>.</td>
+              </tr>
+              <tr>
+                <td><code>~/.eagle-mem/hooks/</code></td>
+                <td>Installed hook entrypoints</td>
+                <td>Stable scripts that agent configs can call.</td>
+              </tr>
+              <tr>
+                <td><code>~/.eagle-mem/lib/</code></td>
+                <td>Shared runtime functions</td>
+                <td>Keeps project detection, agent detection, database access, guardrails, and redaction in one place.</td>
+              </tr>
+              <tr>
+                <td><code>~/.eagle-mem/db/</code></td>
+                <td>Migrations and schema</td>
+                <td>Creates the local SQLite/FTS5 database.</td>
+              </tr>
+              <tr>
+                <td><code>~/.eagle-mem/scripts/</code></td>
+                <td>CLI command implementations</td>
+                <td>Lets users and agents search, verify, curate, orchestrate, and inspect status.</td>
+              </tr>
+              <tr>
+                <td><code>~/.eagle-mem/memory.db</code></td>
+                <td>Single source of local memory</td>
+                <td>Stores shared state across Claude Code, Codex, compactions, and sessions.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="lifecycle">
+        <div class="section-inner">
+          <p class="section-number">05 / Hook Lifecycle</p>
+          <h2>The Runtime Flow From Start To Stop</h2>
+          <p class="lead">
+            The hook lifecycle is the heart of Eagle Mem. The agent does not need to remember to run anything. It naturally starts, receives user prompts, uses tools, and ends turns. Eagle Mem attaches useful behavior to those moments.
+          </p>
+
+          <div class="timeline">
+            <div class="timeline-item">
+              <div class="timeline-time">SessionStart</div>
+              <div class="timeline-body">
+                <h3>Start warm</h3>
+                <p>Upserts the session, auto-provisions scan/index/prune/curate jobs, checks updates, and injects a compact banner, overview, recent recall, stored memories, tasks, and code hints.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-time">UserPromptSubmit</div>
+              <div class="timeline-body">
+                <h3>Search only when the prompt is meaningful</h3>
+                <p>Tracks turn count for context pressure, searches summaries and indexed code through FTS5, and injects relevant recall. Broad-work prompts can also trigger the orchestration protocol reminder.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-time">PreToolUse</div>
+              <div class="timeline-body">
+                <h3>Warn before action</h3>
+                <p>Runs before shell commands and mutations. It can block release-boundary commands with pending feature verification, rewrite raw shell output through RTK, and surface guardrails before edits.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-time">PostToolUse</div>
+              <div class="timeline-body">
+                <h3>Record what happened</h3>
+                <p>Stores observations, mirrors agent memories/plans/tasks, records pending feature verification after edits, surfaces stale-memory warnings, and reminds the agent about file-specific decisions or feature dependencies.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-time">Stop</div>
+              <div class="timeline-body">
+                <h3>Save the lesson</h3>
+                <p>Runs at turn end. It reconciles current diffs into pending feature verification, extracts explicit summary fields when available, falls back to heuristic summaries, and queues LLM enrichment in the background.</p>
+              </div>
+            </div>
+            <div class="timeline-item">
+              <div class="timeline-time">SessionEnd</div>
+              <div class="timeline-body">
+                <h3>Close the loop</h3>
+                <p>Re-syncs task files, marks the session completed, and prunes older observations for the project.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Why these moments matter</h3>
+          <p>
+            A memory system that only saves at the end helps future sessions, but it cannot prevent the current agent from making a bad move. Eagle Mem splits behavior by timing: recall at start, search on prompt, guard before action, record after action, summarize at stop, and clean up at session end.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="agent-adapter">
+        <div class="section-inner">
+          <p class="section-number">06 / Technical Architecture</p>
+          <h2>The Agent Adapter Layer</h2>
+          <p class="lead">
+            The project is agent-generic below the adapter layer. Claude Code and Codex have different config files, tool names, transcript formats, and output expectations. Eagle Mem normalizes those differences into one internal shape.
+          </p>
+
+          <div class="grid-2">
+            <article class="adapter-rule">
+              <h3>Claude Code adapter</h3>
+              <p>Registered through <code>~/.claude/settings.json</code>. Uses Claude hook events such as <code>SessionStart</code>, <code>PreToolUse</code>, <code>PostToolUse</code>, <code>Stop</code>, <code>SessionEnd</code>, <code>TaskCreated</code>, and <code>TaskCompleted</code>.</p>
+              <div class="tag-row">
+                <span class="tag">Bash</span>
+                <span class="tag">Read</span>
+                <span class="tag">Edit</span>
+                <span class="tag">Write</span>
+                <span class="tag">TaskCreate</span>
+              </div>
+            </article>
+
+            <article class="adapter-rule">
+              <h3>Codex adapter</h3>
+              <p>Registered through <code>~/.codex/hooks.json</code> after enabling <code>codex_hooks</code>. Shell protection covers current Codex shell tool paths, including <code>exec_command</code>, <code>shell_command</code>, and <code>unified_exec</code>.</p>
+              <div class="tag-row">
+                <span class="tag">exec_command</span>
+                <span class="tag">unified_exec</span>
+                <span class="tag">apply_patch</span>
+                <span class="tag">Edit</span>
+                <span class="tag">Write</span>
+              </div>
+            </article>
+          </div>
+
+          <h3>Normalization rules</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Problem</th>
+                <th>Normalization</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Each agent names tools differently.</td>
+                <td><code>eagle_is_shell_tool</code> treats known shell tool names as the same category.</td>
+                <td>Release boundaries and RTK token guard work across agents.</td>
+              </tr>
+              <tr>
+                <td>Each agent identifies sessions differently.</td>
+                <td>Hooks parse <code>session_id</code>, <code>cwd</code>, transcript path, workspace paths, and agent-specific markers.</td>
+                <td>Rows attach to the correct project and session.</td>
+              </tr>
+              <tr>
+                <td>Agent output must look different.</td>
+                <td><code>eagle_emit_context_for_agent</code> can keep Codex compact and user-clean while Claude receives richer hook context.</td>
+                <td>The same memory is useful without flooding the UI.</td>
+              </tr>
+              <tr>
+                <td>Future agents may only support some hook moments.</td>
+                <td>The system treats each hook as additive. Missing hooks reduce features but do not invalidate the core database model.</td>
+                <td>New adapters can start small and grow toward full support.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="callout">
+            <h3>The adapter contract</h3>
+            <p>Any future agent can become an Eagle Mem participant if it can run local scripts at lifecycle moments, pass JSON or structured context through stdin, accept context or block decisions from stdout, and preserve a project working directory. Full support needs five moments: start, prompt, before tool, after tool, and stop.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="database">
+        <div class="section-inner">
+          <p class="section-number">07 / Technical Architecture</p>
+          <h2>The Database Layer</h2>
+          <p class="lead">
+            The database is the shared memory. It is intentionally boring: one local SQLite file, WAL mode, FTS5 search tables, and small normalized records. This keeps the system portable and avoids a background service.
+          </p>
+
+          <div class="diagram-frame" role="img" aria-labelledby="db-map-title db-map-desc">
+            <svg class="diagram" viewBox="0 0 1100 620" xmlns="http://www.w3.org/2000/svg">
+              <title id="db-map-title">Eagle Mem database architecture</title>
+              <desc id="db-map-desc">A database diagram showing sessions, summaries, observations, code chunks, agent artifacts, features, pending verification, guardrails, and orchestration lanes.</desc>
+              <defs>
+                <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#111111"></path>
+                </marker>
+              </defs>
+
+              <rect x="40" y="48" width="190" height="82" class="box-cyan"></rect>
+              <text x="62" y="78">sessions</text>
+              <text x="62" y="101" class="small">one row per agent run</text>
+
+              <rect x="310" y="48" width="190" height="82" class="box"></rect>
+              <text x="332" y="78">summaries</text>
+              <text x="332" y="101" class="small">request, learned, completed</text>
+
+              <rect x="570" y="48" width="190" height="82" class="box-soft"></rect>
+              <text x="592" y="78">observations</text>
+              <text x="592" y="101" class="small">tool calls, files, output size</text>
+
+              <rect x="830" y="48" width="190" height="82" class="box-yellow"></rect>
+              <text x="852" y="78">overviews</text>
+              <text x="852" y="101" class="small">project briefing</text>
+
+              <rect x="40" y="210" width="190" height="82" class="box"></rect>
+              <text x="62" y="240">code_chunks</text>
+              <text x="62" y="263" class="small">indexed source excerpts</text>
+
+              <rect x="310" y="210" width="190" height="82" class="box-green"></rect>
+              <text x="332" y="240">agent_artifacts</text>
+              <text x="332" y="263" class="small">memories, plans, tasks</text>
+
+              <rect x="570" y="210" width="190" height="82" class="box-yellow"></rect>
+              <text x="592" y="240">features</text>
+              <text x="592" y="263" class="small">files, deps, smoke tests</text>
+
+              <rect x="830" y="210" width="190" height="82" class="box-soft"></rect>
+              <text x="852" y="240">pending_verify</text>
+              <text x="852" y="263" class="small">release blockers</text>
+
+              <rect x="40" y="372" width="190" height="82" class="box-soft"></rect>
+              <text x="62" y="402">guardrails</text>
+              <text x="62" y="425" class="small">file rules and warnings</text>
+
+              <rect x="310" y="372" width="190" height="82" class="box"></rect>
+              <text x="332" y="402">command_rules</text>
+              <text x="332" y="425" class="small">learned shell handling</text>
+
+              <rect x="570" y="372" width="190" height="82" class="box-cyan"></rect>
+              <text x="592" y="402">file_hints</text>
+              <text x="592" y="425" class="small">hot files and co-edits</text>
+
+              <rect x="830" y="372" width="190" height="82" class="box-green"></rect>
+              <text x="852" y="402">orchestration</text>
+              <text x="852" y="425" class="small">lanes, workers, handoffs</text>
+
+              <path d="M230,88 L305,88" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+              <path d="M230,88 C318,150 480,150 570,88" stroke="#111111" stroke-width="3" fill="none" marker-end="url(#arrow2)"></path>
+              <path d="M665,292 L665,366" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+              <path d="M760,252 L825,252" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+              <path d="M405,292 L405,366" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+              <path d="M135,292 L135,366" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+              <path d="M760,412 L825,412" stroke="#111111" stroke-width="3" marker-end="url(#arrow2)"></path>
+            </svg>
+          </div>
+
+          <h3>What each table family answers</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Table Family</th>
+                <th>Question It Answers</th>
+                <th>Used By</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>sessions</code>, <code>summaries</code>, <code>summaries_fts</code></td>
+                <td>What happened before? What did the agent learn? What should the next agent remember?</td>
+                <td>SessionStart, UserPromptSubmit, search CLI, Stop</td>
+              </tr>
+              <tr>
+                <td><code>observations</code></td>
+                <td>What files and commands were actually used during sessions?</td>
+                <td>PostToolUse, curator, search session drill-down</td>
+              </tr>
+              <tr>
+                <td><code>overviews</code></td>
+                <td>What is this project, in a concise briefing?</td>
+                <td>SessionStart, overview CLI, scan</td>
+              </tr>
+              <tr>
+                <td><code>code_chunks</code>, <code>code_chunks_fts</code></td>
+                <td>Which source files look relevant to this prompt?</td>
+                <td>UserPromptSubmit, index CLI</td>
+              </tr>
+              <tr>
+                <td><code>agent_memories</code>, <code>agent_plans</code>, <code>agent_tasks</code></td>
+                <td>What durable agent artifacts should be shared across Claude Code and Codex?</td>
+                <td>PostToolUse, SessionEnd, skills, search CLI</td>
+              </tr>
+              <tr>
+                <td><code>features</code>, <code>feature_files</code>, <code>feature_dependencies</code>, <code>feature_smoke_tests</code></td>
+                <td>Which user-facing behavior is connected to a file or dependency?</td>
+                <td>PostToolUse, PreToolUse, feature CLI</td>
+              </tr>
+              <tr>
+                <td><code>pending_feature_verifications</code></td>
+                <td>Which affected features still need smoke testing before release?</td>
+                <td>PreToolUse release blocks, Stop reconciliation, feature verify/waive</td>
+              </tr>
+              <tr>
+                <td><code>orchestrations</code>, <code>orchestration_lanes</code>, worker tables</td>
+                <td>Who owns each lane, what is blocked, and what validation is required?</td>
+                <td>orchestrate CLI, SessionStart task injection, worker handoffs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="recall">
+        <div class="section-inner">
+          <p class="section-number">08 / Technical Architecture</p>
+          <h2>Recall Flow</h2>
+          <p class="lead">
+            Recall is the "start warm" feature. It gives the agent the right memory at the right time without dumping months of history into every prompt.
+          </p>
+
+          <div class="step-list">
+            <article class="step">
+              <div class="step-num">A</div>
+              <div>
+                <h3>Build project identity</h3>
+                <p>The hook normalizes the current project from workspace paths, transcripts, remembered session markers, or the current working directory. This prevents worktrees and resumed sessions from becoming separate memories by accident.</p>
+              </div>
+            </article>
+            <article class="step">
+              <div class="step-num">B</div>
+              <div>
+                <h3>Load high-signal context</h3>
+                <p>SessionStart creates the visible "Recall Ready" banner, then adds overview, recent summaries, stored memories, tasks, code index stats, and hot files when available.</p>
+              </div>
+            </article>
+            <article class="step">
+              <div class="step-num">C</div>
+              <div>
+                <h3>Search only when useful</h3>
+                <p>UserPromptSubmit ignores tiny prompts with fewer than three words. For real prompts, it extracts useful search terms, searches summaries and code chunks, and returns compact relevant recall.</p>
+              </div>
+            </article>
+            <article class="step">
+              <div class="step-num">D</div>
+              <div>
+                <h3>Save what happened</h3>
+                <p>Stop persists summary data immediately using explicit fields or heuristics, then enrichment can improve the record later without delaying the user's session.</p>
+              </div>
+            </article>
+          </div>
+
+          <h3>Recall is not the same as enforcement</h3>
+          <p>
+            Recall helps the agent know what happened before. Enforcement stops risky actions. A strong architecture needs both. Eagle Mem uses FTS5 recall for context and feature verification for release safety.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="guardrails">
+        <div class="section-inner">
+          <p class="section-number">09 / Technical Architecture</p>
+          <h2>Guardrail Flow</h2>
+          <p class="lead">
+            Guardrails are timed around risk. Reading a file is low risk, so Eagle Mem surfaces decisions and feature context after reads. Editing and release commands are high risk, so Eagle Mem checks before or immediately after those actions.
+          </p>
+
+          <div class="diagram-frame" role="img" aria-labelledby="guardrail-title guardrail-desc">
+            <svg class="diagram" viewBox="0 0 1100 520" xmlns="http://www.w3.org/2000/svg">
+              <title id="guardrail-title">Eagle Mem feature verification flow</title>
+              <desc id="guardrail-desc">A flow from edit to pending feature verification, then release boundary block, then verify or waive.</desc>
+              <defs>
+                <marker id="arrow3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#111111"></path>
+                </marker>
+              </defs>
+
+              <rect x="50" y="80" width="190" height="86" class="box"></rect>
+              <text x="72" y="112">Agent edits file</text>
+              <text x="72" y="136" class="small">Edit, Write, apply_patch</text>
+
+              <rect x="300" y="80" width="210" height="86" class="box-yellow"></rect>
+              <text x="322" y="112">PostToolUse</text>
+              <text x="322" y="136" class="small">find feature impacts</text>
+
+              <rect x="570" y="80" width="230" height="86" class="box-cyan"></rect>
+              <text x="592" y="112">pending verification</text>
+              <text x="592" y="136" class="small">feature + file + fingerprint</text>
+
+              <rect x="860" y="80" width="190" height="86" class="box"></rect>
+              <text x="882" y="112">Release command</text>
+              <text x="882" y="136" class="small">git push, gh pr create, publish</text>
+
+              <rect x="860" y="250" width="190" height="88" class="box-soft"></rect>
+              <text x="882" y="282">PreToolUse block</text>
+              <text x="882" y="306" class="small">show smoke tests</text>
+
+              <rect x="570" y="250" width="230" height="88" class="box-green"></rect>
+              <text x="592" y="282">Verify or waive</text>
+              <text x="592" y="306" class="small">feature verify / waive</text>
+
+              <rect x="300" y="250" width="210" height="88" class="box-cyan"></rect>
+              <text x="322" y="282">Release allowed</text>
+              <text x="322" y="306" class="small">no pending rows for diff</text>
+
+              <path d="M240,123 L295,123" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+              <path d="M510,123 L565,123" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+              <path d="M800,123 L855,123" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+              <path d="M955,166 L955,244" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+              <path d="M860,294 L805,294" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+              <path d="M570,294 L515,294" stroke="#111111" stroke-width="3" marker-end="url(#arrow3)"></path>
+            </svg>
+          </div>
+
+          <h3>Guardrail types</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Guardrail</th>
+                <th>Trigger</th>
+                <th>User Experience</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Decision recall</td>
+                <td>Reading a file with past decisions</td>
+                <td>The agent sees a note like "Do not revert without explicit user request."</td>
+              </tr>
+              <tr>
+                <td>Stale memory check</td>
+                <td>Editing a file that may contradict stored memory</td>
+                <td>The agent is told to update memory if the edit makes old context wrong.</td>
+              </tr>
+              <tr>
+                <td>Feature guardrail</td>
+                <td>Reading or editing a file mapped to a feature</td>
+                <td>The agent sees dependencies, related files, last verification, and smoke tests.</td>
+              </tr>
+              <tr>
+                <td>Release boundary block</td>
+                <td><code>git push</code>, <code>gh pr create</code>, or package publish with pending verification</td>
+                <td>The command is denied with exact verification or waiver instructions.</td>
+              </tr>
+              <tr>
+                <td>Token guard</td>
+                <td>Shell commands likely to dump large raw output</td>
+                <td>The command is rewritten through RTK or blocked with a compact alternative.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="lanes">
+        <div class="section-inner">
+          <p class="section-number">10 / Technical Architecture</p>
+          <h2>Worker Lanes For Multi-Agent Work</h2>
+          <p class="lead">
+            Lanes are the architecture for work that is too wide for one agent turn. Instead of one agent keeping a fragile mental checklist, Eagle Mem stores lane ownership and status in SQLite so another agent can continue after compaction or handoff.
+          </p>
+
+          <div class="grid-3">
+            <article class="concept">
+              <h3>Coordinator</h3>
+              <p>The active agent defines the goal, splits independent lanes, avoids duplicate work, integrates results, and runs final validation.</p>
+            </article>
+            <article class="concept">
+              <h3>Worker</h3>
+              <p>A worker owns one bounded lane. It usually runs in a git worktree and should not rewrite another worker's files or revert unrelated edits.</p>
+            </article>
+            <article class="concept">
+              <h3>Durable State</h3>
+              <p>Lane records include owner, target agent, status, worktree path, validation command, notes, and handoff output.</p>
+            </article>
+          </div>
+
+          <h3>Default routing</h3>
+          <p>
+            Eagle Mem can route broad work to the opposite agent by default. A Codex coordinator can spawn Claude Code workers; a Claude Code coordinator can spawn Codex workers. The goal is not to make agents compete. The goal is to let each lane have one owner and one validation path.
+          </p>
+
+          <pre><code># Agent-run protocol, not usually a user task
+eagle-mem orchestrate init "Ship the release safely"
+eagle-mem orchestrate lane add api --agent codex --desc "Routes and tests" --validate "npm test"
+eagle-mem orchestrate spawn api
+eagle-mem orchestrate sync
+eagle-mem orchestrate handoff --write docs/handoff-context.md</code></pre>
+
+          <h3>Why lanes matter for all agents</h3>
+          <p>
+            Context windows end. Tools fail. A user may switch from Claude Code to Codex. A worker may finish while the coordinator is compacted. Lanes make this survivable because the state is outside any one transcript.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="ux-principles">
+        <div class="section-inner">
+          <p class="section-number">11 / UX Architecture</p>
+          <h2>The UX Philosophy</h2>
+          <p class="lead">
+            Eagle Mem's UX is not a large screen. It is a set of small, timely interventions inside the agent's existing workflow. The best UX here is often invisible: the user notices that the agent remembers, avoids mistakes, and coordinates work, but does not need to babysit a new interface.
+          </p>
+
+          <div class="grid-2">
+            <article class="principle">
+              <h3>1. Stay in the agent's flow</h3>
+              <p>Users already live in Claude Code or Codex. Eagle Mem should not require them to open a dashboard before every task. Hooks inject context where the agent already is.</p>
+            </article>
+            <article class="principle">
+              <h3>2. Show up only when useful</h3>
+              <p>SessionStart gives a compact status. Prompt recall appears only for meaningful prompts. Release blocks happen only when current changed files map to pending feature verification.</p>
+            </article>
+            <article class="principle">
+              <h3>3. Teach the agent, not just the user</h3>
+              <p>Most messages are addressed to the agent because the agent is the actor about to read, edit, push, or spawn work. The user benefits from better behavior without extra manual steps.</p>
+            </article>
+            <article class="principle">
+              <h3>4. Keep trust local</h3>
+              <p>The database is local. Logs and memory are local. There is no hosted memory service. This is important for repo privacy and for agent adoption across many project types.</p>
+            </article>
+            <article class="principle">
+              <h3>5. Be explicit at risk boundaries</h3>
+              <p>When a release command is blocked, the message must say exactly why, which features are pending, what smoke tests to run, and how to verify or waive.</p>
+            </article>
+            <article class="principle">
+              <h3>6. Respect each agent's display model</h3>
+              <p>Claude can handle richer hook context. Codex should keep user-facing replies clean and let Stop capture summaries from normal prose.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="ux-surfaces">
+        <div class="section-inner">
+          <p class="section-number">12 / UX Architecture</p>
+          <h2>User-Facing Surfaces</h2>
+          <p class="lead">
+            Eagle Mem has many small surfaces. Each one has a specific UX job. Together, they make memory feel automatic instead of heavy.
+          </p>
+
+          <div class="grid-2">
+            <article class="surface">
+              <h3>Install Screen</h3>
+              <p><strong>Job:</strong> Build confidence. It checks prerequisites, shows what was installed, and explains when manual statusline patching is needed.</p>
+              <p><strong>Failure to avoid:</strong> Silent partial setup where hooks are not actually active.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Recall Ready Banner</h3>
+              <p><strong>Job:</strong> Confirm memory is active at session start and show useful counts: sessions, sources, memories, tasks, code chunks, and last work.</p>
+              <p><strong>Failure to avoid:</strong> Long startup dumps that cost tokens and bury the user's prompt.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Relevant Recall</h3>
+              <p><strong>Job:</strong> Give the agent enough past context to act correctly. It should be short, attributed, and directly relevant to the current prompt.</p>
+              <p><strong>Failure to avoid:</strong> Treating memory search output as the final answer.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Relevant Code</h3>
+              <p><strong>Job:</strong> Point the agent to likely source files without pretending those snippets replace reading the actual code.</p>
+              <p><strong>Failure to avoid:</strong> Making stale code index hits sound authoritative when current code has not been opened.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Feature Block</h3>
+              <p><strong>Job:</strong> Stop release commands when affected features still need verification. The message is a safety gate, not a suggestion.</p>
+              <p><strong>Failure to avoid:</strong> Blocking without telling the user how to unblock safely.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Token Guard</h3>
+              <p><strong>Job:</strong> Prevent huge raw shell output from consuming context. It suggests an RTK equivalent and allows a short-lived escape hatch.</p>
+              <p><strong>Failure to avoid:</strong> Making routine exploration feel broken. The replacement command must be clear.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Statusline</h3>
+              <p><strong>Job:</strong> Keep Eagle Mem visible in a tiny terminal footprint: version, session count, memory count, and turn count.</p>
+              <p><strong>Failure to avoid:</strong> Turning the terminal into a dashboard that competes with coding.</p>
+            </article>
+
+            <article class="surface">
+              <h3>Skills</h3>
+              <p><strong>Job:</strong> Teach agents when to search memory, manage tasks, build overviews, or coordinate lanes. Skills are UX for the agent's behavior.</p>
+              <p><strong>Failure to avoid:</strong> Asking the user to run internal orchestration steps that the agent should run.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="tutorial">
+        <div class="section-inner">
+          <p class="section-number">13 / Tutorial</p>
+          <h2>Walkthrough: From Empty Memory To Safer Release</h2>
+          <p class="lead">
+            This walkthrough explains how the system feels to a beginner. The same flow works whether the active agent is Claude Code or Codex.
+          </p>
+
+          <div class="step-list">
+            <article class="step">
+              <div class="step-num">1</div>
+              <div>
+                <h3>Install once</h3>
+                <p>The user installs Eagle Mem. The installer sets up hooks, migrations, skills, config, and optional statusline integration. After that, the user opens their normal agent in a project.</p>
+                <pre><code>npm install -g eagle-mem
+eagle-mem install</code></pre>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">2</div>
+              <div>
+                <h3>Start a session</h3>
+                <p>SessionStart runs automatically. On a new project, background scan and index jobs can create a project overview and searchable source chunks. On an existing project, the agent sees compact recall.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">3</div>
+              <div>
+                <h3>Ask a normal question</h3>
+                <p>The user asks, "Can you fix the release guardrail bug?" UserPromptSubmit turns that into an FTS5 query, finds relevant prior summaries and code chunks, and injects only the useful context.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">4</div>
+              <div>
+                <h3>The agent reads and edits files</h3>
+                <p>PostToolUse records observations. If a file belongs to a tracked feature, Eagle Mem can create pending verification records tied to the feature, file, and current diff fingerprint.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">5</div>
+              <div>
+                <h3>The agent tries to release</h3>
+                <p>If the agent runs <code>git push</code>, <code>gh pr create</code>, or package publish while affected features are pending, PreToolUse blocks the command and tells the agent what must be verified.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">6</div>
+              <div>
+                <h3>Verification resolves the blocker</h3>
+                <p>After smoke tests pass, the agent runs <code>eagle-mem feature verify &lt;name&gt; --notes "what passed"</code>. If the exception is intentional, it can waive a specific pending record with a reason.</p>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-num">7</div>
+              <div>
+                <h3>The turn ends with durable memory</h3>
+                <p>Stop saves what happened so the next session can recall it. Codex can keep the final reply clean; Claude can use richer summary fields when appropriate. Either way, the durable memory lands in SQLite.</p>
+              </div>
+            </article>
+          </div>
+
+          <h3>What beginners should remember</h3>
+          <ul>
+            <li><strong>You do not have to open a dashboard.</strong> Work normally in your agent.</li>
+            <li><strong>You do not have to manually search first.</strong> The hook searches when your prompt has enough signal.</li>
+            <li><strong>You do have to verify real feature risk.</strong> If Eagle Mem blocks release, run the relevant smoke tests, then verify or waive with notes.</li>
+            <li><strong>You can ask agents to use lanes for broad work.</strong> The agent should run the orchestration commands and keep the user updated.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="future-agents">
+        <div class="section-inner">
+          <p class="section-number">14 / All-Agent Applicability</p>
+          <h2>How To Add Another Agent</h2>
+          <p class="lead">
+            The project already supports Claude Code and Codex, but the architecture should scale to any coding agent that can run local hooks or wrapper scripts. The integration work should live at the edge, not inside the database model.
+          </p>
+
+          <h3>Minimum viable adapter</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Capability</th>
+                <th>Needed For</th>
+                <th>Fallback If Missing</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Session start hook</td>
+                <td>Inject overview, summaries, memories, tasks, and code hints.</td>
+                <td>User can run <code>eagle-mem search</code> manually, but warm start is weaker.</td>
+              </tr>
+              <tr>
+                <td>User prompt hook</td>
+                <td>Search memory in response to the current request.</td>
+                <td>Agent can use the search skill manually.</td>
+              </tr>
+              <tr>
+                <td>Pre-tool hook</td>
+                <td>Block releases, enforce guardrails, and rewrite noisy commands before context damage.</td>
+                <td>Post-action warnings still work, but safety is weaker.</td>
+              </tr>
+              <tr>
+                <td>Post-tool hook</td>
+                <td>Record observations, mirror tasks, and create pending feature verification records.</td>
+                <td>Stop summaries can still save high-level memory, but tool history is thin.</td>
+              </tr>
+              <tr>
+                <td>Stop hook</td>
+                <td>Persist session summaries and learned decisions automatically.</td>
+                <td>Manual <code>eagle-mem session save</code> can capture summaries.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Adapter checklist</h3>
+          <ol>
+            <li>Register the agent's lifecycle events to call the installed scripts in <code>~/.eagle-mem/hooks/</code>.</li>
+            <li>Set <code>EAGLE_AGENT_SOURCE</code> to a stable value, such as <code>codex</code>, <code>claude-code</code>, or a future agent key.</li>
+            <li>Map the agent's shell and file tools into Eagle Mem's known categories.</li>
+            <li>Pass enough JSON to identify <code>session_id</code>, <code>cwd</code>, tool name, tool input, and optional transcript path.</li>
+            <li>Teach output formatting for the agent: compact JSON, plain additional context, or deny decisions.</li>
+            <li>Install the same skills or equivalent instruction files so the agent knows when to search, orchestrate, verify, or summarize.</li>
+            <li>Store all rows with source attribution so shared memory can say which agent created the knowledge.</li>
+          </ol>
+
+          <div class="callout">
+            <h3>Architectural rule for new agents</h3>
+            <p>Do not fork the memory model for every agent. Add a thin adapter, normalize into the same hook contract, and keep shared behavior in <code>lib/</code> and <code>db/</code>. Agent-specific behavior should explain how to speak to the agent, not redefine what memory means.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="source-map">
+        <div class="section-inner">
+          <p class="section-number">15 / Source Map</p>
+          <h2>Where To Read The Code</h2>
+          <p class="lead">
+            Use this map when you want to verify the tutorial against the implementation. Start with the row that matches your question.
+          </p>
+
+          <div class="source-list">
+            <article class="source-box">
+              <h3>Product promise and public explanation</h3>
+              <ul>
+                <li><code>README.md</code> - product layers, getting started, hook table, token savings, anti-regression, lanes.</li>
+                <li><code>package.json</code> - version, package entrypoint, published file set, project keywords.</li>
+              </ul>
+            </article>
+
+            <article class="source-box">
+              <h3>CLI entrypoints</h3>
+              <ul>
+                <li><code>bin/eagle-mem</code> - subcommand dispatcher.</li>
+                <li><code>scripts/help.sh</code> - user-facing command map.</li>
+                <li><code>scripts/search.sh</code>, <code>scripts/feature.sh</code>, <code>scripts/orchestrate.sh</code> - main user and agent command surfaces.</li>
+              </ul>
+            </article>
+
+            <article class="source-box">
+              <h3>Installation and adapters</h3>
+              <ul>
+                <li><code>scripts/install.sh</code> - runtime copy, migrations, hook registration, skills, statusline, config.</li>
+                <li><code>lib/codex-hooks.sh</code> - Codex hook enablement and hook registration.</li>
+                <li><code>lib/hooks.sh</code> - Claude Code hook patching.</li>
+              </ul>
+            </article>
+
+            <article class="source-box">
+              <h3>Hook behavior</h3>
+              <ul>
+                <li><code>hooks/session-start.sh</code> and <code>lib/hooks-sessionstart.sh</code> - warm start, auto-scan, auto-index, auto-prune, auto-curate.</li>
+                <li><code>hooks/user-prompt-submit.sh</code> - context pressure, prompt search, relevant recall and code hits.</li>
+                <li><code>hooks/pre-tool-use.sh</code> - release blocking and token guard.</li>
+                <li><code>hooks/post-tool-use.sh</code> and <code>lib/hooks-posttool.sh</code> - observations, mirrored artifacts, feature impacts, stale hints.</li>
+                <li><code>hooks/stop.sh</code> and <code>hooks/session-end.sh</code> - summary persistence and cleanup.</li>
+              </ul>
+            </article>
+
+            <article class="source-box">
+              <h3>Shared runtime and data</h3>
+              <ul>
+                <li><code>lib/common.sh</code> - project detection, agent detection, command parsing, redaction, release command detection.</li>
+                <li><code>lib/db-core.sh</code> and <code>lib/db.sh</code> - SQLite connection setup and module loading.</li>
+                <li><code>lib/db-features.sh</code> - feature lookup, pending verification, verify/waive behavior.</li>
+                <li><code>db/*.sql</code> - schema and migrations for all persistent state.</li>
+              </ul>
+            </article>
+
+            <article class="source-box">
+              <h3>Agent instruction UX</h3>
+              <ul>
+                <li><code>skills/eagle-mem-search/SKILL.md</code> - when and how agents should search memory.</li>
+                <li><code>skills/eagle-mem-orchestrate/SKILL.md</code> - coordinator and worker lane rules.</li>
+                <li><code>skills/eagle-mem-tasks/SKILL.md</code> - task loop behavior for long sequential work.</li>
+              </ul>
+            </article>
+          </div>
+
+          <h3>Recommended reading order</h3>
+          <ol>
+            <li>Read <code>README.md</code> for the product promise.</li>
+            <li>Read <code>scripts/install.sh</code> to understand activation.</li>
+            <li>Read the hook scripts in lifecycle order.</li>
+            <li>Read <code>lib/common.sh</code> and <code>lib/db-features.sh</code> for cross-agent normalization and safety gates.</li>
+            <li>Read the migrations in <code>db/</code> to understand persistent state.</li>
+            <li>Read the skills to understand how Eagle Mem shapes agent behavior.</li>
+          </ol>
+        </div>
+      </section>
+
+      <div class="footer-note">
+        <p>Built as a self-contained HTML tutorial for the Eagle Mem repo. Open <code>architecture.html</code> directly in a browser, or publish it as the site architecture page referenced by the README.</p>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

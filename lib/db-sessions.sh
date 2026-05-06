@@ -167,24 +167,31 @@ eagle_abandon_stale_sessions() {
 }
 
 eagle_get_project_stats() {
-    local project; project=$(eagle_sql_escape "$1")
+    local project_scope="${1:-}"
+    local session_filter memory_filter plan_filter task_filter chunk_filter observation_filter
+    session_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
+    memory_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
+    plan_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
+    task_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
+    chunk_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
+    observation_filter=$(eagle_sql_project_scope_condition "project" "$project_scope")
     eagle_db_pipe <<SQL
-SELECT 'sessions|' || COUNT(*) FROM sessions WHERE project = '$project';
-SELECT 'sessions_claude|' || COUNT(*) FROM sessions WHERE project = '$project' AND agent = 'claude-code';
-SELECT 'sessions_codex|' || COUNT(*) FROM sessions WHERE project = '$project' AND agent = 'codex';
-SELECT 'summaries|' || COUNT(*) FROM summaries WHERE project = '$project';
-SELECT 'with_summaries|' || COUNT(*) FROM summaries WHERE project = '$project' AND request IS NOT NULL AND request != '';
-SELECT 'memories|' || COUNT(*) FROM agent_memories WHERE project = '$project';
-SELECT 'plans|' || COUNT(*) FROM agent_plans WHERE project = '$project';
-SELECT 'tasks_pending|' || COUNT(*) FROM agent_tasks WHERE project = '$project' AND status = 'pending';
-SELECT 'tasks_progress|' || COUNT(*) FROM agent_tasks WHERE project = '$project' AND status = 'in_progress';
-SELECT 'tasks_done|' || COUNT(*) FROM agent_tasks WHERE project = '$project' AND status = 'completed';
-SELECT 'chunks|' || COUNT(*) FROM code_chunks WHERE project = '$project';
-SELECT 'observations|' || COUNT(*) FROM observations WHERE session_id IN (SELECT id FROM sessions WHERE project = '$project');
-SELECT 'last_active|' || COALESCE(MAX(date(COALESCE(last_activity_at, started_at))), 'never') FROM sessions WHERE project = '$project';
+SELECT 'sessions|' || COUNT(*) FROM sessions WHERE $session_filter;
+SELECT 'sessions_claude|' || COUNT(*) FROM sessions WHERE $session_filter AND agent = 'claude-code';
+SELECT 'sessions_codex|' || COUNT(*) FROM sessions WHERE $session_filter AND agent = 'codex';
+SELECT 'summaries|' || COUNT(*) FROM summaries WHERE $session_filter;
+SELECT 'with_summaries|' || COUNT(*) FROM summaries WHERE $session_filter AND request IS NOT NULL AND request != '';
+SELECT 'memories|' || COUNT(*) FROM agent_memories WHERE $memory_filter;
+SELECT 'plans|' || COUNT(*) FROM agent_plans WHERE $plan_filter;
+SELECT 'tasks_pending|' || COUNT(*) FROM agent_tasks WHERE $task_filter AND status = 'pending';
+SELECT 'tasks_progress|' || COUNT(*) FROM agent_tasks WHERE $task_filter AND status = 'in_progress';
+SELECT 'tasks_done|' || COUNT(*) FROM agent_tasks WHERE $task_filter AND status = 'completed';
+SELECT 'chunks|' || COUNT(*) FROM code_chunks WHERE $chunk_filter;
+SELECT 'observations|' || COUNT(*) FROM observations WHERE $observation_filter;
+SELECT 'last_active|' || COALESCE(MAX(date(COALESCE(last_activity_at, started_at))), 'never') FROM sessions WHERE $session_filter;
 SELECT 'last_summary|' || COALESCE((SELECT substr(request, 1, 60)
     FROM summaries
-    WHERE project = '$project'
+    WHERE $session_filter
     AND COALESCE(request, '') NOT LIKE '# AGENTS.md instructions%'
     AND COALESCE(request, '') NOT LIKE '<environment_context>%'
     ORDER BY created_at DESC

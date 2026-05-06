@@ -82,8 +82,7 @@ WHERE file_path = '$fp_sql'
 UPDATE agent_memories
 SET origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
     origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
-    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
-    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END
 WHERE file_path = '$fp_sql'
   AND content_hash = '$hash_sql'
   AND (('$proj_sql' != '' AND project != '$proj_sql')
@@ -104,8 +103,7 @@ eagle_search_agent_memories() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="AND m.project = '$project'"
+        where_clause="AND $(eagle_sql_project_scope_condition "m.project" "$project")"
     fi
 
     eagle_db "SELECT m.memory_name, m.memory_type, m.description,
@@ -125,8 +123,7 @@ eagle_list_agent_memories() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="WHERE project = '$project'"
+        where_clause="WHERE $(eagle_sql_project_scope_condition "project" "$project")"
     fi
 
     eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent
@@ -178,8 +175,7 @@ WHERE file_path = '$fp_sql'
 UPDATE agent_plans
 SET origin_session_id = COALESCE(NULLIF('$origin_sql', ''), origin_session_id),
     origin_agent      = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
-    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
-    updated_at        = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    project           = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END
 WHERE file_path = '$fp_sql'
   AND content_hash = '$hash_sql'
   AND (('$proj_sql' != '' AND project != '$proj_sql')
@@ -200,8 +196,7 @@ eagle_search_agent_plans() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="AND p.project = '$project'"
+        where_clause="AND $(eagle_sql_project_scope_condition "p.project" "$project")"
     fi
 
     eagle_db "SELECT p.title, p.project,
@@ -221,8 +216,7 @@ eagle_list_agent_plans() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="WHERE project = '$project'"
+        where_clause="WHERE $(eagle_sql_project_scope_condition "project" "$project")"
     fi
 
     eagle_db "SELECT title, project, file_path, updated_at, origin_agent
@@ -291,8 +285,7 @@ WHERE file_path = '$fp_sql'
 
 UPDATE agent_tasks
 SET origin_agent  = COALESCE(NULLIF('$agent_sql', ''), origin_agent),
-    project       = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END,
-    updated_at    = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    project       = CASE WHEN '$proj_sql' != '' THEN '$proj_sql' ELSE project END
 WHERE file_path = '$fp_sql'
   AND content_hash = '$hash_sql'
   AND (('$proj_sql' != '' AND project != '$proj_sql')
@@ -306,8 +299,7 @@ eagle_list_agent_tasks() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="WHERE project = '$project'"
+        where_clause="WHERE $(eagle_sql_project_scope_condition "project" "$project")"
     fi
 
     eagle_db "SELECT subject, status, source_session_id, source_task_id, updated_at, origin_agent
@@ -329,8 +321,7 @@ eagle_search_agent_tasks() {
 
     local where_clause=""
     if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="AND t.project = '$project'"
+        where_clause="AND $(eagle_sql_project_scope_condition "t.project" "$project")"
     fi
 
     eagle_db "SELECT t.subject, t.status,

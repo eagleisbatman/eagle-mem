@@ -37,6 +37,12 @@ project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
 p_esc=$(eagle_sql_escape "$project")
+recall_scope=$(eagle_recall_project_scope_from_cwd "$cwd" "$project")
+[ -z "$recall_scope" ] && recall_scope="$project"
+recall_scope_label=$(eagle_project_scope_label "$recall_scope")
+recall_project_filter=$(eagle_sql_project_scope_condition "project" "$recall_scope")
+recall_memory_filter=$(eagle_sql_project_scope_condition "m.project" "$recall_scope")
+recall_lane_filter=$(eagle_sql_project_scope_condition "l.project" "$recall_scope")
 
 eagle_log "INFO" "SessionStart: session=$session_id project=$project source=$source_type agent=$agent"
 
@@ -96,7 +102,7 @@ while IFS='|' read -r key val; do
         last_active)     stat_last_active="$val" ;;
         last_summary)    stat_last_summary="$val" ;;
     esac
-done <<< "$(eagle_get_project_stats "$project")"
+done <<< "$(eagle_get_project_stats "$recall_scope")"
 
 # ─── Build compressed banner (elide zero-value lines) ────
 
@@ -119,6 +125,10 @@ eagle_banner="======================================
  Project      | $project
  Agent        | $agent_label
  Sessions     | $stat_sessions ($stat_with_summaries with summaries)"
+if [ "$recall_scope_label" != "$project" ]; then
+    eagle_banner+="
+ Recall Scope | $recall_scope_label"
+fi
 if [ "$stat_sessions_codex" -gt 0 ] || [ "$stat_sessions_claude" -gt 0 ]; then
     eagle_banner+="
  Sources      | Claude $stat_sessions_claude, Codex $stat_sessions_codex"
@@ -137,7 +147,195 @@ eagle_banner+="
 ======================================"
 
 context="$eagle_banner
+Eagle Mem recalls: use the project memory below before making design or implementation claims. If it affects your answer, mention the recall in one short attribution line.
 "
+
+if [ "$codex_compact" -eq 1 ]; then
+    codex_context="Eagle Mem Recall Ready
+Project: $project | Agent: $agent_label
+Memory: $stat_sessions sessions"
+    if [ "$recall_scope_label" != "$project" ]; then
+        codex_context="Eagle Mem Recall Ready
+Project: $project | Recall: $recall_scope_label | Agent: $agent_label
+Memory: $stat_sessions sessions"
+    fi
+    [ "$stat_with_summaries" -gt 0 ] && codex_context+=", $stat_with_summaries summarized"
+    [ "$stat_memories" -gt 0 ] && codex_context+=", $stat_memories memories"
+    [ "$stat_chunks" -gt 0 ] && codex_context+=", $stat_chunks code chunks"
+    codex_context+="
+"
+
+    if [ -n "$update_notice" ]; then
+        codex_context+="
+Update: $(eagle_trim_text "$update_notice" 180)
+"
+    fi
+
+    if [ "${stat_with_summaries:-0}" -eq 0 ] 2>/dev/null; then
+        codex_context+="
+Capture: Codex hooks are active. Eagle Mem will summarize decisions and gotchas from the transcript automatically.
+"
+    fi
+
+    overview=$(eagle_get_overview "$project")
+    if [ -n "$overview" ]; then
+        codex_context+="
+Project brief: $(eagle_trim_text "$overview" 260)
+"
+    else
+        codex_context+="
+Project brief: no overview yet; background scan is running.
+"
+    fi
+
+    recent=$(eagle_get_recent_summaries "$recall_scope" 1)
+    if [ -n "$recent" ]; then
+        codex_context+="
+Relevant now:
+"
+        while IFS='|' read -r request completed learned _next_steps created_at _decisions gotchas _key_files summary_agent; do
+            [ -z "$request" ] && [ -z "$completed" ] && continue
+            summary_agent_label=$(eagle_agent_label "$summary_agent")
+            recent_line="$completed"
+            [ -z "$recent_line" ] && recent_line="$request"
+            codex_context+="- Recent [$summary_agent_label]: $(eagle_trim_text "$recent_line" 180)
+"
+            [ -n "$learned" ] && codex_context+="  Learned: $(eagle_trim_text "$learned" 140)
+"
+            [ -n "$gotchas" ] && codex_context+="  Watch: $(eagle_trim_text "$gotchas" 120)
+"
+        done <<< "$recent"
+    fi
+
+    memories=$(eagle_db "SELECT memory_name, memory_type, description, origin_agent,
+        CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
+        FROM agent_memories
+        WHERE $recall_project_filter
+        AND memory_name NOT IN ('Codex Memory Registry', 'Codex Memory Summary')
+        ORDER BY
+            CASE
+                WHEN lower(memory_name) LIKE 'current status%' THEN 4
+                WHEN memory_type = 'project' THEN 0
+                WHEN memory_type = 'feedback' THEN 1
+                WHEN memory_type IN ('user', 'reference') THEN 2
+                ELSE 3
+            END,
+            updated_at DESC
+        LIMIT 4;")
+    if [ -n "$memories" ]; then
+        [ -z "$recent" ] && codex_context+="
+Relevant now:
+"
+        while IFS='|' read -r mname mtype mdesc morigin days_ago; do
+            [ -z "$mname" ] && continue
+            origin_label=$(eagle_agent_label "$morigin")
+            age_label="fresh"
+            if [ -n "$days_ago" ] && [ "$days_ago" -gt 14 ] 2>/dev/null; then
+                age_label="older"
+            elif [ -n "$days_ago" ] && [ "$days_ago" -gt 0 ] 2>/dev/null; then
+                age_label="${days_ago}d old"
+            fi
+            codex_context+="- Memory [$mtype][$origin_label][$age_label]: $mname"
+            [ -n "$mdesc" ] && codex_context+=" — $(eagle_trim_text "$mdesc" 120)"
+            codex_context+="
+"
+        done <<< "$memories"
+    fi
+
+    synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM agent_tasks
+        WHERE $recall_project_filter
+        AND status IN ('in_progress', 'pending')
+        AND source_session_id != 'orchestration'
+        AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
+        ORDER BY CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT 3;")
+    orchestration_lanes=$(eagle_db "SELECT o.name, l.lane_key, l.title, l.agent, l.status
+        FROM orchestration_lanes l
+        JOIN orchestrations o ON o.id = l.orchestration_id
+        WHERE $recall_lane_filter
+          AND o.status = 'active'
+          AND l.status IN ('in_progress', 'pending', 'blocked')
+        ORDER BY CASE l.status WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 ELSE 2 END, l.updated_at DESC
+        LIMIT 3;" 2>/dev/null)
+    if [ -n "$synced_tasks" ] || [ -n "$orchestration_lanes" ]; then
+        codex_context+="
+Work state:
+"
+        while IFS='|' read -r tsubject tstatus tblocked torigin; do
+            [ -z "$tsubject" ] && continue
+            origin_label=$(eagle_agent_label "$torigin")
+            block_marker=""
+            [ "$tblocked" != "[]" ] && [ -n "$tblocked" ] && block_marker=" blocked"
+            codex_context+="- Task [$tstatus][$origin_label$block_marker]: $(eagle_trim_text "$tsubject" 130)
+"
+        done <<< "$synced_tasks"
+        while IFS='|' read -r oname lkey ltitle lagent lstatus; do
+            [ -z "$lkey" ] && continue
+            origin_label=$(eagle_agent_label "$lagent")
+            codex_context+="- Lane [$lstatus][$origin_label]: $lkey"
+            [ -n "$ltitle" ] && codex_context+=" — $(eagle_trim_text "$ltitle" 100)"
+            [ -n "$oname" ] && codex_context+=" ($oname)"
+            codex_context+="
+"
+        done <<< "$orchestration_lanes"
+        [ -n "$orchestration_lanes" ] && codex_context+="  Agent rule: you update lane status with eagle-mem orchestrate; do not ask the user to run it.
+"
+    fi
+
+    pending_features=$(eagle_list_pending_feature_verifications "$project" 3 2>/dev/null)
+    if [ -n "$pending_features" ]; then
+        codex_context+="
+Guardrail:
+"
+        while IFS='|' read -r pf_id pf_name pf_file pf_reason _pf_trigger _pf_created pf_smoke _pfingerprint; do
+            [ -z "$pf_id" ] && continue
+            codex_context+="- Pending verification #$pf_id: $pf_name"
+            [ -n "$pf_file" ] && codex_context+=" ($pf_file)"
+            [ -n "$pf_reason" ] && codex_context+=" — $(eagle_trim_text "$pf_reason" 90)"
+            [ -n "$pf_smoke" ] && codex_context+=" | smoke: $(eagle_trim_text "$pf_smoke" 100)"
+            codex_context+="
+"
+        done <<< "$pending_features"
+        codex_context+="  Release commands are blocked until these are verified or waived.
+"
+    fi
+
+    hot_files=$(eagle_get_hot_files "$project")
+    if [ -n "$hot_files" ]; then
+        core_files=""
+        IFS=',' read -ra hf_arr <<< "$hot_files"
+        hf_count=0
+        for hf in "${hf_arr[@]}"; do
+            [ "$hf_count" -ge 5 ] && break
+            [ -z "$hf" ] && continue
+            [ -n "$core_files" ] && core_files+=", "
+            core_files+="$(basename "$hf")"
+            hf_count=$((hf_count + 1))
+        done
+        [ -n "$core_files" ] && codex_context+="
+Core files: $core_files
+"
+    fi
+
+    if [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
+        working_set=$(eagle_get_working_set "$session_id")
+        if [ -n "$working_set" ]; then
+            codex_context+="
+Working set:
+"
+            while IFS='|' read -r ws_path ws_edits; do
+                [ -z "$ws_path" ] && continue
+                codex_context+="- $(basename "$ws_path") (${ws_edits} edits)
+"
+            done <<< "$working_set"
+        fi
+    fi
+
+    codex_context+="
+Use recalled context only when relevant. Keep user-facing replies clean; do not print raw Eagle Mem internals."
+    eagle_emit_context_for_agent "$agent" "SessionStart" "$codex_context"
+    exit 0
+fi
 
 if [ -n "$update_notice" ]; then
     context+="
@@ -181,7 +379,7 @@ else
     _summary_limit=2
 fi
 
-recent=$(eagle_get_recent_summaries "$project" "$_summary_limit")
+recent=$(eagle_get_recent_summaries "$recall_scope" "$_summary_limit")
 
 if [ -n "$recent" ]; then
     context+="
@@ -230,13 +428,22 @@ fi
 
 # ─── Memories (skip if none) ─────────────────────────────
 
-memory_limit=3
-[ "$codex_compact" -eq 1 ] && memory_limit=2
+memory_limit=5
+[ "$codex_compact" -eq 1 ] && memory_limit=3
 memories=$(eagle_db "SELECT memory_name, memory_type, description, file_path, updated_at, origin_agent,
     CAST(julianday('now') - julianday(updated_at) AS INTEGER) as days_ago
     FROM agent_memories
-    WHERE project = '$p_esc'
-    ORDER BY updated_at DESC
+    WHERE $recall_project_filter
+    AND memory_name NOT IN ('Codex Memory Registry', 'Codex Memory Summary')
+    ORDER BY
+        CASE
+            WHEN lower(memory_name) LIKE 'current status%' THEN 4
+            WHEN memory_type = 'project' THEN 0
+            WHEN memory_type = 'feedback' THEN 1
+            WHEN memory_type IN ('user', 'reference') THEN 2
+            ELSE 3
+        END,
+        updated_at DESC
     LIMIT $memory_limit;")
 if [ -n "$memories" ]; then
     context+="
@@ -263,7 +470,7 @@ fi
 
 # ─── Plans (skip if none) ────────────────────────────────
 
-plans=$(eagle_list_agent_plans "$project" 3)
+plans=$(eagle_list_agent_plans "$recall_scope" 3)
 if [ -n "$plans" ]; then
     context+="
 === Eagle Mem: Plans ===
@@ -281,7 +488,7 @@ fi
 task_limit=5
 [ "$codex_compact" -eq 1 ] && task_limit=3
 synced_tasks=$(eagle_db "SELECT subject, status, blocked_by, origin_agent FROM agent_tasks
-    WHERE project = '$p_esc'
+    WHERE $recall_project_filter
     AND status IN ('in_progress', 'pending')
     AND source_session_id != 'orchestration'
     AND updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
@@ -314,7 +521,7 @@ orchestration_lanes=$(eagle_db "SELECT o.name, o.goal, l.lane_key, l.title,
         l.agent, l.status, l.validation, l.worktree_path, l.notes
     FROM orchestration_lanes l
     JOIN orchestrations o ON o.id = l.orchestration_id
-    WHERE l.project = '$p_esc'
+    WHERE $recall_lane_filter
       AND o.status = 'active'
       AND l.status IN ('in_progress', 'pending', 'blocked')
     ORDER BY

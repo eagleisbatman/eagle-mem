@@ -185,6 +185,12 @@ eagle_update_backup_runtime() {
         fi
     done
 
+    for item in .version .latest-version config.toml install-manifest.json .last-update.json; do
+        if [ -f "$EAGLE_MEM_DIR/$item" ]; then
+            cp "$EAGLE_MEM_DIR/$item" "$backup_dir/$item" 2>/dev/null || true
+        fi
+    done
+
     if [ -f "$EAGLE_MEM_DB" ]; then
         local sqlite_bin
         sqlite_bin=$(eagle_sqlite_path)
@@ -202,6 +208,12 @@ eagle_update_restore_runtime() {
     for item in hooks lib db scripts; do
         if [ -d "$backup_dir/$item" ]; then
             cp -R "$backup_dir/$item" "$EAGLE_MEM_DIR/" 2>/dev/null || true
+        fi
+    done
+
+    for item in .version .latest-version config.toml install-manifest.json .last-update.json; do
+        if [ -f "$backup_dir/$item" ]; then
+            cp "$backup_dir/$item" "$EAGLE_MEM_DIR/$item" 2>/dev/null || true
         fi
     done
 

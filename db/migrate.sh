@@ -44,7 +44,18 @@ run_migration() {
 
         # Set connection PRAGMAs, then run migration body + tracking insert atomically
         # .bail on ensures sqlite3 stops on the first error instead of continuing
-        { echo ".bail on"; echo "PRAGMA trusted_schema=ON;"; echo "PRAGMA foreign_keys=ON;"; echo "PRAGMA busy_timeout=5000;"; echo "BEGIN;"; echo "$body"; echo "INSERT INTO _migrations (name) VALUES ('$name');"; echo "COMMIT;"; } | "$SQLITE_BIN" "$DB"
+        {
+            echo ".bail on"
+            echo ".output /dev/null"
+            echo "PRAGMA trusted_schema=ON;"
+            echo "PRAGMA foreign_keys=ON;"
+            echo "PRAGMA busy_timeout=5000;"
+            echo ".output stdout"
+            echo "BEGIN;"
+            echo "$body"
+            echo "INSERT INTO _migrations (name) VALUES ('$name');"
+            echo "COMMIT;"
+        } | "$SQLITE_BIN" "$DB"
         echo "  applied: $name"
     fi
 }
@@ -57,7 +68,7 @@ run_migration() {
 );"
 
 # Set PRAGMAs (these must be set on every connection)
-"$SQLITE_BIN" "$DB" "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;"
+"$SQLITE_BIN" "$DB" "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;" >/dev/null
 
 # ─── Migration 001: Initial schema (special name) ──────────
 run_migration "001_initial_schema" "$SCRIPT_DIR/schema.sql"

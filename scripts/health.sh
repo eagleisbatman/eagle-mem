@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# ════════��══════════��═══════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # Eagle Mem — Health Check
 # Diagnoses how well the self-learning pipeline is working
-# ════════���══════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -51,7 +51,7 @@ score=0
 max_score=0
 issues=()
 
-# ─��─ 1. Summary capture rate (25 pts) ───────────────────
+# ─── 1. Summary capture rate (25 pts) ───────────────────
 
 max_score=$((max_score + 25))
 
@@ -263,10 +263,10 @@ else
     issues+=("Run: eagle-mem curate --dry-run")
 fi
 
-# ─── Score ───────���────────────────────────────────────────
+# ─── Score ────────────────────────────────────────────────
 
 echo ""
-echo -e "  ${DIM}────���────────────────────────────────${RESET}"
+echo -e "  ${DIM}─────────────────────────────────────${RESET}"
 
 pct=$((score * 100 / max_score))
 if [ "$pct" -ge 80 ]; then
@@ -280,14 +280,17 @@ else
     grade="Unhealthy"
 fi
 
-echo -e "  ${BOLD}Score: ${color}${score}/${max_score} (${pct}%)${RESET}  ${color}${grade}${RESET}"
+echo -e "  ${BOLD}Overall:${RESET} ${color}${grade}${RESET}  ${DIM}${score}/${max_score} (${pct}%)${RESET}"
 
 if [ ${#issues[@]} -gt 0 ]; then
     echo ""
-    echo -e "  ${BOLD}Issues:${RESET}"
+    echo -e "  ${BOLD}Next:${RESET}"
     for issue in "${issues[@]}"; do
         echo -e "    ${YELLOW}!${RESET} $issue"
     done
+else
+    echo ""
+    eagle_ok "No immediate action needed."
 fi
 
 eagle_footer "Health check complete."

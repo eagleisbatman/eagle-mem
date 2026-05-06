@@ -18,6 +18,7 @@ eagle_header "Features"
 project=$(eagle_project_from_cwd "$(pwd)")
 subcommand="${1:-list}"
 shift 2>/dev/null || true
+raw_output=false
 
 case "$subcommand" in
     list|ls)
@@ -73,28 +74,53 @@ case "$subcommand" in
         ;;
 
     pending)
+        limit=50
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --raw|--debug) raw_output=true; shift ;;
+                --limit|-n) limit="$2"; shift 2 ;;
+                --project|-p) project="$2"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+        limit=$(eagle_sql_int "$limit")
+        [ "$limit" -eq 0 ] && limit=50
         results=$(eagle_list_pending_feature_verifications "$project" 50)
         if [ -z "$results" ]; then
             eagle_ok "No pending feature verifications for '$project'"
             exit 0
         fi
 
-        echo -e "  ${BOLD}ID   Feature                        File                         Trigger   Diff${RESET}"
-        echo -e "  ${DIM}──── ────────────────────────────── ──────────────────────────── ───────── ────────────${RESET}"
+        pending_count=$(printf '%s\n' "$results" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+        echo -e "  ${BOLD}Pending verification${RESET} ${DIM}($project)${RESET}"
+        echo -e "  ${DIM}${pending_count} check(s) must be verified or waived before release-boundary commands.${RESET}"
+        echo ""
+
+        shown=0
         while IFS='|' read -r id feat file reason trigger created smoke fingerprint; do
             [ -z "$id" ] && continue
-            feat_display="${feat:0:30}"
-            file_display="${file:0:28}"
-            trigger_display="${trigger:-hook}"
-            fingerprint_display="${fingerprint:-unknown}"
-            printf "  %-4s %-30s %-28s %-9s %-12s\n" "$id" "$feat_display" "$file_display" "$trigger_display" "$fingerprint_display"
-            [ -n "$reason" ] && echo -e "       ${DIM}${reason}${RESET}"
-            [ -n "$smoke" ] && echo -e "       ${CYAN}smoke:${RESET} $smoke"
-            [ -n "$created" ] && echo -e "       ${DIM}created: $created${RESET}"
+            [ "$shown" -ge "$limit" ] && break
+            shown=$((shown + 1))
+            echo -e "  ${BOLD}${shown}. ${feat}${RESET} ${DIM}#${id}${RESET}"
+            [ -n "$file" ] && echo -e "     ${DIM}File:${RESET} $file"
+            [ -n "$reason" ] && echo -e "     ${DIM}Why:${RESET} $reason"
+            [ -n "$smoke" ] && echo -e "     ${CYAN}Smoke:${RESET} $smoke"
+            if [ "$raw_output" = true ]; then
+                [ -n "$trigger" ] && echo -e "     ${DIM}Trigger:${RESET} $trigger"
+                [ -n "$fingerprint" ] && echo -e "     ${DIM}Diff:${RESET} $fingerprint"
+                [ -n "$created" ] && echo -e "     ${DIM}Created:${RESET} $created"
+            fi
+            echo ""
         done <<< "$results"
-        echo ""
+        if [ "$pending_count" -gt "$shown" ] 2>/dev/null; then
+            eagle_dim "$((pending_count - shown)) more pending; run with --limit $pending_count to show all."
+            echo ""
+        fi
         eagle_info "Verify after testing: eagle-mem feature verify <name> --notes \"what passed\""
         eagle_info "Waive intentionally: eagle-mem feature waive <id> --reason \"why safe\""
+        if [ "$raw_output" = false ]; then
+            eagle_dim "Run with --raw to show trigger, diff fingerprint, and created timestamp."
+        fi
         ;;
 
     waive)

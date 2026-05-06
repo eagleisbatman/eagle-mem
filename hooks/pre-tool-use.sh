@@ -96,12 +96,12 @@ Pending checks:"
     rtk_cmd=$(eagle_rtk_rewrite_command "$cmd")
     if [ -n "$rtk_cmd" ]; then
         if [ "$agent" = "codex" ] && [ "$raw_bash_mode" != "allow" ] && ! eagle_raw_bash_unlock_active; then
-            reason="Eagle Mem token guard blocked raw shell output.
+            reason="Eagle Mem blocked raw shell output to keep Codex context clean.
 
-Use RTK so large output is compact before it enters context:
+Recommended compact command:
   $rtk_cmd
 
-Temporary escape hatch for one-off raw output:
+One-off developer bypass:
   touch $EAGLE_RAW_BASH_UNLOCK"
             jq -nc --arg reason "$reason" '{
                 "decision":"block",
@@ -120,15 +120,15 @@ Temporary escape hatch for one-off raw output:
             context+="Eagle Mem token guard: rewrote raw shell command through RTK to reduce context load: ${rtk_cmd}. "
         fi
     elif [ "$rtk_mode" = "enforce" ] && ! command -v rtk >/dev/null 2>&1 && eagle_raw_output_command_needs_guard "$cmd" && ! eagle_raw_bash_unlock_active; then
-        reason="Eagle Mem token guard is set to enforce, but RTK is not installed or not on PATH.
+        reason="Eagle Mem blocked this command because RTK enforcement is on, but RTK is not installed or not on PATH.
 
 This command can dump raw output into agent context:
   $cmd
 
-Install RTK or disable enforcement:
+Install RTK or switch enforcement to auto:
   eagle-mem config set token_guard.rtk auto
 
-Temporary escape hatch:
+One-off developer bypass:
   touch $EAGLE_RAW_BASH_UNLOCK"
         jq -nc --arg reason "$reason" '{
             "decision":"block",

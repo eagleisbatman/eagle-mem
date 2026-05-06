@@ -200,8 +200,8 @@ esac
 
 eagle_posttool_mirror_writes "$tool_name" "$fp" "$session_id" "$project" "$agent"
 eagle_posttool_mirror_tasks "$tool_name" "$session_id" "$project" "$input" "$agent"
-eagle_posttool_stale_hint "$tool_name" "$fp" "$project"
-eagle_posttool_decision_surface "$tool_name" "$fp" "$project"
+eagle_posttool_stale_hint "$tool_name" "$fp" "$project" "$agent"
+eagle_posttool_decision_surface "$tool_name" "$fp" "$project" "$agent"
 
 # ─── Record observation ──────────────────────────────────
 

@@ -57,12 +57,16 @@ SQL
 }
 
 eagle_get_recent_summaries() {
-    local project; project=$(eagle_sql_escape "$1")
+    local project_scope="${1:-}"
     local limit; limit=$(eagle_sql_int "${2:-5}")
+    local project_filter="1 = 1"
+    if [ -n "$project_scope" ]; then
+        project_filter=$(eagle_sql_project_scope_condition "s.project" "$project_scope")
+    fi
 
     eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.decisions, s.gotchas, s.key_files, s.agent
               FROM summaries s
-              WHERE s.project = '$project'
+              WHERE $project_filter
               AND COALESCE(s.request, '') NOT LIKE '%<local-command-caveat>%'
               AND COALESCE(s.request, '') NOT LIKE '# AGENTS.md instructions%'
               AND COALESCE(s.request, '') NOT LIKE '<environment_context>%'
@@ -73,13 +77,12 @@ eagle_get_recent_summaries() {
 eagle_search_summaries() {
     local query; query=$(eagle_fts_sanitize "$1")
     query=$(eagle_sql_escape "$query")
-    local project="${2:-}"
+    local project_scope="${2:-}"
     local limit; limit=$(eagle_sql_int "${3:-10}")
 
     local where_clause=""
-    if [ -n "$project" ]; then
-        project=$(eagle_sql_escape "$project")
-        where_clause="AND s.project = '$project'"
+    if [ -n "$project_scope" ]; then
+        where_clause="AND $(eagle_sql_project_scope_condition "s.project" "$project_scope")"
     fi
 
     eagle_db "SELECT s.request, s.completed, s.learned, s.next_steps, s.created_at, s.project, s.decisions, s.gotchas, s.key_files, s.agent
@@ -89,8 +92,17 @@ eagle_search_summaries() {
               AND COALESCE(s.request, '') NOT LIKE '%<local-command-caveat>%'
               AND COALESCE(s.request, '') NOT LIKE '# AGENTS.md instructions%'
               AND COALESCE(s.request, '') NOT LIKE '<environment_context>%'
+              AND COALESCE(s.request, '') NOT LIKE '<subagent_notification>%'
+              AND COALESCE(s.request, '') NOT LIKE '</subagent_notification>%'
               $where_clause
-              ORDER BY rank
+              ORDER BY
+                CASE
+                  WHEN julianday('now') - julianday(s.created_at) <= 14 THEN 0
+                  WHEN julianday('now') - julianday(s.created_at) <= 45 THEN 1
+                  ELSE 2
+                END,
+                s.created_at DESC,
+                rank
               LIMIT $limit;"
 }
 

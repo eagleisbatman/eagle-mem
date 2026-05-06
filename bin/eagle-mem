@@ -21,6 +21,7 @@ case "$command" in
     uninstall)  bash "$SCRIPTS_DIR/uninstall.sh" "$@" ;;
     search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
     health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
+    doctor)     bash "$SCRIPTS_DIR/doctor.sh" "$PACKAGE_DIR" "$@" ;;
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     updates)    bash "$SCRIPTS_DIR/updates.sh" "$@" ;;
     statusline) "$SCRIPTS_DIR/statusline-em.sh" "$@" ;;

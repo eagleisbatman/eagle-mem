@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.9.6 hardens hooks, updates, and SQLite:** Stop hooks save immediately and queue LLM enrichment in the background instead of launching nested agents during turn shutdown. Updates also queue slow project backfills instead of blocking install completion. SQLite calls resolve through one FTS5-capable binary selector, so Android SDK or other PATH shims do not accidentally break Eagle Mem.
+**v4.9.7 focuses on distribution trust and visible UX:** `eagle-mem doctor` now checks the installed runtime, selected SQLite/FTS5 binary, hooks, statusline wiring, install manifest, and runtime drift. Install/update show a clear "what will change" preflight, uninstall supports dry-run cleanup with backups, and statuslines now resolve the live session project so brand-new projects do not inherit old memory/session counts.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -63,9 +63,10 @@ Both agents share the same SQLite database at `~/.eagle-mem/memory.db`, and capt
 ```bash
 npm install -g eagle-mem
 eagle-mem install
+eagle-mem doctor
 ```
 
-That's it. Open Claude Code or Codex in any project directory. Eagle Mem activates automatically.
+That's it. `doctor` should report a healthy install. Open Claude Code or Codex in any project directory and Eagle Mem activates automatically.
 
 Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, prunes stale data, and installs patch bug fixes — all in the background via hooks.
 
@@ -134,10 +135,11 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | Command | What It Does |
 |---------|-------------|
 | `eagle-mem install` | First-time setup: hooks, database, skills |
-| `eagle-mem update` | Re-deploy hooks and run migrations after `npm update` |
-| `eagle-mem uninstall` | Remove hooks and optionally delete data |
+| `eagle-mem update` | Re-deploy hooks, refresh the install manifest, and run migrations after `npm update` |
+| `eagle-mem uninstall` | Remove hooks/statuslines/skills/instruction blocks, with `--dry-run` and backups |
 | `eagle-mem search` | Search past sessions, memories, and code |
 | `eagle-mem health` | Diagnose pipeline health and background automation |
+| `eagle-mem doctor` | Verify installed runtime files, hooks, SQLite/FTS5, statusline, manifest, and drift |
 | `eagle-mem config` | View or change LLM provider and token-guard settings |
 | `eagle-mem updates` | View or change auto-update policy |
 | `eagle-mem guard` | Manage regression guardrails for files |
@@ -151,6 +153,31 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
+
+### Trust and Recovery
+
+Eagle Mem now treats installation as a visible product surface, not a black box:
+
+```bash
+eagle-mem doctor             # human install report
+eagle-mem doctor --json      # automation-friendly report
+eagle-mem uninstall --dry-run
+```
+
+Install and update print the files/configs they intend to touch before they change the runtime. The installed runtime writes `~/.eagle-mem/install-manifest.json` with file sizes, modes, and SHA-256 hashes, so `doctor` can tell whether hooks, scripts, libraries, and database helpers still match the package that installed them.
+
+Uninstall removes Claude Code and Codex hook registrations, Eagle Mem instruction blocks, custom Claude statusline integration, and skill links. It backs up user config files before editing them and keeps `~/.eagle-mem/memory.db` unless you explicitly confirm data deletion.
+
+### v4.9.7 Patch
+
+This patch is a release-readiness and UX-hardening pass:
+
+- `eagle-mem doctor` reports the install footprint, selected SQLite binary, FTS5 availability, hook registration, statusline wiring, install-manifest health, and runtime drift.
+- Install/update show a clear preflight plan, refresh the manifest, and keep rollback backups aware of the manifest/version files.
+- Uninstall supports `--dry-run`, backs up config files, removes Claude/Codex hook and instruction integrations, cleans up skill links, and preserves runtime data by default.
+- Claude statusline/HUD rendering is centralized through `scripts/statusline-em.sh --hud`.
+- Statusline project resolution now prefers the live session row and avoids `$HOME` ancestor leakage, so new projects show their own sessions/memories instead of stale counts from older workspaces.
+- Default hook/search/memory output follows the visible-surface UX contract: branded, compact, freshness-aware, and free of raw IDs/paths unless `--raw`, `--debug`, or `--json` is requested.
 
 ### v4.9.6 Patch
 

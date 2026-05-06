@@ -60,6 +60,7 @@ eagle_posttool_mirror_tasks() {
 
 eagle_posttool_stale_hint() {
     local tool_name="$1" fp="$2" project="$3"
+    local agent="${4:-$(eagle_agent_source)}"
 
     case "$tool_name" in
         Write|Edit|apply_patch)
@@ -77,9 +78,16 @@ eagle_posttool_stale_hint() {
                                 local stale_hit
                                 stale_hit=$(eagle_search_stale_memories "$project" "$fts_query")
                                 if [ -n "$stale_hit" ]; then
-                                    local stale_msg="=== Eagle Mem: Memory Check ===
+                                    local stale_msg
+                                    if [ "$agent" = "codex" ]; then
+                                        stale_msg="Eagle Mem memory check:
+- Memory '${stale_hit}' may reference '${fname}'.
+- If this edit contradicts that memory, update or correct the memory before relying on it."
+                                    else
+                                        stale_msg="=== Eagle Mem: Memory Check ===
 Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, update the memory.
 ================"
+                                    fi
                                     jq -nc --arg ctx "$stale_msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
                                 fi
                             fi
@@ -93,6 +101,7 @@ Memory '${stale_hit}' may reference '${fname}'. If your edit contradicts it, upd
 
 eagle_posttool_decision_surface() {
     local tool_name="$1" fp="$2" project="$3"
+    local agent="${4:-$(eagle_agent_source)}"
 
     case "$tool_name" in
         Read)
@@ -110,10 +119,17 @@ eagle_posttool_decision_surface() {
                                 local decision_hit
                                 decision_hit=$(eagle_search_decisions_for_file "$project" "$fts_query")
                                 if [ -n "$decision_hit" ]; then
-                                    read_context+="=== Eagle Mem: Decision Recall ===
+                                    if [ "$agent" = "codex" ]; then
+                                        read_context+="Eagle Mem decision recall:
+- ${fname}: ${decision_hit}
+- Do not revert without explicit user request.
+"
+                                    else
+                                        read_context+="=== Eagle Mem: Decision Recall ===
 ${fname}: ${decision_hit} — Do not revert without explicit user request.
 ================
 "
+                                    fi
                                 fi
                             fi
                         fi
@@ -123,17 +139,35 @@ ${fname}: ${decision_hit} — Do not revert without explicit user request.
                         if [ -n "$feature_hit" ]; then
                             while IFS='|' read -r feat_name feat_desc feat_verified _role feat_deps feat_other_files feat_smoke; do
                                 [ -z "$feat_name" ] && continue
-                                read_context+="=== Eagle Mem: Feature Guardrail ===
+                                if [ "$agent" = "codex" ]; then
+                                    read_context+="Eagle Mem feature guardrail:
+- '${fname}' is part of '${feat_name}'"
+                                    [ -n "$feat_desc" ] && read_context+=": ${feat_desc}"
+                                    read_context+=".
+"
+                                    [ -n "$feat_verified" ] && read_context+="- Last verified: ${feat_verified}.
+"
+                                    [ -n "$feat_deps" ] && read_context+="- Dependencies: ${feat_deps}.
+"
+                                    [ -n "$feat_other_files" ] && read_context+="- Related files: ${feat_other_files}.
+"
+                                    [ -n "$feat_smoke" ] && read_context+="- Smoke tests: ${feat_smoke}.
+"
+                                    read_context+="- Retest after changes before release.
+"
+                                else
+                                    read_context+="=== Eagle Mem: Feature Guardrail ===
 '${fname}' is part of feature '${feat_name}'"
-                                [ -n "$feat_desc" ] && read_context+=" ($feat_desc)"
-                                read_context+="."
-                                [ -n "$feat_verified" ] && read_context+=" Last verified: ${feat_verified}."
-                                [ -n "$feat_deps" ] && read_context+=" Dependencies: ${feat_deps}."
-                                [ -n "$feat_other_files" ] && read_context+=" Other files in pipeline: ${feat_other_files}."
-                                [ -n "$feat_smoke" ] && read_context+=" Smoke tests: ${feat_smoke}."
-                                read_context+=" Changes require re-testing after deploy.
+                                    [ -n "$feat_desc" ] && read_context+=" ($feat_desc)"
+                                    read_context+="."
+                                    [ -n "$feat_verified" ] && read_context+=" Last verified: ${feat_verified}."
+                                    [ -n "$feat_deps" ] && read_context+=" Dependencies: ${feat_deps}."
+                                    [ -n "$feat_other_files" ] && read_context+=" Other files in pipeline: ${feat_other_files}."
+                                    [ -n "$feat_smoke" ] && read_context+=" Smoke tests: ${feat_smoke}."
+                                    read_context+=" Changes require re-testing after deploy.
 ================
 "
+                                fi
                             done <<< "$feature_hit"
                         fi
 

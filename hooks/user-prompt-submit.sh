@@ -26,6 +26,8 @@ agent=$(eagle_agent_source_from_json "$input")
 [ -z "$user_prompt" ] && exit 0
 
 project=$(eagle_project_from_hook_input "$input")
+recall_scope=$(eagle_recall_project_scope_from_cwd "$cwd" "$project")
+[ -z "$recall_scope" ] && recall_scope="$project"
 codex_compact=0
 [ "$agent" = "codex" ] && codex_compact=1
 
@@ -46,8 +48,10 @@ if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
     if [ "$turn_count" -ge 30 ]; then
         if [ "$codex_compact" -eq 1 ]; then
             context+="
-=== Eagle Mem: Context Pressure Critical ($turn_count turns since compact) ===
-Keep the next Codex reply user-clean. Do not print Eagle Mem summary capture blocks or other internals. Include a short normal handoff note if useful, then ask the user to run /compact.
+Eagle Mem context pressure: critical ($turn_count turns since compact)
+- Keep the next Codex reply user-clean.
+- Do not print Eagle Mem summary blocks or internals.
+- Add a short normal handoff note if useful, then ask the user to run /compact.
 "
         else
             context+="
@@ -60,8 +64,10 @@ Tell the user to run /compact NOW to avoid losing context.
     elif [ "$turn_count" -ge 20 ]; then
         if [ "$codex_compact" -eq 1 ]; then
             context+="
-=== Eagle Mem: Context Pressure High ($turn_count turns since compact) ===
-Keep the next Codex reply clean. Do not print Eagle Mem summary capture blocks or other internals. Summarize any durable decisions in normal prose only.
+Eagle Mem context pressure: high ($turn_count turns since compact)
+- Keep the next Codex reply clean.
+- Do not print Eagle Mem summary blocks or internals.
+- Summarize durable decisions in normal prose only.
 "
         else
             context+="
@@ -89,8 +95,10 @@ fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:low
         split("the a an is are was were be been being have has had do does did will would shall should may might can could of in to for on with at by from", sw, " ")
         for (i in sw) stop[sw[i]]=1
         n=0
+        split("ad ai ui ux db", keep, " ")
+        for (i in keep) short_keep[keep[i]]=1
         for (i=1; i<=NF && n<6; i++) {
-            if (length($i) > 2 && !($i in stop)) {
+            if ((length($i) > 2 || ($i in short_keep)) && !($i in stop)) {
                 printf "%s%s", (n>0?" OR ":""), $i; n++
             }
         }
@@ -106,8 +114,10 @@ fi
 lower_prompt=$(printf '%s' "$user_prompt" | tr '[:upper:]' '[:lower:]')
 if printf '%s\n' "$lower_prompt" | grep -Eq '(orchestrat|worker|parallel|multi-agent|multi agent|split|lane|scope out|plan and get started|broad|full codebase|release|publish|ship)'; then
     if [ "$codex_compact" -eq 1 ]; then
-        context+="=== Eagle Mem: Orchestration Protocol ===
-For broad work, you run eagle-mem orchestrate yourself. Use durable lanes, opposite-agent workers, and concise user-visible status.
+        context+="
+Eagle Mem orchestration:
+- For broad work, you run eagle-mem orchestrate yourself.
+- Use durable lanes, opposite-agent workers, and concise user-visible status.
 "
     else
         context+="=== Eagle Mem: Orchestration Protocol ===
@@ -131,11 +141,23 @@ if [ "$codex_compact" -eq 1 ]; then
     code_limit=2
 fi
 
-results=$(eagle_search_summaries "$fts_query" "$project" "$summary_limit")
+memory_limit=3
+[ "$codex_compact" -eq 1 ] && memory_limit=2
 
-if [ -n "$results" ]; then
-    context+="=== Eagle Mem: Relevant Recall ===
+results=$(eagle_search_summaries "$fts_query" "$recall_scope" "$summary_limit")
+memory_results=$(eagle_search_agent_memories "$fts_query" "$recall_scope" "$memory_limit" 2>/dev/null || true)
+
+if [ -n "$results" ] || [ -n "$memory_results" ]; then
+    if [ "$codex_compact" -eq 1 ]; then
+        context+="
+Eagle Mem recalls:
 "
+    else
+        context+="Eagle Mem recalls: apply these retrieved project facts before answering. If they are relevant to the user's prompt, start with one short \"Eagle Mem recalls:\" attribution line.
+
+=== Eagle Mem: Relevant Recall ===
+"
+    fi
     while IFS='|' read -r req completed learned _next_steps created_at _proj decisions gotchas key_files summary_agent; do
         [ -z "$req" ] && [ -z "$completed" ] && continue
         origin_label=$(eagle_agent_label "$summary_agent")
@@ -143,13 +165,14 @@ if [ -n "$results" ]; then
             req=$(eagle_trim_text "$req" 90)
             completed=$(eagle_trim_text "$completed" 150)
             learned=$(eagle_trim_text "$learned" 110)
-            context+="- [$origin_label] "
+            context+="- Recent [$origin_label]: "
             if [ -n "$completed" ]; then
                 context+="$completed"
             else
                 context+="$req"
             fi
-            [ -n "$learned" ] && context+=" | learned: $learned"
+            [ -n "$learned" ] && context+="
+  Learned: $learned"
             context+="
 "
         else
@@ -173,6 +196,30 @@ if [ -n "$results" ]; then
 "
         fi
     done <<< "$results"
+
+    while IFS='|' read -r mname mtype mdesc msnippet _mfile _mupdated morigin; do
+        [ -z "$mname" ] && continue
+        case "$mname" in
+            "Codex Memory Registry"|"Codex Memory Summary") continue ;;
+        esac
+        origin_label=$(eagle_agent_label "$morigin")
+        if [ "$codex_compact" -eq 1 ]; then
+            mdesc=$(eagle_trim_text "$mdesc" 120)
+            context+="- Memory [$mtype][$origin_label]: $mname"
+            [ -n "$mdesc" ] && context+=" — $mdesc"
+            context+="
+"
+        else
+            mdesc=$(eagle_trim_text "$mdesc" 180)
+            msnippet=$(eagle_trim_text "$msnippet" 220)
+            context+="[Memory][$origin_label][$mtype] $mname"
+            [ -n "$mdesc" ] && context+=" — $mdesc"
+            [ -n "$msnippet" ] && context+="
+  Snippet: $msnippet"
+            context+="
+"
+        fi
+    done <<< "$memory_results"
 fi
 
 # Search indexed code chunks (if any exist for this project)
@@ -181,11 +228,21 @@ if [ "${has_chunks:-0}" -gt 0 ]; then
     code_results=$(eagle_search_code_chunks "$fts_query" "$project" "$code_limit")
 
     if [ -n "$code_results" ]; then
-        context+="=== Eagle Mem: Relevant Code ===
+        if [ "$codex_compact" -eq 1 ]; then
+            context+="
+Relevant code:
 "
+        else
+            context+="=== Eagle Mem: Relevant Code ===
+"
+        fi
         while IFS='|' read -r fpath sline eline lang; do
             [ -z "$fpath" ] && continue
-            context+="$fpath:${sline}-${eline}"
+            if [ "$codex_compact" -eq 1 ]; then
+                context+="- $fpath:${sline}-${eline}"
+            else
+                context+="$fpath:${sline}-${eline}"
+            fi
             [ -n "$lang" ] && context+=" ($lang)"
             context+="
 "
@@ -197,7 +254,7 @@ fi
 
 if [ "$codex_compact" -eq 1 ]; then
     context+="
-Use only if directly useful. If you mention it to the user, keep Eagle Mem attribution to one short line.
+Note: use only if directly useful. If you mention it to the user, keep Eagle Mem attribution to one short line.
 "
 else
     context+="

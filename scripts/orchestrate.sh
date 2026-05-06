@@ -797,9 +797,9 @@ orchestrate_worker_run_script() {
         printf 'printf "%%s\\n" "$rc" > %q\n' "$exit_path"
         printf 'date -u "+%%Y-%%m-%%dT%%H:%%M:%%SZ" > %q.done\n' "$exit_path"
         echo 'if [ "$rc" -eq 0 ]; then'
-        printf '  bash %q orchestrate lane --project %q --name %q complete %q --notes %q >/dev/null 2>&1\n' "$bin_path" "$project" "$name" "$lane_key" "$complete_note"
+        printf '  bash %q orchestrate --project %q --name %q lane complete %q --notes %q >/dev/null 2>&1\n' "$bin_path" "$project" "$name" "$lane_key" "$complete_note"
         echo 'else'
-        printf '  bash %q orchestrate lane --project %q --name %q block %q --notes %q >/dev/null 2>&1\n' "$bin_path" "$project" "$name" "$lane_key" "$block_note"
+        printf '  bash %q orchestrate --project %q --name %q lane block %q --notes %q >/dev/null 2>&1\n' "$bin_path" "$project" "$name" "$lane_key" "$block_note"
         echo 'fi'
         echo 'exit "$rc"'
     } > "$run_script"
