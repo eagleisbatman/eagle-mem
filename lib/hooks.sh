@@ -47,4 +47,5 @@ eagle_patch_hook() {
     tmp=$(mktemp)
     jq --argjson entry "$entry" ".hooks.${event} = ((.hooks.${event} // []) + [\$entry])" "$settings" > "$tmp" && mv "$tmp" "$settings"
     [ -n "$description" ] && eagle_ok "$description"
+    return 0
 }
