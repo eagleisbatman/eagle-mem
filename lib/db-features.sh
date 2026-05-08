@@ -110,16 +110,16 @@ eagle_record_pending_feature_verifications() {
         local fid; fid=$(eagle_sql_int "$feature_id")
         local name_esc; name_esc=$(eagle_sql_escape "$feature_name")
 
-        if [ -n "$change_fingerprint" ]; then
-            already_resolved=$(eagle_db "SELECT 1 FROM pending_feature_verifications
-                WHERE project = '$p_esc'
-                  AND feature_id = $fid
-                  AND file_path = '$fp_esc'
-                  AND change_fingerprint = '$fp_hash_esc'
-                  AND status IN ('verified', 'waived')
-                LIMIT 1;")
-            [ -n "$already_resolved" ] && continue
-        fi
+        already_resolved=$(eagle_db "SELECT 1 FROM pending_feature_verifications
+            WHERE project = '$p_esc'
+              AND feature_id = $fid
+              AND file_path = '$fp_esc'
+              AND (
+                  (change_fingerprint = '$fp_hash_esc' AND status = 'verified')
+                  OR status = 'waived'
+              )
+            LIMIT 1;")
+        [ -n "$already_resolved" ] && continue
 
         eagle_db "INSERT INTO pending_feature_verifications
             (project, feature_id, feature_name, file_path, reason, source_session_id, trigger_tool, change_fingerprint)

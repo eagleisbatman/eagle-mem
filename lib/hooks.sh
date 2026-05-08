@@ -4,6 +4,18 @@
 # Shared by install.sh and update.sh
 # ═══════════════════════════════════════════════════════════
 
+eagle_clean_hook_entries() {
+    local settings="$1"
+    local event="$2"
+    local command="$3"
+
+    local tmp
+    tmp=$(mktemp)
+    jq --arg cmd "$command" \
+        ".hooks.${event} = ((.hooks.${event} // []) | map(select(.hooks | all(.command != \$cmd))))" \
+        "$settings" > "$tmp" && mv "$tmp" "$settings"
+}
+
 eagle_patch_hook() {
     local settings="$1"
     local event="$2"

@@ -18,8 +18,8 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-cwd=$(echo "$input" | jq -r '.cwd // empty')
+IFS=$'\x1f' read -r session_id cwd <<< \
+    "$(echo "$input" | jq -r '[.session_id, .cwd] | map(. // "") | join("")')"
 user_prompt=$(echo "$input" | jq -r '.prompt // empty')
 agent=$(eagle_agent_source_from_json "$input")
 

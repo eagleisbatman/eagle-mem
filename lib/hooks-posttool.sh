@@ -33,31 +33,6 @@ eagle_posttool_mirror_writes() {
     esac
 }
 
-eagle_posttool_mirror_tasks() {
-    local tool_name="$1" session_id="$2" project="$3" input="$4"
-    local agent="${5:-$(eagle_agent_source)}"
-
-    case "$tool_name" in
-        TaskCreate|TaskUpdate)
-            if eagle_validate_session_id "$session_id"; then
-                local task_dir="$EAGLE_CLAUDE_TASKS_DIR/$session_id"
-                if [ -d "$task_dir" ]; then
-                    local task_id
-                    task_id=$(echo "$input" | jq -r '.tool_input.id // empty')
-                    if [ -z "$task_id" ]; then
-                        local newest
-                        newest=$(ls -t "$task_dir"/*.json 2>/dev/null | head -1)
-                        [ -n "$newest" ] && [ -f "$newest" ] && eagle_capture_agent_task "$newest" "$session_id" "$project" "$agent"
-                    elif eagle_validate_session_id "$task_id"; then
-                        local task_json="$task_dir/$task_id.json"
-                        [ -f "$task_json" ] && eagle_capture_agent_task "$task_json" "$session_id" "$project" "$agent"
-                    fi
-                fi
-            fi
-            ;;
-    esac
-}
-
 eagle_posttool_stale_hint() {
     local tool_name="$1" fp="$2" project="$3"
     local agent="${4:-$(eagle_agent_source)}"

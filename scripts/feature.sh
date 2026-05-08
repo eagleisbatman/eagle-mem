@@ -125,13 +125,7 @@ case "$subcommand" in
 
     waive)
         id="${1:-}"
-        [ -z "$id" ] && { eagle_err "Usage: eagle-mem feature waive <id> --reason <text>"; exit 1; }
-        case "$id" in
-            *[!0-9]*)
-                eagle_err "Invalid ID: '$id' (must be numeric)"
-                exit 1
-                ;;
-        esac
+        [ -z "$id" ] && { eagle_err "Usage: eagle-mem feature waive <id|name> --reason <text>"; exit 1; }
         shift
         reason=""
         while [ $# -gt 0 ]; do
@@ -147,14 +141,27 @@ case "$subcommand" in
                 *) reason="$1"; shift ;;
             esac
         done
-        [ -z "$reason" ] && { eagle_err "Usage: eagle-mem feature waive <id> --reason <text>"; exit 1; }
-        waived=$(eagle_waive_pending_feature_verification "$project" "$id" "$reason" | tail -1)
-        if [ "${waived:-0}" -gt 0 ] 2>/dev/null; then
-            eagle_ok "Pending verification #$id waived"
-        else
-            eagle_err "No pending verification found with ID $id"
-            exit 1
-        fi
+        [ -z "$reason" ] && { eagle_err "Usage: eagle-mem feature waive <id|name> --reason <text>"; exit 1; }
+        case "$id" in
+            *[!0-9]*)
+                waived=$(eagle_resolve_pending_feature_verifications "$project" "$id" "waived" "$reason" | tail -1)
+                if [ "${waived:-0}" -gt 0 ] 2>/dev/null; then
+                    eagle_ok "Waived $waived pending verification(s) for '$id'"
+                else
+                    eagle_err "No pending verifications found for feature '$id'"
+                    exit 1
+                fi
+                ;;
+            *)
+                waived=$(eagle_waive_pending_feature_verification "$project" "$id" "$reason" | tail -1)
+                if [ "${waived:-0}" -gt 0 ] 2>/dev/null; then
+                    eagle_ok "Pending verification #$id waived"
+                else
+                    eagle_err "No pending verification found with ID $id"
+                    exit 1
+                fi
+                ;;
+        esac
         ;;
 
     add)

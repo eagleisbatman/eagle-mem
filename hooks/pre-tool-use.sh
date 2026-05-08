@@ -21,7 +21,8 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
-tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+IFS=$'\x1f' read -r tool_name session_id cwd <<< \
+    "$(echo "$input" | jq -r '[.tool_name, .session_id, .cwd] | map(. // "") | join("")')"
 agent=$(eagle_agent_source_from_json "$input")
 
 case "$tool_name" in
@@ -30,9 +31,6 @@ case "$tool_name" in
 esac
 
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
-
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-cwd=$(echo "$input" | jq -r '.cwd // empty')
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
 
@@ -77,8 +75,6 @@ Pending checks:"
             done <<< "$pending_rows"
 
             jq -nc --arg reason "$block_reason" '{
-                "decision":"block",
-                "reason":$reason,
                 "hookSpecificOutput":{
                     "hookEventName":"PreToolUse",
                     "permissionDecision":"deny",
@@ -104,8 +100,6 @@ Recommended compact command:
 One-off developer bypass:
   touch $EAGLE_RAW_BASH_UNLOCK"
             jq -nc --arg reason "$reason" '{
-                "decision":"block",
-                "reason":$reason,
                 "hookSpecificOutput":{
                     "hookEventName":"PreToolUse",
                     "permissionDecision":"deny",
@@ -131,8 +125,6 @@ Install RTK or switch enforcement to auto:
 One-off developer bypass:
   touch $EAGLE_RAW_BASH_UNLOCK"
         jq -nc --arg reason "$reason" '{
-            "decision":"block",
-            "reason":$reason,
             "hookSpecificOutput":{
                 "hookEventName":"PreToolUse",
                 "permissionDecision":"deny",

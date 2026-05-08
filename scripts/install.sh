@@ -226,7 +226,11 @@ if [ "$claude_found" = true ]; then
         "$EAGLE_MEM_DIR/hooks/stop.sh" \
         "Stop hook"
 
-    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskCreate|TaskUpdate" \
+    # Clean old registrations before re-registering (handles matcher changes across versions)
+    eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+
+    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" \
         "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
         "PostToolUse hook"
 
@@ -246,21 +250,9 @@ if [ "$claude_found" = true ]; then
         "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
         "UserPromptSubmit hook"
 
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash" \
+    eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" \
         "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-        "PreToolUse hook (Bash)"
-
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Read" \
-        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-        "PreToolUse hook (Read)"
-
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Edit" \
-        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-        "PreToolUse hook (Edit)"
-
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Write" \
-        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-        "PreToolUse hook (Write)"
+        "PreToolUse hook"
 else
     eagle_info "Claude hooks skipped ${DIM}(Claude Code not detected)${RESET}"
 fi

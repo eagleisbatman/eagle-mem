@@ -17,12 +17,9 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-cwd=$(echo "$input" | jq -r '.cwd // empty')
-tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+IFS=$'\x1f' read -r session_id cwd tool_name hook_event <<< \
+    "$(echo "$input" | jq -r '[.session_id, .cwd, .tool_name, .hook_event_name] | map(. // "") | join("")')"
 agent=$(eagle_agent_source_from_json "$input")
-
-hook_event=$(echo "$input" | jq -r '.hook_event_name // empty')
 
 if [ -z "$session_id" ]; then exit 0; fi
 
@@ -73,7 +70,7 @@ esac
 
 # Only track relevant tools
 case "$tool_name" in
-    Read|Write|Edit|TaskCreate|TaskUpdate|apply_patch) ;;
+    Read|Write|Edit|apply_patch|TaskUpdate) ;;
     *) eagle_is_shell_tool "$tool_name" || exit 0 ;;
 esac
 
@@ -153,9 +150,18 @@ case "$tool_name" in
             *) command_category="other" ;;
         esac
         ;;
-    TaskCreate|TaskUpdate)
-        task_subject=$(echo "$input" | jq -r '.tool_input.subject // empty')
-        tool_summary="$tool_name: $task_subject"
+    TaskUpdate)
+        task_id=$(echo "$input" | jq -r '.tool_input.taskId // empty')
+        task_status=$(echo "$input" | jq -r '.tool_input.status // empty')
+        tool_summary="TaskUpdate: ${task_id} → ${task_status}"
+        if [ -n "$task_id" ] && [ -n "$task_status" ]; then
+            fp_sql=$(eagle_sql_escape "event://${session_id}/${task_id}")
+            stat_sql=$(eagle_sql_escape "$task_status")
+            eagle_db_pipe <<SQL
+UPDATE agent_tasks SET status = '$stat_sql', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE file_path = '$fp_sql';
+SQL
+        fi
         ;;
 esac
 
@@ -199,7 +205,6 @@ esac
 # ─── Dispatch to extracted responsibilities ───────────────
 
 eagle_posttool_mirror_writes "$tool_name" "$fp" "$session_id" "$project" "$agent"
-eagle_posttool_mirror_tasks "$tool_name" "$session_id" "$project" "$input" "$agent"
 eagle_posttool_stale_hint "$tool_name" "$fp" "$project" "$agent"
 eagle_posttool_decision_surface "$tool_name" "$fp" "$project" "$agent"
 

@@ -21,16 +21,12 @@ eagle_ensure_db
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
-session_id=$(echo "$input" | jq -r '.session_id // empty')
-cwd=$(echo "$input" | jq -r '.cwd // empty')
-transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
+IFS=$'\x1f' read -r session_id cwd transcript_path agent_type <<< \
+    "$(echo "$input" | jq -r '[.session_id, .cwd, .transcript_path, .agent_type] | map(. // "") | join("")')"
 last_assistant_message=$(echo "$input" | jq -r '.last_assistant_message // empty')
 agent=$(eagle_agent_source_from_json "$input")
 
 [ -z "$session_id" ] && exit 0
-
-# Skip subagent contexts
-agent_type=$(echo "$input" | jq -r '.agent_type // empty')
 [ -n "$agent_type" ] && [ "$agent_type" != "main" ] && exit 0
 
 project=$(eagle_project_from_hook_input "$input")

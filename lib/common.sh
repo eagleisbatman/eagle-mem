@@ -672,6 +672,15 @@ eagle_project_from_hook_input() {
     cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
     transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
 
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+        project=$(eagle_project_from_workspace_path "$CLAUDE_PROJECT_DIR")
+        if [ -n "$project" ]; then
+            [ -n "$session_id" ] && eagle_remember_session_project "$session_id" "$project" 1 >/dev/null 2>&1
+            printf '%s\n' "$project"
+            return
+        fi
+    fi
+
     workspace_project=$(printf '%s' "$input" | jq -r '.workspace.project_dir // empty' 2>/dev/null)
     if [ -n "$workspace_project" ]; then
         project=$(eagle_project_from_workspace_path "$workspace_project")
