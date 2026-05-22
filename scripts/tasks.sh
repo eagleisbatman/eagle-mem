@@ -21,6 +21,7 @@ action="pending"
 case "${1:-}" in
     -*)  ;; # flags parsed below
     "")  ;;
+    stale) action="stale"; shift ;;
     *)   action="$1"; shift ;;
 esac
 
@@ -41,6 +42,7 @@ show_help() {
     echo -e "    eagle-mem tasks ${CYAN}start${RESET} <id>       ${DIM}# mark task in_progress${RESET}"
     echo -e "    eagle-mem tasks ${CYAN}complete${RESET} <id>    ${DIM}# mark task completed${RESET}"
     echo -e "    eagle-mem tasks ${CYAN}cancel${RESET} <id>      ${DIM}# mark task cancelled${RESET}"
+    echo -e "    eagle-mem tasks ${CYAN}stale${RESET}            ${DIM}# show only long-in_progress tasks (discipline check)"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
     echo -e "    ${CYAN}-p, --project${RESET} <name>    Project name (default: current dir)"
@@ -78,6 +80,7 @@ tasks_list() {
     case "$filter" in
         pending) where_status="AND status IN ('pending', 'in_progress')" ;;
         completed) where_status="AND status = 'completed'" ;;
+        stale)   where_status="AND status = 'in_progress' AND updated_at < datetime('now', '-7 days')" ;;
         all) where_status="" ;;
     esac
 
@@ -91,7 +94,7 @@ tasks_list() {
     fi
 
     local results
-    results=$(eagle_db "SELECT source_task_id, subject, status, blocked_by, description
+    results=$(eagle_db "SELECT source_task_id, subject, status, blocked_by, description, updated_at
                         FROM agent_tasks
                         WHERE project = '$project_sql' $where_status
                         ORDER BY
@@ -109,15 +112,26 @@ tasks_list() {
     echo -e "  ${DIM}─────────────────────────────────────${RESET}"
     echo ""
 
-    while IFS='|' read -r tid subject status blocked_by desc; do
+    while IFS='|' read -r tid subject status blocked_by desc updated_at; do
         [ -z "$tid" ] && continue
-        local icon marker
+        local icon marker=""
         case "$status" in
-            in_progress) icon="${CYAN}>${RESET}"; marker=" ${CYAN}[in_progress]${RESET}" ;;
-            pending)     icon="${DIM}o${RESET}"; marker="" ;;
+            in_progress)
+                icon="${CYAN}>${RESET}"
+                marker=" ${CYAN}[in_progress]${RESET}"
+                # Staleness check for discipline
+                if [ -n "$updated_at" ]; then
+                    local age_days
+                    age_days=$(echo "SELECT (julianday('now') - julianday('$updated_at'))" | sqlite3 "$EAGLE_MEM_DB" 2>/dev/null | cut -d. -f1)
+                    if [ -n "$age_days" ] && [ "$age_days" -gt 7 ]; then
+                        marker+=" ${RED}[STALE - ${age_days}d]${RESET}"
+                    fi
+                fi
+                ;;
+            pending)     icon="${DIM}o${RESET}" ;;
             completed)   icon="${GREEN}+${RESET}"; marker=" ${DIM}[completed]${RESET}" ;;
             cancelled)   icon="${RED}x${RESET}"; marker=" ${RED}[cancelled]${RESET}" ;;
-            *)           icon="$DOT"; marker="" ;;
+            *)           icon="$DOT" ;;
         esac
         if [ "$blocked_by" != "[]" ] && [ -n "$blocked_by" ]; then
             marker+=" ${DIM}(blocked)${RESET}"
@@ -346,6 +360,7 @@ case "$action" in
     list)       tasks_list "all" ;;
     pending)    tasks_list "pending" ;;
     completed)  tasks_list "completed" ;;
+    stale)      tasks_list "stale" ;;
     search)     tasks_search ;;
     add)        tasks_add ;;
     update)     tasks_update ;;

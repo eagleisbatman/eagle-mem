@@ -117,6 +117,14 @@ if [ -d "$EAGLE_CODEX_SKILLS_DIR" ]; then
     done
 fi
 
+if [ -d "$EAGLE_GROK_SKILLS_DIR" ]; then
+    for target in "$EAGLE_GROK_SKILLS_DIR"/eagle-mem-*; do
+        [ -L "$target" ] || [ -d "$target" ] || continue
+        rm -rf "$target"
+        eagle_ok "Grok skill removed: $(basename "$target")"
+    done
+fi
+
 # ─── Optionally wipe data ─────────────────────────────────
 
 if [ -d "$EAGLE_MEM_DIR" ]; then

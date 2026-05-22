@@ -146,6 +146,7 @@ ensure_rtk
 # Claude Code / Codex
 claude_found=false
 codex_found=false
+grok_found=false
 
 if [ -d "$HOME/.claude" ]; then
     eagle_ok "Claude Code ${DIM}(~/.claude/)${RESET}"
@@ -164,12 +165,17 @@ else
     eagle_warn "Codex not found ${DIM}(~/.codex/ missing and codex not on PATH)${RESET}"
 fi
 
-if [ "$claude_found" = false ] && [ "$codex_found" = false ]; then
+if [ -d "$EAGLE_GROK_DIR" ]; then
+    grok_found=true
+    eagle_ok "Grok ${DIM}($EAGLE_GROK_DIR/)${RESET}"
+else
+    eagle_warn "Grok not found ${DIM}(~/.grok/ does not exist)${RESET}"
+fi
+
+if [ "$claude_found" = false ] && [ "$codex_found" = false ] && [ "$grok_found" = false ]; then
     eagle_fail "No supported agent install found"
     echo ""
-    eagle_dim "Install Claude Code or Codex first, then re-run:"
-    eagle_dim "  npm install -g @anthropic-ai/claude-code"
-    eagle_dim "  npm install -g @openai/codex"
+    eagle_dim "Install Claude Code, Codex, or ensure ~/.grok/ exists, then re-run."
     echo ""
     exit 1
 fi
@@ -289,6 +295,18 @@ if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
     done
 fi
 
+if [ "$grok_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    mkdir -p "$EAGLE_GROK_SKILLS_DIR"
+    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+        [ ! -d "$skill_dir" ] && continue
+        skill_name=$(basename "$skill_dir")
+        dst="$EAGLE_GROK_SKILLS_DIR/$skill_name"
+        [ -L "$dst" ] && rm "$dst"
+        ln -sf "$skill_dir" "$dst"
+        eagle_ok "Grok skill: $skill_name"
+    done
+fi
+
 # ─── Statusline integration ───────────────────────────────
 
 if [ "$claude_found" = true ]; then
@@ -391,7 +409,13 @@ eagle_kv "Database:" "$EAGLE_MEM_DIR/memory.db"
 eagle_kv "Hooks:" "$EAGLE_MEM_DIR/hooks/"
 [ "$claude_found" = true ] && eagle_kv "Claude settings:" "$SETTINGS"
 [ "$codex_found" = true ] && eagle_kv "Codex hooks:" "$EAGLE_CODEX_HOOKS"
+[ "$grok_found" = true ] && eagle_kv "Grok skills:" "$EAGLE_GROK_SKILLS_DIR"
 
 echo ""
-eagle_dim "Start a new Claude Code or Codex session — Eagle Mem will activate automatically."
+if [ "$grok_found" = true ]; then
+    eagle_dim "Grok skills installed. Run 'eagle-mem grok-bootstrap' for setup guidance and recall."
+fi
+if [ "$claude_found" = true ] || [ "$codex_found" = true ]; then
+    eagle_dim "Start a new Claude Code or Codex session — Eagle Mem will activate automatically."
+fi
 echo ""

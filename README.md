@@ -70,13 +70,13 @@ That's it. `doctor` should report a healthy install. Open Claude Code or Codex i
 
 Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, prunes stale data, and installs patch bug fixes — all in the background via hooks.
 
-For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md` with the Eagle Mem summary contract. For Claude Code, it keeps using `~/.claude/settings.json`, `CLAUDE.md`, `~/.claude/skills`, and the existing Claude memory/task locations.
+For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md`. For Claude Code, it integrates with `~/.claude/settings.json`, `CLAUDE.md`, and `~/.claude/skills`. Grok users get skill symlinks into `~/.grok/skills/` and can run `eagle-mem grok-bootstrap` for setup guidance.
 
 ### Prerequisites
 
 - `sqlite3` with FTS5 support (ships with macOS; Eagle Mem prefers known system/Homebrew SQLite binaries before PATH shims)
 - `jq` (the installer offers to install if missing)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, or both installed
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, or a Grok environment (`~/.grok/`)
 
 ## How It Works
 
@@ -107,6 +107,10 @@ These run automatically via SessionStart — no commands needed:
 ### Token Savings
 
 Eagle Mem actively reduces token consumption:
+
+### Compaction Survival
+
+One of the core promises of Eagle Mem is protecting against `/compact` and session amnesia. The system uses durable tasks, enriched `<eagle-summary>` blocks, SessionStart re-injection, and tools like `eagle-mem compaction` and `eagle-mem tasks stale` to ensure projects remain safe even after context resets. Run `eagle-mem compaction` anytime to check readiness.
 
 - **Injection compression** — zero-value stats are elided from the banner, overview is capped, compact reloads get 1 recent session instead of 3
 - **Command rewriting** — PreToolUse routes noisy shell output through RTK when available and blocks known raw-output commands in enforce mode when RTK is missing.
@@ -150,6 +154,9 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem orchestrate` | Coordinate durable worker lanes across agents |
 | `eagle-mem curate` | Run curator (co-edits, hot files, guardrails) |
 | `eagle-mem feature` | Track and verify features |
+| `eagle-mem compaction` | Check Compaction Survival status and readiness |
+| `eagle-mem grok-bootstrap` | Set up and verify Grok integration |
+| `eagle-mem test` | Run basic smoke tests for the memory layer |
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
 | `eagle-mem index` | Index source files for FTS5 code search |
@@ -361,6 +368,17 @@ eagle-mem config set token_guard.rtk enforce   # block known raw-output commands
 eagle-mem config set token_guard.rtk off       # disable RTK behavior
 eagle-mem config set token_guard.raw_bash block
 ```
+
+## Long-term Direction
+
+The current implementation is pure Bash + SQLite (with FTS5) for maximum portability, zero runtime dependencies, and easy auditing. This has proven effective for the core goals of recall, guardrails, and cross-agent coordination.
+
+Future evolution paths under consideration (Phase 3 work):
+- Incremental native helpers in Rust for hot paths (large FTS searches, heavy curation workloads, very large observation tables)
+- Optional full Rust runtime for the core if Bash becomes a bottleneck on extremely long-lived projects
+- Deeper native hooks and recall injection for additional agent environments
+
+The guiding principles remain the same: local-only, no daemon, no vector database, strong anti-regression guarantees, and excellent visibility for the human using the agents.
 
 ## License
 

@@ -5,11 +5,11 @@
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LIB_DIR="$SCRIPT_DIR/../lib"
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPTS_DIR/../lib"
 
+. "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
-. "$SCRIPT_DIR/style.sh"
 . "$LIB_DIR/db.sh"
 . "$LIB_DIR/provider.sh"
 . "$LIB_DIR/updater.sh"
@@ -167,6 +167,19 @@ fi
 orch_route=$(eagle_config_get "orchestration" "route" "opposite")
 orch_auto_worktree=$(eagle_config_get "orchestration" "auto_worktree" "true")
 orch_worktree_root=$(eagle_config_get "orchestration" "worktree_root" "")
+
+active_lanes=$(eagle_db "SELECT COUNT(*) FROM orchestration_lanes WHERE project='$p_esc' AND status NOT IN ('completed','cancelled')" 2>/dev/null || echo 0)
+if [ "$active_lanes" -gt 0 ]; then
+    eagle_info "Active orchestration lanes: $active_lanes (use 'eagle-mem orchestrate' or 'eagle-mem compaction' for details)"
+else
+    eagle_dim "  No active orchestration lanes"
+fi
+
+# ─── Curator / RTK enhancements visibility ──────────────────
+
+learned_rules=$(eagle_db "SELECT COUNT(*) FROM command_rules" 2>/dev/null || echo 0)
+last_curated=$(eagle_db "SELECT value FROM eagle_meta WHERE key = 'last_curated'" 2>/dev/null || echo "never")
+eagle_dim "  Curator: $learned_rules command rules learned, last run: $last_curated"
 orch_codex_model=$(eagle_config_get "orchestration" "codex_worker_model" "gpt-5.5")
 orch_codex_effort=$(eagle_config_get "orchestration" "codex_worker_effort" "xhigh")
 orch_claude_model=$(eagle_config_get "orchestration" "claude_worker_model" "claude-opus-4-7")
