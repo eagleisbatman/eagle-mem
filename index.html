@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Eagle Mem - Shared Memory for Claude Code and Codex</title>
+    <title>Eagle Mem - Shared Memory for Claude Code, Codex, and Grok Workflows</title>
     <meta
       name="description"
-      content="Eagle Mem gives Claude Code and Codex shared project memory, release guardrails, RTK token protection, and durable worker lanes through local hooks and SQLite."
+      content="Eagle Mem gives Claude Code and Codex hook-backed shared project memory, gives Grok skills and CLI access, and protects releases with local SQLite guardrails."
     />
     <link rel="stylesheet" href="site.css" />
   </head>
@@ -63,9 +63,9 @@ handoff      | captured back into the same project memory
           <p class="eyebrow">Shared memory for AI coding agents</p>
           <h1>Agents that remember the project.</h1>
           <p>
-            Eagle Mem gives Claude Code and Codex one local memory layer, release-safety checks,
-            token-aware shell guardrails, and durable worker lanes. Install once. Every future
-            session starts warmer, safer, and less wasteful.
+            Eagle Mem gives Claude Code and Codex one hook-backed memory layer, gives Grok the
+            same skills and CLI memory surface, and protects releases with local SQLite guardrails.
+            Install once. Every future session starts warmer, safer, and less wasteful.
           </p>
           <div class="cta-row">
             <a class="button primary" href="#install">Install Eagle Mem</a>
@@ -81,16 +81,16 @@ handoff      | captured back into the same project memory
             <span>Claude Code and Codex share `~/.eagle-mem/memory.db`.</span>
           </div>
           <div class="proof">
-            <strong>2 agents</strong>
-            <span>Every summary, task, memory, and decision keeps its source.</span>
+            <strong>3 surfaces</strong>
+            <span>Claude Code and Codex get hooks; Grok gets skills and CLI access.</span>
           </div>
           <div class="proof">
             <strong>0 daemons</strong>
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.9.4</strong>
-            <span>Folder-stable memory for monorepos, RTK guardrails, and worker lanes.</span>
+            <strong>v4.10.0</strong>
+            <span>Grok support, Compaction Survival, self-tests, and stale task discipline.</span>
           </div>
         </div>
       </section>
@@ -141,26 +141,28 @@ handoff      | captured back into the same project memory
             <div class="section-kicker">Install</div>
             <h2>One command, then open your agent.</h2>
             <p class="lead">
-              Eagle Mem installs hooks for Claude Code and Codex, runs schema migrations,
-              links skills, enables patch auto-updates, and keeps the local database under
+              Eagle Mem installs hooks for Claude Code and Codex, links Grok skills when
+              `~/.grok` is present, runs schema migrations, enables patch auto-updates, and keeps the local database under
               your home directory.
             </p>
             <pre class="command"><code>npm install -g eagle-mem
 eagle-mem install</code></pre>
           </div>
 <div class="terminal-shot"><span class="cyan">What users see now</span>
-Eagle Mem v4.9.4
-Shared memory, guardrails, and worker lanes
+Eagle Mem v4.10.0
+Shared memory, guardrails, lanes, and Grok skills
 
 Core
   install        setup hooks, database, skills
   update         redeploy hooks and migrations
   search         recall sessions, memories, code
   memories       sync Claude Code and Codex memory files
+  grok-bootstrap set up Grok skill and CLI workflow
 
 Safety
   feature        verify release-impacting changes
   guard          manage regression rules
+  compaction     inspect context-survival readiness
   config         choose providers and RTK behavior
 
 Coordination
@@ -199,6 +201,15 @@ Coordination
               `~/.codex/hooks.json`, links skills into `~/.codex/skills`, and creates or updates
               `~/.codex/AGENTS.md` with a clean-output contract so Codex does not print internal
               capture blocks to the user.
+            </p>
+          </article>
+          <article class="wide-panel">
+            <h3>Grok</h3>
+            <p>
+              Links Eagle Mem skills into `~/.grok/skills` and uses `eagle-mem grok-bootstrap`
+              to verify the setup. Grok can search memory, inspect tasks, coordinate lanes, and
+              check Compaction Survival through the shared CLI. Native lifecycle hooks can be
+              added later if Grok exposes compatible hook points.
             </p>
           </article>
         </div>
@@ -280,7 +291,7 @@ Coordination
           <div class="flow-arrow" aria-hidden="true">-&gt;</div>
           <div class="flow-box">
             <h3>Next Agent</h3>
-            <p>Claude Code and Codex both recall the same project, with source labels intact.</p>
+            <p>Claude Code and Codex recall through hooks; Grok can inspect the same project memory through skills and CLI commands.</p>
           </div>
         </div>
       </section>
@@ -289,12 +300,12 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.9.4 keeps memory attached to the workspace.</h2>
+            <h2>v4.10.0 adds Grok support and Compaction Survival.</h2>
           </div>
           <p>
-            The product surface now matches the runtime: cross-agent memory, enforced
-            anti-regression, RTK protection, clean Codex output, worker orchestration, and
-            folder-stable project identity are first-class and testable.
+            The product surface now matches the runtime: Grok skill/CLI support, shared
+            Compaction Survival status, self-tests, stale task discipline, enforced
+            anti-regression, RTK protection, and worker orchestration are first-class and testable.
           </p>
         </div>
 
@@ -317,10 +328,9 @@ Coordination
           <article class="wide-panel">
             <h3>For proof</h3>
             <p>
-              Project keys now follow the workspace/session root instead of whichever
-              subfolder the agent last entered. Existing session-linked summaries, memories,
-              plans, tasks, feature checks, and statusline counts can be repaired into the
-              same project namespace during normal hook/update flow.
+              `eagle-mem compaction` reports whether a project has enough durable summaries,
+              tasks, and lane state to survive context loss. It is shared project state,
+              not a Grok-only layer.
             </p>
           </article>
         </div>
@@ -328,8 +338,8 @@ Coordination
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.9.4</span>
-      <span>Local-first memory and release safety for Claude Code and Codex.</span>
+      <span>Eagle Mem v4.10.0</span>
+      <span>Local-first memory and release safety for Claude Code, Codex, and Grok workflows.</span>
     </footer>
   </body>
 </html>

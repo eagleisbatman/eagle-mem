@@ -6,7 +6,7 @@
     <title>About Eagle Mem - Local-first Memory for AI Coding Agents</title>
     <meta
       name="description"
-      content="Why Eagle Mem exists, who it is for, and how it keeps Claude Code and Codex project memory local, useful, and source-attributed."
+      content="Why Eagle Mem exists, who it is for, and how it keeps Claude Code, Codex, and Grok workflows local, useful, and source-attributed."
     />
     <link rel="stylesheet" href="site.css" />
   </head>
@@ -59,10 +59,11 @@
           </article>
           <article class="card">
             <span class="label">Source aware</span>
-            <h3>Claude Code and Codex do not blur together</h3>
+            <h3>Agent surfaces do not blur together</h3>
             <p>
-              Sessions, summaries, memories, plans, and tasks record their source agent, so
-              cross-agent recall stays auditable.
+              Sessions, summaries, memories, plans, and tasks record their source agent.
+              Claude Code and Codex get lifecycle capture, while Grok uses the same memory
+              through skills and CLI commands.
             </p>
           </article>
           <article class="card">
@@ -155,9 +156,10 @@
             <div class="section-kicker">Start</div>
             <h2>Install it where the agents work.</h2>
             <p class="lead">
-              Run the install once, then open Claude Code or Codex in a project. Eagle Mem
-              will create the project memory layer automatically and apply patch updates by
-              default when new bug fixes are published.
+              Run the install once, then open Claude Code or Codex in a project. For Grok,
+              run `eagle-mem grok-bootstrap` to confirm linked skills. Eagle Mem will create
+              the project memory layer and apply patch updates by default when new bug fixes
+              are published.
             </p>
           </div>
           <pre class="command"><code>npm install -g eagle-mem

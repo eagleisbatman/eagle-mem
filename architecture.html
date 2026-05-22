@@ -6,7 +6,7 @@
     <title>Eagle Mem Architecture - Hooks, SQLite, Guardrails, Worker Lanes</title>
     <meta
       name="description"
-      content="How Eagle Mem connects Claude Code and Codex through hooks, SQLite, FTS5 search, feature verification, RTK token guardrails, and git-worktree worker lanes."
+      content="How Eagle Mem connects Claude Code, Codex, and Grok workflows through hooks, skills, SQLite, FTS5 search, feature verification, RTK token guardrails, and worker lanes."
     />
     <link rel="stylesheet" href="site.css" />
   </head>
@@ -39,7 +39,7 @@
         <div class="flow" aria-label="Architecture flow">
           <div class="flow-box">
             <h3>Agent Event</h3>
-            <p>Claude Code or Codex starts, receives a prompt, uses a tool, or stops a turn.</p>
+            <p>Claude Code or Codex starts, receives a prompt, uses a tool, or stops a turn. Grok enters through linked skills and CLI commands.</p>
           </div>
           <div class="flow-arrow" aria-hidden="true">-&gt;</div>
           <div class="flow-box">
@@ -72,7 +72,7 @@
             <h3>Hook lifecycle</h3>
             <p>
               SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, and SessionEnd
-              provide the capture and injection points.
+              provide the capture and injection points for Claude Code and Codex.
             </p>
           </article>
           <article class="step">
@@ -98,6 +98,15 @@
             <p>
               Broad work can split into git worktrees with owned lanes, validation commands,
               worker logs, and durable handoff state.
+            </p>
+          </article>
+          <article class="step">
+            <span class="label">Layer 5</span>
+            <h3>Compaction Survival</h3>
+            <p>
+              `eagle-mem compaction` reads shared project state: enriched summaries, durable
+              tasks, stale work, active lanes, and recent durable updates. It is shared state,
+              not a Grok-only feature.
             </p>
           </article>
         </div>
@@ -126,7 +135,7 @@
           </div>
           <div role="row">
             <strong role="cell">agent_memories, agent_plans, agent_tasks</strong>
-            <span role="cell">Mirror Claude Code and Codex memory surfaces with `origin_agent`.</span>
+            <span role="cell">Mirror Claude Code and Codex memory surfaces with `origin_agent`; Grok accesses the same project memory through skills and CLI commands.</span>
           </div>
           <div role="row">
             <strong role="cell">features, feature_files, pending_feature_verifications</strong>
