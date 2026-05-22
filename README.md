@@ -7,11 +7,11 @@
 
 # Eagle Mem
 
-**Shared memory, release guardrails, and worker lanes for Claude Code and Codex.**
+**Shared memory, release guardrails, and worker lanes for Claude Code, Codex, and Grok-assisted workflows.**
 
-Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex the same local memory, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
+Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code and Codex hook-backed shared memory, gives Grok the same skills and CLI memory surface, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.9.7 focuses on distribution trust and visible UX:** `eagle-mem doctor` now checks the installed runtime, selected SQLite/FTS5 binary, hooks, statusline wiring, install manifest, and runtime drift. Install/update show a clear "what will change" preflight, uninstall supports dry-run cleanup with backups, and statuslines now resolve the live session project so brand-new projects do not inherit old memory/session counts.
+**v4.10.0 focuses on Grok support and Compaction Survival:** Grok users now get first-class skill linking and `eagle-mem grok-bootstrap`, while all agents can inspect project-level compaction readiness with `eagle-mem compaction`. Claude Code and Codex continue to get the deepest automatic lifecycle support through hooks; Grok currently uses the shared CLI and skill workflow until native lifecycle hooks are available.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -41,7 +41,7 @@ Eagle Mem is a local runtime layer for AI coding agents. It adds three things th
 | **Guardrails** | "The agent cannot casually undo known decisions or push unverified feature changes." | Surfaces decisions before edits and enforces feature verification on push, PR, and publish boundaries. |
 | **Lanes** | "A big task can survive compaction and split across agents." | Persists orchestrations, worker lanes, worktrees, logs, validation commands, and handoffs. |
 
-Both agents share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code` or `Codex`.
+Claude Code and Codex share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code` or `Codex`. Grok uses the same database through skills and CLI commands, with native lifecycle capture reserved for a future adapter.
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash scripts, sqlite3 (WAL mode, FTS5 full-text search), and jq.
 
@@ -66,11 +66,11 @@ eagle-mem install
 eagle-mem doctor
 ```
 
-That's it. `doctor` should report a healthy install. Open Claude Code or Codex in any project directory and Eagle Mem activates automatically.
+That's it. `doctor` should report a healthy install. Open Claude Code or Codex in any project directory and Eagle Mem activates automatically. For Grok, run `eagle-mem grok-bootstrap` after install to confirm the linked skills and CLI workflow.
 
-Everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, prunes stale data, and installs patch bug fixes — all in the background via hooks.
+For Claude Code and Codex, everything is automatic from here. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors Claude's memories and tasks, learns which commands are noisy, prunes stale data, and installs patch bug fixes — all in the background via hooks.
 
-For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md`. For Claude Code, it integrates with `~/.claude/settings.json`, `CLAUDE.md`, and `~/.claude/skills`. Grok users get skill symlinks into `~/.grok/skills/` and can run `eagle-mem grok-bootstrap` for setup guidance.
+For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md`. For Claude Code, it integrates with `~/.claude/settings.json`, `CLAUDE.md`, and `~/.claude/skills`. Grok users get skill symlinks into `~/.grok/skills/` and can run `eagle-mem grok-bootstrap` for setup guidance and self-linking.
 
 ### Prerequisites
 
@@ -110,7 +110,9 @@ Eagle Mem actively reduces token consumption:
 
 ### Compaction Survival
 
-One of the core promises of Eagle Mem is protecting against `/compact` and session amnesia. The system uses durable tasks, enriched `<eagle-summary>` blocks, SessionStart re-injection, and tools like `eagle-mem compaction` and `eagle-mem tasks stale` to ensure projects remain safe even after context resets. Run `eagle-mem compaction` anytime to check readiness.
+One of the core promises of Eagle Mem is protecting against `/compact` and session amnesia. Compaction Survival is project-level, not Grok-specific: it reads shared Eagle Mem state such as durable tasks, enriched summaries, stale work, and orchestration lanes. Claude Code and Codex get automatic hook-backed recovery through SessionStart, Stop, task mirroring, and context-pressure nudges. Grok can inspect and use the same state through `eagle-mem compaction`, `eagle-mem tasks`, and the linked skills, but does not yet have native lifecycle hooks.
+
+Run `eagle-mem compaction` anytime to check readiness.
 
 - **Injection compression** — zero-value stats are elided from the banner, overview is capped, compact reloads get 1 recent session instead of 3
 - **Command rewriting** — PreToolUse routes noisy shell output through RTK when available and blocks known raw-output commands in enforce mode when RTK is missing.
@@ -174,6 +176,16 @@ eagle-mem uninstall --dry-run
 Install and update print the files/configs they intend to touch before they change the runtime. The installed runtime writes `~/.eagle-mem/install-manifest.json` with file sizes, modes, and SHA-256 hashes, so `doctor` can tell whether hooks, scripts, libraries, and database helpers still match the package that installed them.
 
 Uninstall removes Claude Code and Codex hook registrations, Eagle Mem instruction blocks, custom Claude statusline integration, and skill links. It backs up user config files before editing them and keeps `~/.eagle-mem/memory.db` unless you explicitly confirm data deletion.
+
+### v4.10.0 Minor Release
+
+This release makes Eagle Mem broader and safer across agent workflows:
+
+- Grok is now a first-class skill/CLI target: install detects `~/.grok`, links Eagle Mem skills into `~/.grok/skills`, and adds `eagle-mem grok-bootstrap`.
+- `eagle-mem compaction` reports Compaction Survival readiness from shared project state: enriched summaries, durable tasks, stale tasks, active lanes, and last durable update.
+- `eagle-mem test` provides a built-in smoke harness for the memory layer.
+- `eagle-mem tasks stale` and `[STALE - Nd]` warnings make long-running task drift visible.
+- `eagle-mem health` now surfaces orchestration lanes, learned command rules, and curator timing.
 
 ### v4.9.7 Patch
 
@@ -302,17 +314,17 @@ Both agents write to `~/.eagle-mem/memory.db`:
 - mirrored memories, plans, and tasks include `origin_agent`
 - SessionStart recall labels sources as `Claude Code` or `Codex`
 
-That means opening the same project in Claude Code and Codex does not create two isolated memory worlds. They recall the same project history while preserving the source of each memory.
+That means opening the same project in Claude Code and Codex does not create two isolated memory worlds. They recall the same project history while preserving the source of each memory. Grok can search, inspect, and update that same project memory through the linked skills and CLI commands.
 
-## Skills (Inside Claude Code and Codex)
+## Skills (Inside Claude Code, Codex, and Grok)
 
 | Skill | What It Does |
 |-------|-------------|
-| `/eagle-mem-search` | Search memory and past sessions — Claude interprets results in context |
+| `/eagle-mem-search` | Search memory and past sessions — the active agent interprets results in context |
 | `/eagle-mem-overview` | Build a rich project briefing from README, entry points, and git history |
 | `/eagle-mem-memories` | View and search mirrored agent memories and plans |
 | `/eagle-mem-tasks` | TaskAware Compact Loop — break complex work into tasks that survive `/compact` |
-| `/eagle-mem-orchestrate` | Orchestrator/worker lane handoffs across Claude Code and Codex |
+| `/eagle-mem-orchestrate` | Orchestrator/worker lane handoffs across Claude Code and Codex, with shared CLI visibility for Grok |
 
 ## Data
 

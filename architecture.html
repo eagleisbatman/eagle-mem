@@ -683,7 +683,7 @@
       <div class="brand">
         <span class="brand-label">Eagle Mem</span>
         <h1>Agent Architecture Tutorial</h1>
-        <p>Technical architecture plus UX architecture for Claude Code, Codex, and future coding agents.</p>
+        <p>Technical architecture plus UX architecture for Claude Code, Codex, Grok, and future coding agents.</p>
       </div>
 
       <p class="nav-title">Start Here</p>
@@ -719,7 +719,7 @@
     <main id="main">
       <section class="hero" id="purpose">
         <div class="hero-inner">
-          <p class="eyebrow">Architecture guide - technical + UX - updated 2026-05-05</p>
+          <p class="eyebrow">Architecture guide - technical + UX - updated 2026-05-22</p>
           <h2>Eagle Mem is a local memory and safety layer that makes AI coding agents start warmer, ship safer, and coordinate better.</h2>
           <p class="hero-summary">
             This tutorial explains the project from first principles. You do not need to know the codebase first. Read it like a guided tour: what problem Eagle Mem solves, how hooks move data through the system, how SQLite stores shared memory, and why the user experience is intentionally quiet until the agent needs help.
@@ -732,7 +732,7 @@
             </div>
             <div class="meta-box">
               <strong>Agents</strong>
-              <span>Claude Code and Codex today; adapter contract for more agents later.</span>
+              <span>Claude Code and Codex with hooks; Grok through skills and CLI today.</span>
             </div>
             <div class="meta-box">
               <strong>Core Promise</strong>
@@ -789,6 +789,11 @@
           <div class="callout">
             <h3>The simplest explanation</h3>
             <p>Eagle Mem is not a hosted memory service. It is not a vector database. It is a local runtime made of hook scripts, CLI commands, and a SQLite database. Agents keep working in their normal terminal UI, while Eagle Mem quietly injects context, records what happened, and blocks risky release boundaries when verification is still pending.</p>
+          </div>
+
+          <div class="callout">
+            <h3>Compaction Survival is shared state</h3>
+            <p><code>eagle-mem compaction</code> is not a Grok-only feature. It reads project-level state from SQLite: enriched summaries, durable tasks, stale tasks, active orchestration lanes, and recent durable updates. Claude Code and Codex have hook-backed automatic recovery around compact and clear events. Grok can use the same state through linked skills and CLI commands until native lifecycle hooks exist.</p>
           </div>
 
           <h3>Vocabulary</h3>
@@ -857,7 +862,7 @@
               <text x="40" y="42" class="label">User Layer</text>
               <rect x="40" y="58" width="220" height="72" class="box-cyan"></rect>
               <text x="62" y="90">Developer</text>
-              <text x="62" y="112" class="small">Works in Claude Code or Codex</text>
+              <text x="62" y="112" class="small">Works in Claude Code, Codex, or Grok</text>
 
               <text x="40" y="178" class="label">Agent Layer</text>
               <rect x="40" y="194" width="220" height="78" class="box"></rect>
@@ -935,7 +940,7 @@
               <div class="step-num">2</div>
               <div>
                 <h3>Prerequisites are checked</h3>
-                <p>The installer checks for an FTS5-capable <code>sqlite3</code>, <code>jq</code>, optional <code>rtk</code>, and at least one supported agent installation. FTS5 matters because summaries, code chunks, and mirrored artifacts are searched with SQLite full-text search.</p>
+                <p>The installer checks for an FTS5-capable <code>sqlite3</code>, <code>jq</code>, optional <code>rtk</code>, and at least one supported agent environment. FTS5 matters because summaries, code chunks, and mirrored artifacts are searched with SQLite full-text search.</p>
               </div>
             </article>
 
@@ -959,7 +964,7 @@
               <div class="step-num">5</div>
               <div>
                 <h3>Agent hooks are registered</h3>
-                <p>Claude Code hooks are patched into <code>~/.claude/settings.json</code>. Codex hooks are registered in <code>~/.codex/hooks.json</code>, and <code>codex_hooks = true</code> is enabled in <code>~/.codex/config.toml</code>.</p>
+                <p>Claude Code hooks are patched into <code>~/.claude/settings.json</code>. Codex hooks are registered in <code>~/.codex/hooks.json</code>, and <code>codex_hooks = true</code> is enabled in <code>~/.codex/config.toml</code>. Grok currently has skills and CLI access rather than hook registration.</p>
               </div>
             </article>
 
@@ -967,7 +972,7 @@
               <div class="step-num">6</div>
               <div>
                 <h3>Skills and instructions are linked</h3>
-                <p>Eagle Mem skills are symlinked into each agent's skill directory. Claude receives <code>CLAUDE.md</code> summary instructions. Codex receives <code>AGENTS.md</code> clean-output memory instructions.</p>
+                <p>Eagle Mem skills are symlinked into each agent's skill directory. Claude receives <code>CLAUDE.md</code> summary instructions. Codex receives <code>AGENTS.md</code> clean-output memory instructions. Grok receives the same Eagle Mem skills under <code>~/.grok/skills</code> and can run <code>eagle-mem grok-bootstrap</code> for setup guidance.</p>
               </div>
             </article>
           </div>
@@ -1010,7 +1015,7 @@
               <tr>
                 <td><code>~/.eagle-mem/memory.db</code></td>
                 <td>Single source of local memory</td>
-                <td>Stores shared state across Claude Code, Codex, compactions, and sessions.</td>
+                <td>Stores shared state across Claude Code, Codex, Grok skills, compactions, and sessions.</td>
               </tr>
             </tbody>
           </table>
@@ -1082,7 +1087,7 @@
           <p class="section-number">06 / Technical Architecture</p>
           <h2>The Agent Adapter Layer</h2>
           <p class="lead">
-            The project is agent-generic below the adapter layer. Claude Code and Codex have different config files, tool names, transcript formats, and output expectations. Eagle Mem normalizes those differences into one internal shape.
+            The project is agent-generic below the adapter layer. Claude Code and Codex have different config files, tool names, transcript formats, and output expectations, while Grok currently participates through skills and CLI commands. Eagle Mem normalizes each supported surface into the same project memory model.
           </p>
 
           <div class="grid-2">
@@ -1107,6 +1112,17 @@
                 <span class="tag">apply_patch</span>
                 <span class="tag">Edit</span>
                 <span class="tag">Write</span>
+              </div>
+            </article>
+
+            <article class="adapter-rule">
+              <h3>Grok skill/CLI integration</h3>
+              <p>Installed through <code>~/.grok/skills</code> and the <code>eagle-mem grok-bootstrap</code> command. Grok can search memory, inspect tasks, coordinate lanes, and check compaction readiness through the same SQLite-backed CLI. Native lifecycle hooks are not assumed yet.</p>
+              <div class="tag-row">
+                <span class="tag">skills</span>
+                <span class="tag">grok-bootstrap</span>
+                <span class="tag">compaction</span>
+                <span class="tag">tasks</span>
               </div>
             </article>
           </div>
@@ -1645,7 +1661,7 @@ eagle-mem install</code></pre>
           <p class="section-number">14 / All-Agent Applicability</p>
           <h2>How To Add Another Agent</h2>
           <p class="lead">
-            The project already supports Claude Code and Codex, but the architecture should scale to any coding agent that can run local hooks or wrapper scripts. The integration work should live at the edge, not inside the database model.
+            The project supports Claude Code and Codex with lifecycle hooks, and Grok with skills plus CLI workflows. The architecture should scale to any coding agent that can run local hooks, wrapper scripts, or a skill-like command surface. The integration work should live at the edge, not inside the database model.
           </p>
 
           <h3>Minimum viable adapter</h3>
