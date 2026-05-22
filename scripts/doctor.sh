@@ -219,9 +219,10 @@ else
 fi
 echo ""
 
-echo -e "  ${BOLD}Hooks${RESET}"
+echo -e "  ${BOLD}Hooks / Skills${RESET}"
 eagle_kv "Claude Code:" "$claude_hooks"
 eagle_kv "Codex:" "$codex_hooks"
+[ -d "$EAGLE_GROK_DIR" ] && eagle_kv "Grok skills:" "$EAGLE_GROK_SKILLS_DIR"
 eagle_kv "Statusline:" "$statusline_state"
 echo ""
 

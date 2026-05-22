@@ -18,6 +18,8 @@ EAGLE_CODEX_HOOKS="${EAGLE_CODEX_HOOKS:-$EAGLE_CODEX_DIR/hooks.json}"
 EAGLE_CODEX_AGENTS_MD="${EAGLE_CODEX_AGENTS_MD:-$EAGLE_CODEX_DIR/AGENTS.md}"
 EAGLE_CODEX_SKILLS_DIR="${EAGLE_CODEX_SKILLS_DIR:-$EAGLE_CODEX_DIR/skills}"
 EAGLE_CODEX_MEMORIES_DIR="${EAGLE_CODEX_MEMORIES_DIR:-$EAGLE_CODEX_DIR/memories}"
+EAGLE_GROK_DIR="${EAGLE_GROK_DIR:-$HOME/.grok}"
+EAGLE_GROK_SKILLS_DIR="${EAGLE_GROK_SKILLS_DIR:-$HOME/.grok/skills}"
 EAGLE_RAW_BASH_UNLOCK="${EAGLE_RAW_BASH_UNLOCK:-/tmp/eagle-mem-raw-bash-unlock}"
 
 _eagle_sqlite_candidate_paths() {
@@ -1680,35 +1682,28 @@ _eagle_claude_md_section() {
 
 Eagle Mem hooks are active in every project. SessionStart injects context (overview, recent sessions, memories, tasks, orchestration lanes, core files). Stop captures session summaries. PostToolUse mirrors memories/plans/tasks.
 
-**Rule:** Before your final response in every session, emit an `<eagle-summary>` block so the Stop hook can capture a rich summary instead of just heuristics.
+**Rule — Human first, machine invisible:**
+The person reading this transcript should experience natural, thoughtful, human writing — the same tone you would use in a good project update or thoughtful recap with a colleague. They should **never** see raw XML tags, `<eagle-summary>`, `request:`, `learned:`, or anything that feels like a machine log or configuration file in the normal flow of reading.
 
-```
-<eagle-summary>
-request: [what user asked]
-completed: [what shipped]
-learned: [non-obvious discoveries]
-decisions: [choice — why]
-gotchas: [what surprised]
-next_steps: [concrete actions]
-key_files: [path — role]
-files_read: [path, ...]
-files_modified: [path, ...]
-affected_features: [feature, ...]
-verified_features: [feature, ...]
-regression_risks: [risk, ...]
-</eagle-summary>
-```
+**Good visible ending (what a human should read):**
 
-**Why:** Without this block, summaries degrade to "(auto-captured)" with no decisions, gotchas, or learned context. Rich summaries are what make future sessions useful.
+> We spent this session doing a deep review of how well Eagle Mem actually delivers on its promise of giving agents persistent memory and strong anti-regression guardrails. We cleaned up some stale task records that had been left open, verified a key cross-agent feature, and put together a full roadmap for making the system feel first-class for Grok sessions too. The most useful feedback was that the capture mechanism at the end of conversations needed to feel warm and human rather than technical.
+
+The rich structured data still gets saved (so future sessions get excellent context and the anti-regression system keeps working), but it happens without making the transcript feel like you are reading a debug dump.
+
+**Recommended capture approaches (in order of preference):**
+- Best: Use `eagle-mem session save --summary "..."` or the equivalent capture skill/tool. The CLI writes the structured record cleanly; you only show the nice prose to the user.
+- Strong alternative: Put any machine block inside a collapsed `<details>` element so it is available for debugging but invisible by default.
+- Only as last resort: Emit the raw block at all — and only when the user has explicitly asked for technical output.
+
+**Why this rule exists:** Every single session ends with a summary. If it looks technical, the entire conversation history slowly becomes unpleasant to read. The memory layer should make the experience of working with agents *more* human, not less.
 
 **How to apply:**
-- Emit `<eagle-summary>` before your final text response, every session
-- When Eagle Mem injects context at SessionStart, attribute it: "Eagle Mem recalls:"
-- Do not revert decisions surfaced by PostToolUse without asking the user
-- If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
-- For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
-- Never put raw secrets in the summary — Eagle Mem redacts but defense in depth
-- If you contradict a loaded memory, update the memory file
+- Write the visible recap in clear, narrative prose first.
+- Persist the structured details via tool or collapsed element — never as raw tags in the main reply.
+- Keep durable task descriptions truthful and up to date; they often carry more value across compactions than any one summary.
+- When Eagle Mem context appears, attribute it naturally.
+- Protect secrets. Update the durable record if you change direction.
 EAGLE_MD
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "eagle-mem",
   "version": "4.9.10",
-  "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code and Codex",
+  "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code, Codex, and Grok",
   "bin": {
     "eagle-mem": "bin/eagle-mem"
   },
@@ -18,6 +18,7 @@
   "keywords": [
     "claude-code",
     "codex",
+    "grok",
     "memory",
     "sqlite",
     "fts5",

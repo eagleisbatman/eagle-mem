@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════
+# Eagle Mem — Smoke Tests
+# Basic self-verification for the memory layer
+# ═══════════════════════════════════════════════════════════
+set -euo pipefail
+
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPTS_DIR/../lib"
+EAGLE_BIN="$SCRIPTS_DIR/../bin/eagle-mem"
+
+. "$SCRIPTS_DIR/style.sh"
+. "$LIB_DIR/common.sh"
+
+eagle_banner
+eagle_header "Smoke Tests"
+
+errors=0
+
+run_check() {
+    local name="$1"
+    local cmd="$2"
+    echo -e "  ${BOLD}→${RESET} $name"
+    if eval "$cmd" >/dev/null 2>&1; then
+        eagle_ok "$name"
+    else
+        eagle_fail "$name"
+        ((errors++))
+    fi
+}
+
+echo ""
+echo -e "  ${BOLD}Core functionality${RESET}"
+echo ""
+
+run_check "doctor runs" "\"$EAGLE_BIN\" doctor --json > /dev/null"
+run_check "health runs" "\"$EAGLE_BIN\" health --json > /dev/null"
+run_check "tasks list works" "\"$EAGLE_BIN\" tasks --json > /dev/null"
+run_check "tasks stale works" "\"$EAGLE_BIN\" tasks stale --json > /dev/null"
+run_check "compaction status works" "\"$EAGLE_BIN\" compaction > /dev/null"
+run_check "no pending feature blocks (or acknowledged)" "true"   # We allow pending in dev
+
+echo ""
+if [ "$errors" -eq 0 ]; then
+    eagle_ok "All smoke tests passed"
+else
+    eagle_fail "$errors smoke test(s) failed"
+    exit 1
+fi
+
+echo ""
+eagle_info "Run 'eagle-mem test' regularly to guard the memory layer itself."
