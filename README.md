@@ -177,6 +177,36 @@ Install and update print the files/configs they intend to touch before they chan
 
 Uninstall removes Claude Code and Codex hook registrations, Eagle Mem instruction blocks, custom Claude statusline integration, and skill links. It backs up user config files before editing them and keeps `~/.eagle-mem/memory.db` unless you explicitly confirm data deletion.
 
+### Download Counts, Privacy, and Telemetry
+
+npm download graphs are public registry aggregates, not user analytics. A download count means the npm registry served package tarballs. It does not tell package authors who downloaded the package, which project installed it, whether it was a human, or whether it became an active user.
+
+Large single-day spikes can come from normal registry behavior:
+
+- package mirrors and caches fetching a newly published version
+- CI jobs, disposable containers, and build farms reinstalling dependencies
+- bots and scanners that analyze public npm packages
+- repeated installs during local testing or release verification
+
+Eagle Mem does not add phone-home telemetry, install tracking, analytics beacons, or a hosted usage service. Runtime memory stays local in `~/.eagle-mem/memory.db` unless you explicitly choose to move or publish it yourself.
+
+You can inspect the same public aggregate counts shown by npm with:
+
+```bash
+curl https://api.npmjs.org/downloads/range/last-week/eagle-mem
+curl https://api.npmjs.org/downloads/range/last-month/eagle-mem
+```
+
+Use these numbers as directional popularity signals only. They are useful for spotting broad distribution patterns, but they are not a reliable count of users, installs, projects, or companies.
+
+### v4.10.1 Patch
+
+This documentation patch clarifies npm download-count behavior and Eagle Mem privacy expectations:
+
+- npm download counts are aggregate tarball-serving statistics.
+- Package maintainers cannot identify who downloaded the package from npm's public stats.
+- Eagle Mem remains local-first and does not include install telemetry or phone-home analytics.
+
 ### v4.10.0 Minor Release
 
 This release makes Eagle Mem broader and safer across agent workflows:
