@@ -27,6 +27,16 @@ eagle_posttool_mirror_writes() {
                             eagle_capture_agent_plan "$fp" "$session_id" "$project" "$agent"
                         fi
                         ;;
+                    */brain/*/implementation_plan.md)
+                        if [ -f "$fp" ]; then
+                            eagle_capture_agent_plan "$fp" "$session_id" "$project" "$agent"
+                        fi
+                        ;;
+                    */brain/*/task.md|*/brain/*/walkthrough.md)
+                        if [ -f "$fp" ]; then
+                            eagle_capture_agent_memory "$fp" "$session_id" "$project" "$agent"
+                        fi
+                        ;;
                 esac
             fi
             ;;

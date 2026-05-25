@@ -771,6 +771,7 @@ eagle_agent_source() {
     case "$agent" in
         codex|openai-codex) echo "codex" ;;
         claude|claude-code|cloud-code) echo "claude-code" ;;
+        antigravity*|google-antigravity*|google_antigravity*) echo "antigravity" ;;
         *)
             if [ -n "${CODEX_THREAD_ID:-}" ] || [ -n "${CODEX_CI:-}" ] || [ -n "${CODEX_MANAGED_BY_NPM:-}" ]; then
                 echo "codex"
@@ -789,10 +790,15 @@ eagle_agent_source_from_json() {
         return
     fi
 
-    local transcript_path turn_id tool_name
+    local transcript_path turn_id tool_name agent_field
     transcript_path=$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)
     turn_id=$(printf '%s' "$input" | jq -r '.turn_id // empty' 2>/dev/null)
     tool_name=$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)
+    agent_field=$(printf '%s' "$input" | jq -r '.agent // empty' 2>/dev/null)
+
+    case "$agent_field" in
+        antigravity*) echo "antigravity"; return ;;
+    esac
 
     case "$transcript_path" in
         "$HOME/.codex/"*|*/.codex/*) echo "codex"; return ;;
@@ -807,6 +813,7 @@ eagle_agent_source_from_json() {
 eagle_agent_label() {
     case "${1:-$(eagle_agent_source)}" in
         codex) echo "Codex" ;;
+        antigravity*) echo "Antigravity" ;;
         *) echo "Claude Code" ;;
     esac
 }

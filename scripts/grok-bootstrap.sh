@@ -26,22 +26,44 @@ eagle_ok "Grok environment detected ($EAGLE_GROK_DIR)"
 
 # Check skills
 skill_count=0
+broken_links=0
 if [ -d "$EAGLE_GROK_SKILLS_DIR" ]; then
-    skill_count=$(find "$EAGLE_GROK_SKILLS_DIR" -maxdepth 1 -name "eagle-mem-*" -type d 2>/dev/null | wc -l | tr -d ' ')
+    for link in "$EAGLE_GROK_SKILLS_DIR"/eagle-mem-*; do
+        if [ -L "$link" ] && [ ! -e "$link" ]; then
+            broken_links=$((broken_links + 1))
+        elif [ -d "$link" ]; then
+            skill_count=$((skill_count + 1))
+        fi
+    done
 fi
 
-if [ "$skill_count" -gt 0 ]; then
+if [ "$broken_links" -gt 0 ]; then
+    eagle_warn "Detected $broken_links broken or invalid Grok skill symlinks!"
+fi
+
+if [ "$skill_count" -gt 0 ] && [ "$broken_links" -eq 0 ]; then
     eagle_ok "Grok skills installed ($skill_count eagle-mem-* skills)"
 else
-    eagle_warn "No eagle-mem skills found in $EAGLE_GROK_SKILLS_DIR"
+    if [ "$broken_links" -gt 0 ]; then
+        echo ""
+        eagle_info "Repairing broken skill symlinks now..."
+    fi
     if [ -d "$PACKAGE_DIR/skills" ]; then
         echo ""
-        if eagle_confirm "Link Eagle Mem skills into ~/.grok/skills/ now?"; then
+        if eagle_confirm "Link/repair Eagle Mem skills into ~/.grok/skills/ now?"; then
             mkdir -p "$EAGLE_GROK_SKILLS_DIR"
             for skill_dir in "$PACKAGE_DIR"/skills/*/; do
                 [ ! -d "$skill_dir" ] && continue
                 skill_name=$(basename "$skill_dir")
                 dst="$EAGLE_GROK_SKILLS_DIR/$skill_name"
+                
+                # Protect custom user folders with a timestamped backup
+                if [ -d "$dst" ] && [ ! -L "$dst" ]; then
+                    backup_dst="${dst}.bak.$(date +%Y%m%d%H%M%S)"
+                    eagle_warn "Custom directory found at $dst. Backing up to $(basename "$backup_dst")..."
+                    mv "$dst" "$backup_dst"
+                fi
+                
                 [ -L "$dst" ] && rm "$dst"
                 ln -sf "$skill_dir" "$dst"
                 eagle_ok "Linked: $skill_name"

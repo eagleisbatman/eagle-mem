@@ -683,7 +683,7 @@
       <div class="brand">
         <span class="brand-label">Eagle Mem</span>
         <h1>Agent Architecture Tutorial</h1>
-        <p>Technical architecture plus UX architecture for Claude Code, Codex, Grok, and future coding agents.</p>
+        <p>Technical architecture plus UX architecture for Claude Code, Codex, Grok, Google Antigravity, and future coding agents.</p>
       </div>
 
       <p class="nav-title">Start Here</p>
@@ -719,7 +719,7 @@
     <main id="main">
       <section class="hero" id="purpose">
         <div class="hero-inner">
-          <p class="eyebrow">Architecture guide - technical + UX - updated 2026-05-22</p>
+          <p class="eyebrow">Architecture guide - technical + UX - updated 2026-05-26</p>
           <h2>Eagle Mem is a local memory and safety layer that makes AI coding agents start warmer, ship safer, and coordinate better.</h2>
           <p class="hero-summary">
             This tutorial explains the project from first principles. You do not need to know the codebase first. Read it like a guided tour: what problem Eagle Mem solves, how hooks move data through the system, how SQLite stores shared memory, and why the user experience is intentionally quiet until the agent needs help.
@@ -728,11 +728,11 @@
           <div class="hero-meta">
             <div class="meta-box">
               <strong>Runtime</strong>
-              <span>Bash hooks, CLI scripts, SQLite/FTS5, jq, optional RTK.</span>
+              <span>Bash hooks, Python integrations, SQLite/FTS5, jq, optional RTK.</span>
             </div>
             <div class="meta-box">
               <strong>Agents</strong>
-              <span>Claude Code and Codex with hooks; Grok through skills and CLI today.</span>
+              <span>Claude Code, Codex, and Google Antigravity with hooks; Grok via skills.</span>
             </div>
             <div class="meta-box">
               <strong>Core Promise</strong>
@@ -793,7 +793,7 @@
 
           <div class="callout">
             <h3>Compaction Survival is shared state</h3>
-            <p><code>eagle-mem compaction</code> is not a Grok-only feature. It reads project-level state from SQLite: enriched summaries, durable tasks, stale tasks, active orchestration lanes, and recent durable updates. Claude Code and Codex have hook-backed automatic recovery around compact and clear events. Grok can use the same state through linked skills and CLI commands until native lifecycle hooks exist.</p>
+            <p><code>eagle-mem compaction</code> reads project-level state from SQLite: enriched summaries, durable tasks, stale tasks, active orchestration lanes, and recent durable updates. Claude Code, Codex, and Google Antigravity have hook-backed automatic recovery around compact and clear events. Grok can use the same state through linked skills and CLI commands.</p>
           </div>
 
           <h3>Vocabulary</h3>
@@ -862,7 +862,7 @@
               <text x="40" y="42" class="label">User Layer</text>
               <rect x="40" y="58" width="220" height="72" class="box-cyan"></rect>
               <text x="62" y="90">Developer</text>
-              <text x="62" y="112" class="small">Works in Claude Code, Codex, or Grok</text>
+              <text x="62" y="112" class="small">Works in Claude, Codex, Grok, or Antigravity</text>
 
               <text x="40" y="178" class="label">Agent Layer</text>
               <rect x="40" y="194" width="220" height="78" class="box"></rect>
@@ -871,6 +871,12 @@
               <rect x="300" y="194" width="220" height="78" class="box"></rect>
               <text x="322" y="225">Codex</text>
               <text x="322" y="247" class="small">config.toml, hooks.json, AGENTS.md</text>
+              <rect x="560" y="194" width="220" height="78" class="box"></rect>
+              <text x="582" y="225">Grok</text>
+              <text x="582" y="247" class="small">skills link, grok-bootstrap</text>
+              <rect x="820" y="194" width="220" height="78" class="box"></rect>
+              <text x="842" y="225">Antigravity (AGY)</text>
+              <text x="842" y="247" class="small">google_antigravity_hook.py</text>
 
               <text x="40" y="320" class="label">Hook Runtime</text>
               <rect x="40" y="336" width="160" height="68" class="box-soft"></rect>
@@ -902,8 +908,12 @@
 
               <path d="M150,130 L150,190" class="arrow"></path>
               <path d="M260,232 L300,232" class="arrow"></path>
+              <path d="M520,232 L560,232" class="arrow"></path>
+              <path d="M780,232 L820,232" class="arrow"></path>
               <path d="M150,272 L150,330" class="arrow"></path>
               <path d="M410,272 L410,330" class="arrow"></path>
+              <path d="M670,272 L670,330" class="arrow"></path>
+              <path d="M870,272 L870,330" class="arrow"></path>
               <path d="M840,404 L735,462" class="arrow"></path>
               <path d="M660,404 L452,462" class="arrow"></path>
               <path d="M300,404 L182,462" class="arrow"></path>
@@ -964,7 +974,7 @@
               <div class="step-num">5</div>
               <div>
                 <h3>Agent hooks are registered</h3>
-                <p>Claude Code hooks are patched into <code>~/.claude/settings.json</code>. Codex hooks are registered in <code>~/.codex/hooks.json</code>, and <code>codex_hooks = true</code> is enabled in <code>~/.codex/config.toml</code>. Grok currently has skills and CLI access rather than hook registration.</p>
+                <p>Claude Code hooks are patched into <code>~/.claude/settings.json</code>. Codex hooks are registered in <code>~/.codex/hooks.json</code>. Google Antigravity SDK hooks are registered programmatically in <code>google_antigravity_hook.py</code> using native Python async hooks. Grok has skills and CLI access.</p>
               </div>
             </article>
 
@@ -972,7 +982,7 @@
               <div class="step-num">6</div>
               <div>
                 <h3>Skills and instructions are linked</h3>
-                <p>Eagle Mem skills are symlinked into each agent's skill directory. Claude receives <code>CLAUDE.md</code> summary instructions. Codex receives <code>AGENTS.md</code> clean-output memory instructions. Grok receives the same Eagle Mem skills under <code>~/.grok/skills</code> and can run <code>eagle-mem grok-bootstrap</code> for setup guidance.</p>
+                <p>Eagle Mem skills are symlinked into each agent's skill directory. Claude receives <code>CLAUDE.md</code> instructions. Codex receives <code>AGENTS.md</code> instructions. Google Antigravity SDK maps and mirrors standard brain planning artifacts (plans, tasks, walkthroughs). Grok receives skills under <code>~/.grok/skills</code>.</p>
               </div>
             </article>
           </div>
@@ -1015,7 +1025,7 @@
               <tr>
                 <td><code>~/.eagle-mem/memory.db</code></td>
                 <td>Single source of local memory</td>
-                <td>Stores shared state across Claude Code, Codex, Grok skills, compactions, and sessions.</td>
+                <td>Stores shared state across Claude Code, Codex, Grok skills, Google Antigravity hooks, compactions, and sessions.</td>
               </tr>
             </tbody>
           </table>
@@ -1087,7 +1097,7 @@
           <p class="section-number">06 / Technical Architecture</p>
           <h2>The Agent Adapter Layer</h2>
           <p class="lead">
-            The project is agent-generic below the adapter layer. Claude Code and Codex have different config files, tool names, transcript formats, and output expectations, while Grok currently participates through skills and CLI commands. Eagle Mem normalizes each supported surface into the same project memory model.
+            The project is agent-generic below the adapter layer. Claude Code, Codex, and Google Antigravity have direct lifecycle hook adapters, while Grok participates through skills and CLI commands. Eagle Mem normalizes each supported surface into the same project memory model.
           </p>
 
           <div class="grid-2">
@@ -1123,6 +1133,17 @@
                 <span class="tag">grok-bootstrap</span>
                 <span class="tag">compaction</span>
                 <span class="tag">tasks</span>
+              </div>
+            </article>
+
+            <article class="adapter-rule">
+              <h3>Google Antigravity SDK adapter</h3>
+              <p>Integrated programmatically via <code>integrations/google_antigravity_hook.py</code>. Connects Antigravity's async Python hook triggers directly to Eagle Mem's lifecycle events, enabling direct database writes and background curation/sync.</p>
+              <div class="tag-row">
+                <span class="tag">on_session_start</span>
+                <span class="tag">pre_tool_call_decide</span>
+                <span class="tag">post_tool_call</span>
+                <span class="tag">on_compaction</span>
               </div>
             </article>
           </div>
@@ -1275,7 +1296,7 @@
               </tr>
               <tr>
                 <td><code>agent_memories</code>, <code>agent_plans</code>, <code>agent_tasks</code></td>
-                <td>What durable agent artifacts should be shared across Claude Code and Codex?</td>
+                <td>What durable agent artifacts should be shared across Claude Code, Codex, Grok, and Antigravity?</td>
                 <td>PostToolUse, SessionEnd, skills, search CLI</td>
               </tr>
               <tr>
@@ -1464,7 +1485,7 @@
 
           <h3>Default routing</h3>
           <p>
-            Eagle Mem can route broad work to the opposite agent by default. A Codex coordinator can spawn Claude Code workers; a Claude Code coordinator can spawn Codex workers. The goal is not to make agents compete. The goal is to let each lane have one owner and one validation path.
+            Eagle Mem can route broad work to different agents by default. For example, a Codex or Antigravity coordinator can spawn Claude Code or Grok workers; any agent can coordinate or execute worker lanes. The goal is not to make agents compete, but to let each lane have one owner and one validation path.
           </p>
 
           <pre><code># Agent-run protocol, not usually a user task
@@ -1476,7 +1497,7 @@ eagle-mem orchestrate handoff --write docs/handoff-context.md</code></pre>
 
           <h3>Why lanes matter for all agents</h3>
           <p>
-            Context windows end. Tools fail. A user may switch from Claude Code to Codex. A worker may finish while the coordinator is compacted. Lanes make this survivable because the state is outside any one transcript.
+            Context windows end. Tools fail. A user may switch from Claude Code to Codex, Grok, or Antigravity. A worker may finish while the coordinator is compacted. Lanes make this survivable because the state is outside any one transcript.
           </p>
         </div>
       </section>
@@ -1492,7 +1513,7 @@ eagle-mem orchestrate handoff --write docs/handoff-context.md</code></pre>
           <div class="grid-2">
             <article class="principle">
               <h3>1. Stay in the agent's flow</h3>
-              <p>Users already live in Claude Code or Codex. Eagle Mem should not require them to open a dashboard before every task. Hooks inject context where the agent already is.</p>
+              <p>Users already live in Claude Code, Codex, Grok, or Antigravity. Eagle Mem should not require them to open a dashboard before every task. Hooks/skills inject context where the agent already is.</p>
             </article>
             <article class="principle">
               <h3>2. Show up only when useful</h3>
@@ -1512,7 +1533,7 @@ eagle-mem orchestrate handoff --write docs/handoff-context.md</code></pre>
             </article>
             <article class="principle">
               <h3>6. Respect each agent's display model</h3>
-              <p>Claude can handle richer hook context. Codex should keep user-facing replies clean and let Stop capture summaries from normal prose.</p>
+              <p>Claude and Antigravity can handle richer hook context. Codex and Grok should keep user-facing replies clean and let Turn Stop/Stop capture summaries from normal prose.</p>
             </article>
           </div>
         </div>
@@ -1583,7 +1604,7 @@ eagle-mem orchestrate handoff --write docs/handoff-context.md</code></pre>
           <p class="section-number">13 / Tutorial</p>
           <h2>Walkthrough: From Empty Memory To Safer Release</h2>
           <p class="lead">
-            This walkthrough explains how the system feels to a beginner. The same flow works whether the active agent is Claude Code or Codex.
+            This walkthrough explains how the system feels to a beginner. The same flow works whether the active agent is Claude Code, Codex, Grok, or Antigravity.
           </p>
 
           <div class="step-list">
@@ -1641,7 +1662,7 @@ eagle-mem install</code></pre>
               <div class="step-num">7</div>
               <div>
                 <h3>The turn ends with durable memory</h3>
-                <p>Stop saves what happened so the next session can recall it. Codex can keep the final reply clean; Claude can use richer summary fields when appropriate. Either way, the durable memory lands in SQLite.</p>
+                <p>Stop saves what happened so the next session can recall it. Codex and Grok can keep the final reply clean; Claude and Antigravity can use richer summary fields/artifacts when appropriate. Either way, the durable memory lands in SQLite.</p>
               </div>
             </article>
           </div>
@@ -1661,7 +1682,7 @@ eagle-mem install</code></pre>
           <p class="section-number">14 / All-Agent Applicability</p>
           <h2>How To Add Another Agent</h2>
           <p class="lead">
-            The project supports Claude Code and Codex with lifecycle hooks, and Grok with skills plus CLI workflows. The architecture should scale to any coding agent that can run local hooks, wrapper scripts, or a skill-like command surface. The integration work should live at the edge, not inside the database model.
+            The project natively supports Claude Code, Codex, and Google Antigravity with lifecycle hooks, and Grok with skills plus CLI workflows. The architecture should scale to any coding agent that can run local hooks, wrapper scripts, or a skill-like command surface. The integration work should live at the edge, not inside the database model.
           </p>
 
           <h3>Minimum viable adapter</h3>
@@ -1705,7 +1726,7 @@ eagle-mem install</code></pre>
           <h3>Adapter checklist</h3>
           <ol>
             <li>Register the agent's lifecycle events to call the installed scripts in <code>~/.eagle-mem/hooks/</code>.</li>
-            <li>Set <code>EAGLE_AGENT_SOURCE</code> to a stable value, such as <code>codex</code>, <code>claude-code</code>, or a future agent key.</li>
+            <li>Set <code>EAGLE_AGENT_SOURCE</code> to a stable value, such as <code>codex</code>, <code>claude-code</code>, <code>grok</code>, <code>antigravity</code>, or a future agent key.</li>
             <li>Map the agent's shell and file tools into Eagle Mem's known categories.</li>
             <li>Pass enough JSON to identify <code>session_id</code>, <code>cwd</code>, tool name, tool input, and optional transcript path.</li>
             <li>Teach output formatting for the agent: compact JSON, plain additional context, or deny decisions.</li>

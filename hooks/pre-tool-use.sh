@@ -318,12 +318,8 @@ esac
 
 [ -z "$context" ] && [ -z "$updated_input" ] && exit 0
 
-if [ "$agent" = "codex" ]; then
-    # Codex PreToolUse currently supports deny decisions, but not advisory
-    # additionalContext or updatedInput. Deny paths above already returned JSON;
-    # non-blocking reminders are delivered through SessionStart/UserPromptSubmit.
-    exit 0
-fi
+# Codex PreToolUse now natively receives both blocking decisions and advisory context.
+# Removing the old early-exit to align Codex's pre-tool capabilities with Claude and Antigravity.
 
 if [ -n "$updated_input" ]; then
     jq -nc --arg ctx "$context" --argjson ui "$updated_input" \

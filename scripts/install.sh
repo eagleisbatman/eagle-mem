@@ -195,13 +195,14 @@ echo ""
 echo -e "  ${BOLD}Installing Eagle Mem...${RESET}"
 echo ""
 
-mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts}
+mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts,integrations}
 
 cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
 cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
 cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/scripts/*.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
+cp -r "$PACKAGE_DIR"/integrations/* "$EAGLE_MEM_DIR/integrations/" 2>/dev/null || true
 
 chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
 chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh
@@ -410,6 +411,7 @@ eagle_kv "Hooks:" "$EAGLE_MEM_DIR/hooks/"
 [ "$claude_found" = true ] && eagle_kv "Claude settings:" "$SETTINGS"
 [ "$codex_found" = true ] && eagle_kv "Codex hooks:" "$EAGLE_CODEX_HOOKS"
 [ "$grok_found" = true ] && eagle_kv "Grok skills:" "$EAGLE_GROK_SKILLS_DIR"
+eagle_kv "Antigravity Hook:" "$EAGLE_MEM_DIR/integrations/google_antigravity_hook.py"
 
 echo ""
 if [ "$grok_found" = true ]; then
@@ -418,4 +420,10 @@ fi
 if [ "$claude_found" = true ] || [ "$codex_found" = true ]; then
     eagle_dim "Start a new Claude Code or Codex session — Eagle Mem will activate automatically."
 fi
+echo ""
+eagle_info "Google Antigravity SDK Integration:"
+eagle_dim "  To use Eagle Mem inside your Python Antigravity agents, simply import and register the hook:"
+echo ""
+eagle_dim "    from integrations.google_antigravity_hook import EagleMemAntigravityHook"
+eagle_dim "    config = LocalAgentConfig(hooks=EagleMemAntigravityHook().get_hooks())"
 echo ""

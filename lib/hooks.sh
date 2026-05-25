@@ -4,10 +4,25 @@
 # Shared by install.sh and update.sh
 # ═══════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════
+
+eagle_backup_file() {
+    local file="$1"
+    [ -f "$file" ] || return 0
+    if [ -z "${_EAGLE_BACKUP_DONE:-}" ]; then
+        local timestamp
+        timestamp=$(date +%Y%m%d%H%M%S)
+        cp "$file" "${file}.bak.${timestamp}" 2>/dev/null || true
+        _EAGLE_BACKUP_DONE=1
+    fi
+}
+
 eagle_clean_hook_entries() {
     local settings="$1"
     local event="$2"
     local command="$3"
+
+    eagle_backup_file "$settings"
 
     local tmp
     tmp=$(mktemp)
@@ -22,6 +37,8 @@ eagle_patch_hook() {
     local matcher="$3"
     local command="$4"
     local description="${5:-}"
+
+    eagle_backup_file "$settings"
 
     # Check both command AND matcher to avoid skipping entries with different matchers
     # (e.g. PreToolUse with "Bash" vs "Read" matcher using the same script)

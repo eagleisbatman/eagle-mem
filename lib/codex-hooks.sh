@@ -3,12 +3,26 @@
 # Eagle Mem — Codex hook registration helpers
 # Shared by install.sh, update.sh, and uninstall.sh
 # ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 [ -n "${_EAGLE_CODEX_HOOKS_LOADED:-}" ] && return 0
 _EAGLE_CODEX_HOOKS_LOADED=1
+
+eagle_codex_backup_file() {
+    local file="$1"
+    [ -f "$file" ] || return 0
+    if [ -z "${_EAGLE_CODEX_BACKUP_DONE:-}" ]; then
+        local timestamp
+        timestamp=$(date +%Y%m%d%H%M%S)
+        cp "$file" "${file}.bak.${timestamp}" 2>/dev/null || true
+        _EAGLE_CODEX_BACKUP_DONE=1
+    fi
+}
 
 eagle_enable_codex_hooks() {
     local config="$EAGLE_CODEX_CONFIG"
     mkdir -p "$(dirname "$config")"
+
+    eagle_codex_backup_file "$config"
 
     if [ ! -f "$config" ]; then
         cat > "$config" << 'TOML'
@@ -71,6 +85,7 @@ eagle_patch_codex_hook() {
     script_path="${script_path%\"}"
 
     mkdir -p "$(dirname "$hooks_file")"
+    eagle_codex_backup_file "$hooks_file"
     if [ ! -f "$hooks_file" ]; then
         printf '{"hooks":{}}\n' > "$hooks_file"
         chmod 600 "$hooks_file" 2>/dev/null || true
@@ -170,6 +185,8 @@ eagle_remove_codex_hooks() {
     local hooks_file="$EAGLE_CODEX_HOOKS"
     [ -f "$hooks_file" ] || return 1
     command -v jq &>/dev/null || return 1
+
+    eagle_codex_backup_file "$hooks_file"
 
     local tmp
     tmp=$(mktemp)

@@ -31,15 +31,19 @@ Rules:
 
 ## Eagle Mem Sync
 
-Keep the visible ledger, Codex plan state, and Eagle Mem durable task state aligned.
+Keep the visible ledger, agent plan state, and Eagle Mem durable task state aligned.
 
-For Codex:
-
-- Use the live Codex plan tool for active progress when the work has multiple steps.
-- For durable multi-step work, also mirror tasks into Eagle Mem with `eagle-mem tasks add --agent codex`.
-- Start the matching durable task before working on it with `eagle-mem tasks start <id> --agent codex`.
-- Complete the matching durable task after verification with `eagle-mem tasks complete <id> --agent codex`.
+For all agents:
+- For durable multi-step work, mirror tasks into Eagle Mem with `eagle-mem tasks add --agent <agent-tag>`.
+- Start the matching durable task before working on it with `eagle-mem tasks start <id> --agent <agent-tag>`.
+- Complete the matching durable task after verification with `eagle-mem tasks complete <id> --agent <agent-tag>`.
 - If a task changes, fails, or is partially complete, update the Eagle Mem task description with the new context before moving on or compacting.
+
+Agent Specific Planning & Sync Modes:
+- **Codex**: Uses `AGENTS.md` clean-output memory instructions and the live plan tool (`--agent codex`).
+- **Claude Code**: Uses `CLAUDE.md` summary instructions (`--agent claude-code`).
+- **Google Antigravity**: Uses standard planning mode artifacts (`implementation_plan.md`, `task.md`, `walkthrough.md`) in its brain directory, which are automatically indexed and synced by `eagle-mem` (`--agent antigravity`).
+- **Grok**: Uses symlinked skills and CLI workflows (`--agent grok`).
 
 Use durable Eagle Mem task records when any of these are true:
 
@@ -84,10 +88,13 @@ Use these commands when durable task sync is needed:
 
 ```bash
 eagle-mem tasks
-eagle-mem tasks add "Task title" --agent codex --desc "Self-contained task description with decisions, files, verification, and handoff context"
-eagle-mem tasks start <id> --agent codex
-eagle-mem tasks update <id> --agent codex --desc "Updated context, decisions, partial progress, blocker, or failure details"
-eagle-mem tasks complete <id> --agent codex
+eagle-mem tasks add "Task title" --agent <agent-tag> --desc "Self-contained task description with decisions, files, verification, and handoff context"
+eagle-mem tasks start <id> --agent <agent-tag>
+eagle-mem tasks update <id> --agent <agent-tag> --desc "Updated context, decisions, partial progress, blocker, or failure details"
+eagle-mem tasks complete <id> --agent <agent-tag>
+```
+
+*(Note: Replace `<agent-tag>` with `codex`, `claude-code`, `grok`, or `antigravity` based on the active agent)*
 ```
 
 Good Eagle Mem task descriptions must be self-contained. A future context window should be able to read the task description alone and continue without rediscovering the plan.

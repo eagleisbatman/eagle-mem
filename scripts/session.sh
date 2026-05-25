@@ -164,8 +164,9 @@ save_session() {
         case "$agent" in
             codex|openai-codex) agent="codex" ;;
             claude|claude-code|cloud-code) agent="claude-code" ;;
+            antigravity*|google-antigravity*|google_antigravity*) agent="antigravity" ;;
             *)
-                eagle_err "--agent must be codex or claude-code"
+                eagle_err "--agent must be codex, claude-code, or antigravity"
                 exit 1
                 ;;
         esac

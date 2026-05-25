@@ -99,6 +99,13 @@ else
     eagle_info "Statusline integration not present or not auto-removable"
 fi
 
+# ─── Remove integration files ─────────────────────────────
+
+if [ -d "$EAGLE_MEM_DIR/integrations" ]; then
+    rm -rf "$EAGLE_MEM_DIR/integrations"
+    eagle_ok "Antigravity integration files removed"
+fi
+
 # ─── Remove skill symlinks ────────────────────────────────
 
 if [ -d "$EAGLE_SKILLS_DIR" ]; then

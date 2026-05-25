@@ -636,7 +636,7 @@ memories_sync() {
 
             if [ "$existing_hash" = "$new_hash" ] && { [ -z "$mem_project" ] || [ "$existing_project" = "$mem_project" ]; }; then
                 mem_skipped=$((mem_skipped + 1))
-                continue
+                return 0
             fi
 
             eagle_capture_agent_memory "$memfile" "" "$mem_project" "claude-code"
@@ -760,6 +760,84 @@ EOF
     fi
 
     eagle_kv "Tasks:" "$task_synced synced, $task_skipped unchanged"
+    echo ""
+
+    # ─── Sync brain planning artifacts ───────────────────
+    eagle_info "Scanning for agent brain planning artifacts..."
+    echo ""
+
+    local artifact_synced=0
+    local artifact_skipped=0
+
+    # Determine brain paths to scan
+    local brain_paths=(
+        "$HOME/.claude/brain"
+        "$HOME/.codex/brain"
+        "$HOME/.gemini/antigravity/brain"
+    )
+
+    for bdir in "${brain_paths[@]}"; do
+        [ ! -d "$bdir" ] && continue
+
+        # 1. Sync plans (implementation_plan.md)
+        while IFS= read -r -d '' planfile; do
+            [ ! -f "$planfile" ] && continue
+
+            local existing_hash
+            existing_hash=$(eagle_db "SELECT content_hash FROM agent_plans WHERE file_path = '$(eagle_sql_escape "$planfile")';")
+            local new_hash
+            new_hash=$(shasum -a 256 "$planfile" | awk '{print $1}')
+
+            if [ "$existing_hash" = "$new_hash" ]; then
+                artifact_skipped=$((artifact_skipped + 1))
+                continue
+            fi
+
+            # Determine agent name based on brain folder path
+            local origin_agent="claude-code"
+            [[ "$planfile" == *".codex"* ]] && origin_agent="codex"
+            [[ "$planfile" == *"antigravity"* ]] && origin_agent="antigravity"
+
+            local artifact_project="$project"
+            [ -z "$artifact_project" ] && artifact_project=$(eagle_project_from_cwd "$(pwd)")
+
+            eagle_capture_agent_plan "$planfile" "" "$artifact_project" "$origin_agent"
+            artifact_synced=$((artifact_synced + 1))
+            local ptitle
+            ptitle=$(awk '/^# /{print; exit}' "$planfile" | sed 's/^# //')
+            [ -z "$ptitle" ] && ptitle="Implementation Plan"
+            eagle_ok "Mirrored plan [$(eagle_agent_label "$origin_agent")]: $ptitle"
+        done < <(find "$bdir" -name "implementation_plan.md" -print0 2>/dev/null)
+
+        # 2. Sync tasks and walkthroughs (task.md, walkthrough.md)
+        while IFS= read -r -d '' memfile; do
+            [ ! -f "$memfile" ] && continue
+
+            local existing_hash
+            existing_hash=$(eagle_db "SELECT content_hash FROM agent_memories WHERE file_path = '$(eagle_sql_escape "$memfile")';")
+            local new_hash
+            new_hash=$(shasum -a 256 "$memfile" | awk '{print $1}')
+
+            if [ "$existing_hash" = "$new_hash" ]; then
+                artifact_skipped=$((artifact_skipped + 1))
+                continue
+            fi
+
+            # Determine agent name based on brain folder path
+            local origin_agent="claude-code"
+            [[ "$memfile" == *".codex"* ]] && origin_agent="codex"
+            [[ "$memfile" == *"antigravity"* ]] && origin_agent="antigravity"
+
+            local artifact_project="$project"
+            [ -z "$artifact_project" ] && artifact_project=$(eagle_project_from_cwd "$(pwd)")
+
+            eagle_capture_agent_memory "$memfile" "" "$artifact_project" "$origin_agent"
+            artifact_synced=$((artifact_synced + 1))
+            eagle_ok "Mirrored $(basename "$memfile") [$(eagle_agent_label "$origin_agent")]"
+        done < <(find "$bdir" \( -name "task.md" -o -name "walkthrough.md" \) -print0 2>/dev/null)
+    done
+
+    eagle_kv "Brain Artifacts:" "$artifact_synced synced, $artifact_skipped unchanged"
     echo ""
 
     # ─── Backfill project names ──────────────────────────
