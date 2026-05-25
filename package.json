@@ -13,7 +13,8 @@
     "db/",
     "skills/",
     "docs/",
-    "architecture.html"
+    "architecture.html",
+    "integrations/"
   ],
   "keywords": [
     "claude-code",
