@@ -14,7 +14,8 @@
     "skills/",
     "docs/",
     "architecture.html",
-    "integrations/"
+    "integrations/",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "claude-code",
