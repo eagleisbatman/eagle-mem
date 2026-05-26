@@ -367,7 +367,29 @@ fi
 # Store in database
 eagle_upsert_overview "$PROJECT" "$overview" "scan"
 
-eagle_ok "Overview saved for project '$PROJECT'"
+# Populate/wire codebase knowledge graph
+eagle_graph_add_node "$PROJECT" "project" "$PROJECT" "$overview" ""
+project_node_id=$(eagle_graph_get_node_id "$PROJECT" "project" "$PROJECT")
+
+# Prune deleted/removed files from graph
+eagle_graph_prune_orphans "$PROJECT"
+
+file_node_count=0
+if [ -n "$project_node_id" ]; then
+    while IFS= read -r file; do
+        [ -z "$file" ] && continue
+        # Add file node
+        eagle_graph_add_node "$PROJECT" "file" "$file" "" "$TARGET_DIR/$file"
+        file_node_id=$(eagle_graph_get_node_id "$PROJECT" "file" "$file")
+        if [ -n "$file_node_id" ]; then
+            # Connect project containing this file
+            eagle_graph_add_edge "$PROJECT" "$project_node_id" "$file_node_id" "contains" 1.0
+        fi
+        file_node_count=$((file_node_count + 1))
+    done < "$TMPFILE"
+fi
+
+eagle_ok "Overview saved for project '$PROJECT' (wired $file_node_count files in knowledge graph)"
 echo ""
 
 echo -e "  ${BOLD}Generated overview:${RESET}"

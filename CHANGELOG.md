@@ -4,6 +4,18 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.3 Minor Release
+
+This release introduces native relational **Knowledge Graph Memories** and an automated background **Dream Cycle** curator to consolidate multi-agent developer context:
+
+- **Graph-based Memories**: Full integration of custom semantic code graph database primitives (`lib/db-graph.sh` and migrations `db/035_graph_memories.sql` and `db/036_graph_constraints.sql`) to link files, functions, variables, sessions, and memories.
+- **Background Dream Cycle Curation**: Structured offline compilation in `scripts/curate.sh` that merges redundant, overlapping memories into clean `--- Compiled Truth ---` with an underlying `--- Evidence Trail ---`.
+- **Database Firewalls**: Enforced strict enums check triggers on `node_type` and `edge_type` to guarantee complete data integrity.
+- **Sanitized FTS Wildcards**: Safe search query sanitization in `eagle_graph_search` to prevent SQLite MATCH syntax errors on special characters.
+- **Unified Global Porting**: Symlinked advanced nested specialist developer skills and HTTP Model Context Protocol (MCP) gateways natively into the Google Antigravity active configuration.
+
+---
+
 ## v4.10.2 Patch
 
 This release expands the Eagle Mem adapter layer and addresses multi-agent planning synchronization and gap remediations across all four supported agents:

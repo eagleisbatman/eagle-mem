@@ -45,6 +45,9 @@ show_help() {
     echo -e "    eagle-mem memories tasks search ${CYAN}<query>${RESET}     ${DIM}# full-text search tasks${RESET}"
     echo -e "    eagle-mem memories tasks show ${CYAN}<file_path>${RESET}   ${DIM}# show a specific task${RESET}"
     echo -e "    eagle-mem memories sync                     ${DIM}# backfill memories + plans + tasks${RESET}"
+    echo -e "    eagle-mem memories graph                    ${DIM}# view codebase knowledge graph summary${RESET}"
+    echo -e "    eagle-mem memories graph query ${CYAN}<term>${RESET}      ${DIM}# search knowledge graph nodes${RESET}"
+    echo -e "    eagle-mem memories graph neighbors ${CYAN}<name>${RESET}  ${DIM}# view a node's local network connections${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
     echo -e "    ${CYAN}-p, --project${RESET} <name>  Filter by project (default: current project)"
@@ -62,6 +65,7 @@ show_help() {
 
 plan_action=""
 task_action=""
+graph_action=""
 
 case "$action" in
     --help|-h) show_help ;;
@@ -71,6 +75,10 @@ case "$action" in
         ;;
     tasks)
         task_action="${1:-list}"
+        shift 2>/dev/null || true
+        ;;
+    graph)
+        graph_action="${1:-summary}"
         shift 2>/dev/null || true
         ;;
 esac
@@ -858,6 +866,116 @@ EOF
     eagle_footer "Sync complete."
 }
 
+memories_graph() {
+    local sub_action="${graph_action:-summary}"
+
+    case "$sub_action" in
+        query)
+            local qstr="${query:-}"
+            if [ -z "$qstr" ]; then
+                eagle_err "Usage: eagle-mem memories graph query <search_term>"
+                exit 1
+            fi
+            eagle_header "Knowledge Graph Query"
+            eagle_info "Search Term: $qstr"
+            echo ""
+            
+            local nodes
+            nodes=$(eagle_graph_search "$project" "$qstr" "")
+            if [ -z "$nodes" ]; then
+                eagle_dim "No graph nodes found matching '$qstr'."
+                echo ""
+                return
+            fi
+            
+            while IFS='|' read -r nid ntype nname nval npath; do
+                [ -z "$nid" ] && continue
+                echo -e "  ${BOLD}${nname}${RESET}  ${CYAN}[${ntype}]${RESET} ${DIM}(ID: ${nid})${RESET}"
+                [ -n "$nval" ] && echo -e "    ${DIM}${nval}${RESET}"
+                [ -n "$npath" ] && echo -e "    ${DIM}Path: ${npath}${RESET}"
+                echo ""
+            done <<< "$nodes"
+            ;;
+        neighbors)
+            local target_name="${query:-}"
+            if [ -z "$target_name" ]; then
+                eagle_err "Usage: eagle-mem memories graph neighbors <node_name>"
+                exit 1
+            fi
+            
+            # Find node by name (fuzzy or exact)
+            local matched
+            matched=$(eagle_db "SELECT id, node_type, node_name FROM graph_nodes WHERE project = '$(eagle_sql_escape "$project")' AND (node_name = '$(eagle_sql_escape "$target_name")' OR node_name LIKE '%$(eagle_sql_escape "$target_name")%') LIMIT 1;")
+            if [ -z "$matched" ]; then
+                eagle_err "Node not found matching '$target_name'."
+                exit 1
+            fi
+            
+            IFS='|' read -r nid ntype nname <<< "$matched"
+            eagle_header "Graph Neighbors"
+            eagle_info "Node: ${BOLD}${nname}${RESET}  ${CYAN}[${ntype}]${RESET} (ID: ${nid})"
+            echo ""
+            
+            # Query inbound and outbound neighbors
+            eagle_info "Outbound Connections (Node interacts with/references/contains):"
+            local outbound
+            outbound=$(eagle_graph_query_neighbors "$nid" "out")
+            if [ -n "$outbound" ]; then
+                while IFS='|' read -r etype eweight target_id target_type target_name _; do
+                    [ -z "$target_id" ] && continue
+                    echo -e "  ${BOLD}───[ ${etype} ]───>${RESET} ${CYAN}${target_name}${RESET} [${target_type}] ${DIM}(weight: ${eweight})${RESET}"
+                done <<< "$outbound"
+            else
+                eagle_dim "  None"
+            fi
+            echo ""
+            
+            eagle_info "Inbound Connections (Other nodes reference/call/contain this node):"
+            local inbound
+            inbound=$(eagle_graph_query_neighbors "$nid" "in")
+            if [ -n "$inbound" ]; then
+                while IFS='|' read -r etype eweight source_id source_type source_name _; do
+                    [ -z "$source_id" ] && continue
+                    echo -e "  ${CYAN}${source_name}${RESET} [${source_type}] ${BOLD}───[ ${etype} ]───>${RESET} this ${DIM}(weight: ${eweight})${RESET}"
+                done <<< "$inbound"
+            else
+                eagle_dim "  None"
+            fi
+            echo ""
+            ;;
+        summary|*)
+            eagle_header "Knowledge Graph Summary"
+            echo ""
+            
+            local totals
+            totals=$(eagle_db "SELECT node_type, COUNT(*) FROM graph_nodes WHERE project = '$(eagle_sql_escape "$project")' GROUP BY node_type;")
+            
+            local total_edges
+            total_edges=$(eagle_db "SELECT COUNT(*) FROM graph_edges WHERE project = '$(eagle_sql_escape "$project")';")
+            
+            if [ -z "$totals" ]; then
+                eagle_dim "Graph is empty for this project."
+                eagle_dim "Run 'eagle-mem scan' or 'eagle-mem index' to auto-populate codebase nodes."
+                echo ""
+                return
+            fi
+            
+            eagle_info "Entities (Nodes):"
+            while IFS='|' read -r ntype count; do
+                [ -z "$ntype" ] && continue
+                eagle_kv "  ${ntype}:" "${count} nodes"
+            done <<< "$totals"
+            echo ""
+            eagle_kv "Total relationships (Edges):" "${total_edges:-0} edges"
+            echo ""
+            eagle_dim "Commands:"
+            eagle_dim "  eagle-mem memories graph query <search_term>     # search graph nodes"
+            eagle_dim "  eagle-mem memories graph neighbors <node_name>    # view neighbor connections"
+            echo ""
+            ;;
+    esac
+}
+
 # ─── Dispatch ────────────────────────────────────────────
 
 case "$action" in
@@ -880,6 +998,7 @@ case "$action" in
             *)       tasks_list ;;
         esac
         ;;
+    graph)   memories_graph "$@" ;;
     sync)    memories_sync ;;
     *)
         eagle_err "Unknown action: $action"

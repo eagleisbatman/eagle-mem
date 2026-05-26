@@ -55,6 +55,16 @@ Use durable Eagle Mem task records when any of these are true:
 
 For small single-turn fixes, keep the visible ledger and final summary clear; Eagle Mem will capture the transcript automatically.
 
+## Religious Hook Operation & Graph Memory Utilization
+
+To ensure that the self-wiring codebase graph is fully utilized, all four agents (Claude Code, Codex, Grok, and Google Antigravity) MUST execute hooks and query the knowledge graph religiously:
+
+1. **Verify Hook Settings**: Do not bypass, disable, or mock the hook pipelines (`session-start`, `pre-tool-use`, `post-tool-use`, `session-end`) under any conditions. They are the core engine of `eagle-mem`.
+2. **Consult Codebase Graph First**: Before starting any development task or formulating implementation plans, run `eagle-mem graph` or `eagle-mem graph query` to inspect dependencies, declares, and semantic references of the target files.
+3. **Compiled Truth Memory Structure**: When writing agent memories, align with the curated structure:
+   - Place a `--- Compiled Truth ---` section at the top detailing the best, structured, up-to-date understanding of the subsystem or gotchas.
+   - Place a `--- Evidence Trail ---` separator with chronological logs/timeline entries below it. This enables the background "Dream Cycle" curator to cluster and merge redundant memories cleanly.
+
 ## Sync Discipline
 
 Treat task state in this order:

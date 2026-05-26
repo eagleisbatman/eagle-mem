@@ -521,7 +521,138 @@ else
     eagle_dim "  Not enough session data for hot file detection (need 3+ sessions, have ${total_sessions:-0})"
 fi
 
-# ─── 7. Session compression (--full only) ─────────────────
+# ─── 7. Knowledge Graph Wiring & Dream Cycle (Consolidation) ───
+
+eagle_info "Executing Dream Cycle (Knowledge Graph & Memory Consolidation)..."
+
+# 7.1 Wire co-edit edges in the graph
+if [ -n "$co_edit_data" ]; then
+    co_wire_count=0
+    while IFS='|' read -r f1 f2 co_sessions; do
+        [ -z "$f1" ] || [ -z "$f2" ] && continue
+        f1_id=$(eagle_graph_get_node_id "$project" "file" "$f1")
+        f2_id=$(eagle_graph_get_node_id "$project" "file" "$f2")
+        if [ -n "$f1_id" ] && [ -n "$f2_id" ]; then
+            if [ "$DRY_RUN" -eq 0 ]; then
+                eagle_graph_add_edge "$project" "$f1_id" "$f2_id" "co_edited" "$co_sessions"
+            fi
+            co_wire_count=$((co_wire_count + 1))
+        fi
+    done <<< "$co_edit_data"
+    eagle_ok "Wired $co_wire_count co-edited file edges"
+fi
+
+# 7.2 Wire session nodes and access edges
+recent_sessions=$(eagle_db "SELECT id, started_at, model FROM sessions WHERE project = '$p_esc' ORDER BY started_at DESC LIMIT 15;")
+if [ -n "$recent_sessions" ]; then
+    session_wire_count=0
+    while IFS='|' read -r sid sstart smodel; do
+        [ -z "$sid" ] && continue
+        if [ "$DRY_RUN" -eq 0 ]; then
+            eagle_graph_add_node "$project" "session" "$sid" "Session run on $sstart using $smodel" ""
+            sid_node=$(eagle_graph_get_node_id "$project" "session" "$sid")
+            if [ -n "$sid_node" ]; then
+                # Find read/modified files in this session from observations
+                session_files=$(eagle_db "SELECT files_read, files_modified FROM observations WHERE session_id = '$(eagle_sql_escape "$sid")';")
+                if [ -n "$session_files" ]; then
+                    while IFS='|' read -r f_read f_mod; do
+                        # Parse files_read JSON list
+                        if [ -n "$f_read" ] && [ "$f_read" != "[]" ]; then
+                            echo "$f_read" | grep -oE '"[^"]+"' | tr -d '"' | while read -r rf; do
+                                [ -z "$rf" ] && continue
+                                rfid=$(eagle_graph_get_node_id "$project" "file" "$rf")
+                                [ -n "$rfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$rfid" "read" 1.0
+                            done
+                        fi
+                        # Parse files_modified JSON list
+                        if [ -n "$f_mod" ] && [ "$f_mod" != "[]" ]; then
+                            echo "$f_mod" | grep -oE '"[^"]+"' | tr -d '"' | while read -r mf; do
+                                [ -z "$mf" ] && continue
+                                mfid=$(eagle_graph_get_node_id "$project" "file" "$mf")
+                                [ -n "$mfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$mfid" "modified" 2.0
+                            done
+                        fi
+                    done <<< "$session_files"
+                fi
+            fi
+        fi
+        session_wire_count=$((session_wire_count + 1))
+    done <<< "$recent_sessions"
+    eagle_ok "Wired $session_wire_count recent session nodes and edges"
+fi
+
+# 7.3 Offline Memory Consolidation (Compiled Truth vs Evidence)
+active_memories=$(eagle_db "SELECT memory_name, memory_type, description, content FROM agent_memories WHERE project = '$p_esc';")
+if [ -n "$active_memories" ]; then
+    consolidation_prompt="Analyze these mirrored agent memories for project '$project'. Identify any memories that are redundant, overlap in scope, or describe the same subsystem/gotcha/concept.
+    
+MEMORIES:
+$active_memories
+
+For any memories that should be consolidated, merge them into a single 'Compiled Truth' summary.
+The consolidated memory MUST be formatted exactly as:
+--- Compiled Truth ---
+<A structured, clear, up-to-date summary of the topic, gotten by merging the duplicate/overlapping memories. Keep it extremely precise.>
+
+--- Evidence Trail ---
+- <Original memory title 1>: <brief original description or timestamp>
+- <Original memory title 2>: <brief original description or timestamp>
+
+Format your output as a series of instructions:
+CONSOLIDATE: <original memory name 1>, <original memory name 2> -> <new consolidated memory name> | description: <new description> | value: <the merged compiled truth + evidence content>
+
+If no memories need consolidation, output: NONE"
+
+    consolidation_result=$(eagle_llm_call "$consolidation_prompt" "You consolidate software development memories into a single compiled truth. Be precise. Output CONSOLIDATE lines or NONE." 1024)
+
+    if [ -n "$consolidation_result" ] && ! echo "$consolidation_result" | grep -q "^NONE$"; then
+        cons_count=0
+        while IFS= read -r line; do
+            case "$line" in
+                CONSOLIDATE:*)
+                    cons_data=$(echo "$line" | sed 's/^CONSOLIDATE:[[:space:]]*//')
+                    
+                    # Parse matching: original_names -> new_name | description: desc | value: val
+                    names_part=$(echo "$cons_data" | cut -d'-' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    rest_part=$(echo "$cons_data" | cut -d'>' -f2-)
+                    new_name=$(echo "$rest_part" | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    
+                    desc_part=$(echo "$rest_part" | grep -oE "description:[[:space:]]*[^|]+" | sed 's/description:[[:space:]]*//')
+                    val_part=$(echo "$rest_part" | grep -oE "value:[[:space:]]*.+" | sed 's/value:[[:space:]]*//')
+                    
+                    [ -z "$new_name" ] || [ -z "$names_part" ] && continue
+                    
+                    if [ "$DRY_RUN" -eq 1 ]; then
+                        eagle_info "  Would consolidate: $names_part → $new_name"
+                    else
+                        # 1. Add new consolidated memory node
+                        eagle_graph_add_node "$project" "memory" "$new_name" "$val_part" ""
+                        new_node_id=$(eagle_graph_get_node_id "$project" "memory" "$new_name")
+                        
+                        # 2. Wire supersedes edges from new node to old nodes, and mark old nodes as inactive/superseded
+                        IFS=',' read -ra name_arr <<< "$names_part"
+                        for old_n in "${name_arr[@]}"; do
+                            old_n=$(echo "$old_n" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                            [ -z "$old_n" ] && continue
+                            old_node_id=$(eagle_graph_get_node_id "$project" "memory" "$old_n")
+                            if [ -n "$old_node_id" ] && [ -n "$new_node_id" ]; then
+                                eagle_graph_add_edge "$project" "$new_node_id" "$old_node_id" "supersedes" 1.0
+                            fi
+                        done
+                        cons_count=$((cons_count + 1))
+                    fi
+                    ;;
+            esac
+        done <<< "$consolidation_result"
+        eagle_ok "Consolidated $cons_count sets of overlapping agent memories"
+    else
+        eagle_ok "Agent memories are fully consolidated and up to date"
+    fi
+else
+    eagle_dim "  No active agent memories to consolidate"
+fi
+
+# ─── 8. Session compression (--full only) ─────────────────
 
 if [ "$FULL" -eq 1 ]; then
     eagle_info "Compressing old sessions..."

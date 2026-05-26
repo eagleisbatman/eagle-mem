@@ -178,6 +178,50 @@ COMMIT;"
 
     eagle_db_pipe <<< "$txn_sql"
 
+    # Static syntax relation extraction & graph wiring
+    # Wire node & edge static parser
+    file_node_id=$(eagle_graph_get_node_id "$PROJECT" "file" "$file")
+    if [ -n "$file_node_id" ]; then
+        # 1. Parse function/class declarations
+        # e.g., "def name", "class name", "fn name", "function name", "func name"
+        declarations=$(grep -oE '\<(class|struct|function|def|fn|func)[[:space:]]+[A-Za-z0-9_]+' "$full_path" 2>/dev/null | awk '{print $1 ":" $2}' | sort -u || true)
+        if [ -n "$declarations" ]; then
+            while IFS=':' read -r dtype dname; do
+                [ -z "$dname" ] && continue
+                eagle_graph_add_node "$PROJECT" "$dtype" "$dname" "Declared in $file" "$file"
+                decl_node_id=$(eagle_graph_get_node_id "$PROJECT" "$dtype" "$dname")
+                if [ -n "$decl_node_id" ]; then
+                    eagle_graph_add_edge "$PROJECT" "$file_node_id" "$decl_node_id" "declares" 1.0
+                fi
+            done <<< "$declarations"
+        fi
+
+        # 2. Parse local relative imports/requires/sources
+        # Matches paths starting with dot (./ or ../) or sourcing .sh files
+        local_imports=$(grep -oE "['\"](\.[^'\"]+)['\"]" "$full_path" 2>/dev/null | tr -d "'\"" || true)
+        # Also grab shell source files
+        shell_sources=$(grep -E "^[[:space:]]*(\.|source) " "$full_path" 2>/dev/null | sed -E "s/^[[:space:]]*(\.|source)[[:space:]]+(.*)/\\2/" || true)
+        
+        all_refs=$(printf "%s\n%s\n" "$local_imports" "$shell_sources" | sort -u)
+        if [ -n "$all_refs" ]; then
+            while IFS= read -r ref; do
+                [ -z "$ref" ] && continue
+                # Clean up path variables in shell sources (e.g. $_eagle_db_dir/db-core.sh -> db-core.sh)
+                ref_clean=$(echo "$ref" | sed -E 's/.*\///; s/\.sh$//; s/\.js$//; s/\.ts$//')
+                [ -z "$ref_clean" ] && continue
+                
+                # Check if there is a known file node in our graph that matches this basename or path
+                matched_file=$(eagle_db "SELECT node_name FROM graph_nodes WHERE project = '$project_sql' AND node_type = 'file' AND (node_name LIKE '%/$ref_clean%' OR node_name = '$ref_clean') LIMIT 1;")
+                if [ -n "$matched_file" ]; then
+                    target_file_id=$(eagle_graph_get_node_id "$PROJECT" "file" "$matched_file")
+                    if [ -n "$target_file_id" ]; then
+                        eagle_graph_add_edge "$PROJECT" "$file_node_id" "$target_file_id" "imports" 1.0
+                    fi
+                fi
+            done <<< "$all_refs"
+        fi
+    fi
+
     file_count=$((file_count + 1))
 
     if [ $((file_count % 10)) -eq 0 ]; then
