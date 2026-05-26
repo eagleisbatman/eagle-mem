@@ -25,12 +25,32 @@ DRY_RUN=0
 FULL=0
 project=""
 
+show_help() {
+    cat <<EOF
+Usage: eagle-mem curate [options]
+
+Options:
+  -h, --help           Show this help message and exit
+  --dry-run            Analyze gotchas, decisions, features, and memories without saving to db
+  --full               Run full session compression and historical curation (slower)
+  -p, --project <dir>  Target project directory (defaults to auto-detected cwd)
+EOF
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
         --dry-run) DRY_RUN=1; shift ;;
         --full) FULL=1; shift ;;
         -p|--project) project="$2"; shift 2 ;;
-        *) shift ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "Run with -h or --help for usage details." >&2
+            exit 1
+            ;;
     esac
 done
 
@@ -78,7 +98,7 @@ Only promote gotchas that are:
 
 If none qualify, output: NONE"
 
-    gotcha_result=$(eagle_llm_call "$gotcha_prompt" "You analyze software development patterns. Be concise. Only output PROMOTE lines or NONE." 512)
+    gotcha_result=$(eagle_llm_call "$gotcha_prompt" "You analyze software development patterns. Be concise. Only output PROMOTE lines or NONE." 512 || true)
 
     if [ -n "$gotcha_result" ] && ! echo "$gotcha_result" | grep -q "^NONE$"; then
         promoted=0
@@ -126,7 +146,7 @@ SUPERSEDED: <old decision> → <new decision> | file: <affected file if known>
 
 If none are superseded, output: NONE"
 
-    decision_result=$(eagle_llm_call "$decision_prompt" "You detect contradicting software decisions. Be precise." 512)
+    decision_result=$(eagle_llm_call "$decision_prompt" "You detect contradicting software decisions. Be precise." 512 || true)
 
     if [ -n "$decision_result" ] && ! echo "$decision_result" | grep -q "^NONE$"; then
         superseded=0
@@ -208,7 +228,7 @@ Where:
 
 If no rules needed, output: NONE"
 
-        cmd_result=$(eagle_llm_call "$cmd_prompt" "You optimize CLI output for AI assistants. Be conservative — only suggest rules for genuinely noisy commands." 512)
+        cmd_result=$(eagle_llm_call "$cmd_prompt" "You optimize CLI output for AI assistants. Be conservative — only suggest rules for genuinely noisy commands." 512 || true)
 
         if [ -n "$cmd_result" ] && ! echo "$cmd_result" | grep -q "^NONE$"; then
             rules_count=0
@@ -305,7 +325,7 @@ Rules:
 - Don't re-discover existing features
 - If no new features found, output: NONE"
 
-    feature_result=$(eagle_llm_call "$feature_prompt" "You identify software features from development session data. Be specific and evidence-based." 512)
+    feature_result=$(eagle_llm_call "$feature_prompt" "You identify software features from development session data. Be specific and evidence-based." 512 || true)
 
     if [ -n "$feature_result" ] && ! echo "$feature_result" | grep -q "^NONE$"; then
         features_count=0
@@ -428,7 +448,7 @@ if [ -n "$co_edit_data" ]; then
 
     if [ "$DRY_RUN" -eq 1 ]; then
         printf '%s\n' "$co_map_output" | while IFS='|' read -r f partners; do
-            [ -z "$f" ] && continue
+            if [ -z "$f" ]; then continue; fi
             eagle_info "    $(basename "$f") → $partners"
         done
     else
@@ -436,7 +456,7 @@ if [ -n "$co_edit_data" ]; then
             echo "BEGIN;"
             echo "DELETE FROM file_hints WHERE project = '$(eagle_sql_escape "$project")' AND hint_type = 'co_edit';"
             printf '%s\n' "$co_map_output" | while IFS='|' read -r f partners; do
-                [ -z "$f" ] && continue
+                if [ -z "$f" ]; then continue; fi
                 local_f=$(eagle_sql_escape "$f")
                 local_v=$(eagle_sql_escape "$partners")
                 echo "INSERT INTO file_hints (project, hint_type, file_path, hint_value) VALUES ('$(eagle_sql_escape "$project")', 'co_edit', '$local_f', '$local_v') ON CONFLICT(project, hint_type, file_path) DO UPDATE SET hint_value = excluded.hint_value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
@@ -492,7 +512,7 @@ if [ -n "$hot_file_data" ]; then
     hot_count=0
 
     while IFS='|' read -r hf_path hf_reads hf_sessions hf_rps; do
-        [ -z "$hf_path" ] && continue
+        if [ -z "$hf_path" ]; then continue; fi
         if [ -n "$hot_files" ]; then
             hot_files+=","
         fi
@@ -529,7 +549,7 @@ eagle_info "Executing Dream Cycle (Knowledge Graph & Memory Consolidation)..."
 if [ -n "$co_edit_data" ]; then
     co_wire_count=0
     while IFS='|' read -r f1 f2 co_sessions; do
-        [ -z "$f1" ] || [ -z "$f2" ] && continue
+        if [ -z "$f1" ] || [ -z "$f2" ]; then continue; fi
         f1_id=$(eagle_graph_get_node_id "$project" "file" "$f1")
         f2_id=$(eagle_graph_get_node_id "$project" "file" "$f2")
         if [ -n "$f1_id" ] && [ -n "$f2_id" ]; then
@@ -547,7 +567,7 @@ recent_sessions=$(eagle_db "SELECT id, started_at, model FROM sessions WHERE pro
 if [ -n "$recent_sessions" ]; then
     session_wire_count=0
     while IFS='|' read -r sid sstart smodel; do
-        [ -z "$sid" ] && continue
+        if [ -z "$sid" ]; then continue; fi
         if [ "$DRY_RUN" -eq 0 ]; then
             eagle_graph_add_node "$project" "session" "$sid" "Session run on $sstart using $smodel" ""
             sid_node=$(eagle_graph_get_node_id "$project" "session" "$sid")
@@ -559,7 +579,7 @@ if [ -n "$recent_sessions" ]; then
                         # Parse files_read JSON list
                         if [ -n "$f_read" ] && [ "$f_read" != "[]" ]; then
                             echo "$f_read" | grep -oE '"[^"]+"' | tr -d '"' | while read -r rf; do
-                                [ -z "$rf" ] && continue
+                                if [ -z "$rf" ]; then continue; fi
                                 rfid=$(eagle_graph_get_node_id "$project" "file" "$rf")
                                 [ -n "$rfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$rfid" "read" 1.0
                             done
@@ -567,7 +587,7 @@ if [ -n "$recent_sessions" ]; then
                         # Parse files_modified JSON list
                         if [ -n "$f_mod" ] && [ "$f_mod" != "[]" ]; then
                             echo "$f_mod" | grep -oE '"[^"]+"' | tr -d '"' | while read -r mf; do
-                                [ -z "$mf" ] && continue
+                                if [ -z "$mf" ]; then continue; fi
                                 mfid=$(eagle_graph_get_node_id "$project" "file" "$mf")
                                 [ -n "$mfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$mfid" "modified" 2.0
                             done
@@ -603,7 +623,7 @@ CONSOLIDATE: <original memory name 1>, <original memory name 2> -> <new consolid
 
 If no memories need consolidation, output: NONE"
 
-    consolidation_result=$(eagle_llm_call "$consolidation_prompt" "You consolidate software development memories into a single compiled truth. Be precise. Output CONSOLIDATE lines or NONE." 1024)
+    consolidation_result=$(eagle_llm_call "$consolidation_prompt" "You consolidate software development memories into a single compiled truth. Be precise. Output CONSOLIDATE lines or NONE." 1024 || true)
 
     if [ -n "$consolidation_result" ] && ! echo "$consolidation_result" | grep -q "^NONE$"; then
         cons_count=0
@@ -620,7 +640,7 @@ If no memories need consolidation, output: NONE"
                     desc_part=$(echo "$rest_part" | grep -oE "description:[[:space:]]*[^|]+" | sed 's/description:[[:space:]]*//')
                     val_part=$(echo "$rest_part" | grep -oE "value:[[:space:]]*.+" | sed 's/value:[[:space:]]*//')
                     
-                    [ -z "$new_name" ] || [ -z "$names_part" ] && continue
+                    if [ -z "$new_name" ] || [ -z "$names_part" ]; then continue; fi
                     
                     if [ "$DRY_RUN" -eq 1 ]; then
                         eagle_info "  Would consolidate: $names_part → $new_name"
@@ -633,7 +653,7 @@ If no memories need consolidation, output: NONE"
                         IFS=',' read -ra name_arr <<< "$names_part"
                         for old_n in "${name_arr[@]}"; do
                             old_n=$(echo "$old_n" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                            [ -z "$old_n" ] && continue
+                            if [ -z "$old_n" ]; then continue; fi
                             old_node_id=$(eagle_graph_get_node_id "$project" "memory" "$old_n")
                             if [ -n "$old_node_id" ] && [ -n "$new_node_id" ]; then
                                 eagle_graph_add_edge "$project" "$new_node_id" "$old_node_id" "supersedes" 1.0

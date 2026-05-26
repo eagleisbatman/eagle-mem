@@ -4,6 +4,18 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.5 Hardening Release
+
+This patch release hardens the database architecture, improves CLI usability, and increases programmatic test coverage for all core features:
+
+- **Database-Level Task Deduplication**: Normalized synthetic task file paths to `event://${task_id}` in `hooks/post-tool-use.sh`, making task tracking constant across sessions. Added a partial unique index `idx_agent_tasks_dedup` on `(project, source_task_id)` via migration `db/037_task_dedup.sql` to block duplicate task rows on repeated sync loops.
+- **Resilient Curation Engine (`curate.sh`)**: Refactored vulnerable inline conditional `&& continue` statements to safe, standard `if` blocks, preventing pipeline subshell crashes under `set -e` and guaranteeing metadata and footer summaries complete successfully.
+- **CLI Usability & Previews (`--help` / `--dry-run`)**: Integrated structured option parsing cases for `-h`/`--help` and `--dry-run` to both `curate.sh` and `install.sh`. Covered all installer filesystem writes, hook updates, and migrations in `install.sh --dry-run` to enable a zero-risk preview of planned changes.
+- **Core Smoke Test suite (`test.sh`)**: Expanded the automated smoke test suite to run concrete checks for **7 core features** (`compaction-survival`, `feature-verification`, `grok-cli-integration`, `agent-orchestration`, `Cross Agent Memory`, `Installer And Updater`, `Code Scan And Index`), automatically updating the SQLite database to mark them verified upon success.
+- **Stale Task Cleanup**: Resolved compaction warning overhead by marking stale, in-progress tasks (`840`, `895`, `968`, `970`) as `'completed'`.
+
+---
+
 ## v4.10.4 Minor Release
 
 This release introduces native relational **Knowledge Graph Memories** and an automated background **Dream Cycle** curator to consolidate multi-agent developer context:

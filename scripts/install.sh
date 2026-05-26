@@ -5,7 +5,44 @@
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-PACKAGE_DIR="${1:-.}"
+DRY_RUN=0
+PACKAGE_DIR="."
+
+show_help() {
+    cat <<EOF
+Usage: install.sh [options] [package_dir]
+
+Options:
+  -h, --help     Show this help message and exit
+  --dry-run      Analyze and print what would be installed without mutating the system
+
+Arguments:
+  package_dir    Path to the eagle-mem package directory (defaults to current directory)
+EOF
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Run with -h or --help for usage details." >&2
+            exit 1
+            ;;
+        *)
+            PACKAGE_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPTS_DIR/../lib"
 
@@ -195,77 +232,94 @@ echo ""
 echo -e "  ${BOLD}Installing Eagle Mem...${RESET}"
 echo ""
 
-mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts,integrations}
+if [ "$DRY_RUN" -eq 1 ]; then
+    eagle_info "Would create directory: $EAGLE_MEM_DIR"
+    eagle_info "Would copy hooks, lib, db, scripts, and integrations to $EAGLE_MEM_DIR"
+else
+    mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts,integrations}
 
-cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
-cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
-cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
-cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
-cp "$PACKAGE_DIR"/scripts/*.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
-cp -r "$PACKAGE_DIR"/integrations/* "$EAGLE_MEM_DIR/integrations/" 2>/dev/null || true
+    cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
+    cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
+    cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
+    cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
+    cp "$PACKAGE_DIR"/scripts/*.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
+    cp -r "$PACKAGE_DIR"/integrations/* "$EAGLE_MEM_DIR/integrations/" 2>/dev/null || true
 
-chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
-chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh
-chmod +x "$EAGLE_MEM_DIR"/scripts/*.sh 2>/dev/null
+    chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
+    chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh
+    chmod +x "$EAGLE_MEM_DIR"/scripts/*.sh 2>/dev/null
 
-eagle_ok "Files copied to $EAGLE_MEM_DIR"
+    eagle_ok "Files copied to $EAGLE_MEM_DIR"
+fi
 
 # ─── Run migrations ────────────────────────────────────────
 
-if ! "$EAGLE_MEM_DIR/db/migrate.sh" 2>/dev/null; then
-    eagle_err "Database migration failed"
-    exit 1
+if [ "$DRY_RUN" -eq 1 ]; then
+    eagle_info "Would run database migrations using: $EAGLE_MEM_DIR/db/migrate.sh"
+else
+    if ! "$EAGLE_MEM_DIR/db/migrate.sh" 2>/dev/null; then
+        eagle_err "Database migration failed"
+        exit 1
+    fi
+    eagle_ok "Database ready"
 fi
-eagle_ok "Database ready"
 
 # ─── Patch settings.json ───────────────────────────────────
 
 if [ "$claude_found" = true ]; then
-    if [ ! -f "$SETTINGS" ]; then
-        echo '{}' > "$SETTINGS"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would patch Claude Code settings.json at: $SETTINGS with hooks"
+    else
+        if [ ! -f "$SETTINGS" ]; then
+            echo '{}' > "$SETTINGS"
+        fi
+
+        eagle_patch_hook "$SETTINGS" "SessionStart" "" \
+            "$EAGLE_MEM_DIR/hooks/session-start.sh" \
+            "SessionStart hook"
+
+        eagle_patch_hook "$SETTINGS" "Stop" "" \
+            "$EAGLE_MEM_DIR/hooks/stop.sh" \
+            "Stop hook"
+
+        # Clean old registrations before re-registering (handles matcher changes across versions)
+        eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+        eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+
+        eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" \
+            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+            "PostToolUse hook"
+
+        eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
+            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+            "TaskCreated hook"
+
+        eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
+            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
+            "TaskCompleted hook"
+
+        eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
+            "$EAGLE_MEM_DIR/hooks/session-end.sh" \
+            "SessionEnd hook"
+
+        eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
+            "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
+            "UserPromptSubmit hook"
+
+        eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" \
+            "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
+            "PreToolUse hook"
     fi
-
-    eagle_patch_hook "$SETTINGS" "SessionStart" "" \
-        "$EAGLE_MEM_DIR/hooks/session-start.sh" \
-        "SessionStart hook"
-
-    eagle_patch_hook "$SETTINGS" "Stop" "" \
-        "$EAGLE_MEM_DIR/hooks/stop.sh" \
-        "Stop hook"
-
-    # Clean old registrations before re-registering (handles matcher changes across versions)
-    eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
-
-    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" \
-        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-        "PostToolUse hook"
-
-    eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
-        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-        "TaskCreated hook"
-
-    eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
-        "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-        "TaskCompleted hook"
-
-    eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
-        "$EAGLE_MEM_DIR/hooks/session-end.sh" \
-        "SessionEnd hook"
-
-    eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
-        "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
-        "UserPromptSubmit hook"
-
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" \
-        "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-        "PreToolUse hook"
 else
     eagle_info "Claude hooks skipped ${DIM}(Claude Code not detected)${RESET}"
 fi
 
 if [ "$codex_found" = true ]; then
-    eagle_register_codex_hooks
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would register Codex hooks"
+    else
+        eagle_register_codex_hooks
+    fi
 else
     eagle_info "Codex hooks skipped ${DIM}(Codex not detected)${RESET}"
 fi
@@ -273,39 +327,51 @@ fi
 # ─── Install skills ────────────────────────────────────────
 
 if [ "$claude_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
-    mkdir -p "$EAGLE_SKILLS_DIR"
-    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
-        [ ! -d "$skill_dir" ] && continue
-        skill_name=$(basename "$skill_dir")
-        dst="$EAGLE_SKILLS_DIR/$skill_name"
-        [ -L "$dst" ] && rm "$dst"
-        ln -sf "$skill_dir" "$dst"
-        eagle_ok "Skill: $skill_name"
-    done
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would symlink Claude Code skills to: $EAGLE_SKILLS_DIR"
+    else
+        mkdir -p "$EAGLE_SKILLS_DIR"
+        for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+            [ ! -d "$skill_dir" ] && continue
+            skill_name=$(basename "$skill_dir")
+            dst="$EAGLE_SKILLS_DIR/$skill_name"
+            [ -L "$dst" ] && rm "$dst"
+            ln -sf "$skill_dir" "$dst"
+            eagle_ok "Skill: $skill_name"
+        done
+    fi
 fi
 
 if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
-    mkdir -p "$EAGLE_CODEX_SKILLS_DIR"
-    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
-        [ ! -d "$skill_dir" ] && continue
-        skill_name=$(basename "$skill_dir")
-        dst="$EAGLE_CODEX_SKILLS_DIR/$skill_name"
-        [ -L "$dst" ] && rm "$dst"
-        ln -sf "$skill_dir" "$dst"
-        eagle_ok "Codex skill: $skill_name"
-    done
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would symlink Codex skills to: $EAGLE_CODEX_SKILLS_DIR"
+    else
+        mkdir -p "$EAGLE_CODEX_SKILLS_DIR"
+        for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+            [ ! -d "$skill_dir" ] && continue
+            skill_name=$(basename "$skill_dir")
+            dst="$EAGLE_CODEX_SKILLS_DIR/$skill_name"
+            [ -L "$dst" ] && rm "$dst"
+            ln -sf "$skill_dir" "$dst"
+            eagle_ok "Codex skill: $skill_name"
+        done
+    fi
 fi
 
 if [ "$grok_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
-    mkdir -p "$EAGLE_GROK_SKILLS_DIR"
-    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
-        [ ! -d "$skill_dir" ] && continue
-        skill_name=$(basename "$skill_dir")
-        dst="$EAGLE_GROK_SKILLS_DIR/$skill_name"
-        [ -L "$dst" ] && rm "$dst"
-        ln -sf "$skill_dir" "$dst"
-        eagle_ok "Grok skill: $skill_name"
-    done
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would symlink Grok skills to: $EAGLE_GROK_SKILLS_DIR"
+    else
+        mkdir -p "$EAGLE_GROK_SKILLS_DIR"
+        for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+            [ ! -d "$skill_dir" ] && continue
+            skill_name=$(basename "$skill_dir")
+            dst="$EAGLE_GROK_SKILLS_DIR/$skill_name"
+            [ -L "$dst" ] && rm "$dst"
+            ln -sf "$skill_dir" "$dst"
+            eagle_ok "Grok skill: $skill_name"
+        done
+    fi
 fi
 
 # ─── Statusline integration ───────────────────────────────
@@ -316,9 +382,12 @@ if [ "$claude_found" = true ]; then
     existing_sl_file=$(eagle_statusline_script_from_command "$existing_sl" 2>/dev/null || true)
 
     if [ -z "$existing_sl" ]; then
-        # No statusline configured — set up a minimal one that shows Eagle Mem
-        wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
-        cat > "$wrapper" << 'WRAPPER'
+        if [ "$DRY_RUN" -eq 1 ]; then
+            eagle_info "Would create minimal statusline wrapper and register with Claude Code"
+        else
+            # No statusline configured — set up a minimal one that shows Eagle Mem
+            wrapper="$EAGLE_MEM_DIR/scripts/statusline-wrapper.sh"
+            cat > "$wrapper" << 'WRAPPER'
 #!/usr/bin/env bash
 input=$(cat)
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // .cwd // ""' 2>/dev/null)
@@ -326,31 +395,36 @@ session_id=$(echo "$input" | jq -r '.session_id // .session.id // ""' 2>/dev/nul
 source "$HOME/.eagle-mem/scripts/statusline-em.sh"
 eagle_mem_statusline "$project_dir" "$session_id" "$input"
 WRAPPER
-        chmod +x "$wrapper"
-        tmp=$(mktemp)
-        jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-        eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
+            chmod +x "$wrapper"
+            tmp=$(mktemp)
+            jq --arg cmd "sh $wrapper" '.statusLine = {"type": "command", "command": $cmd, "refreshInterval": 30}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+            eagle_ok "Statusline ${DIM}(new — Eagle Mem indicator)${RESET}"
+        fi
     else
         # Existing statusline — if it points at a shell script, inspect the
         # target file. Custom HUD commands often do not include "eagle-mem" in
         # the command string even when the script contains an embedded block.
         sl_file="$existing_sl_file"
         if [ -n "$sl_file" ] && [ -f "$sl_file" ]; then
-            if eagle_patch_statusline_script "$sl_file"; then
-                eagle_ok "Statusline ${DIM}(patched existing Eagle Mem block)${RESET}"
-            elif eagle_statusline_script_uses_input "$sl_file"; then
-                eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+            if [ "$DRY_RUN" -eq 1 ]; then
+                eagle_info "Would inspect and patch existing statusline script: $sl_file"
             else
-                eagle_dim "  Statusline detected: $sl_file"
-                eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
-                echo ""
-                eagle_dim "    # ── Eagle Mem ──"
-                eagle_dim "    em_section=\"\""
-                eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
-                eagle_dim "      em_section=\$(printf '%s' \"\$input\" | bash \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" --hud)"
-                eagle_dim "    fi"
-                echo ""
-                eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+                if eagle_patch_statusline_script "$sl_file"; then
+                    eagle_ok "Statusline ${DIM}(patched existing Eagle Mem block)${RESET}"
+                elif eagle_statusline_script_uses_input "$sl_file"; then
+                    eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
+                else
+                    eagle_dim "  Statusline detected: $sl_file"
+                    eagle_dim "  To add Eagle Mem, add this snippet before your ASSEMBLE section:"
+                    echo ""
+                    eagle_dim "    # ── Eagle Mem ──"
+                    eagle_dim "    em_section=\"\""
+                    eagle_dim "    if [ -f \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" ]; then"
+                    eagle_dim "      em_section=\$(printf '%s' \"\$input\" | bash \"\$HOME/.eagle-mem/scripts/statusline-em.sh\" --hud)"
+                    eagle_dim "    fi"
+                    echo ""
+                    eagle_ok "Statusline ${DIM}(manual patch needed — instructions above)${RESET}"
+                fi
             fi
         elif echo "$existing_sl" | grep -q "eagle-mem"; then
             eagle_ok "Statusline ${DIM}(already has Eagle Mem)${RESET}"
@@ -365,46 +439,71 @@ fi
 . "$LIB_DIR/provider.sh"
 . "$LIB_DIR/updater.sh"
 if [ ! -f "$EAGLE_CONFIG_FILE" ]; then
-    eagle_config_init
-    eagle_ok "Config created ${DIM}(auto-detected provider)${RESET}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would initialize Eagle Mem config file at: $EAGLE_CONFIG_FILE"
+    else
+        eagle_config_init
+        eagle_ok "Config created ${DIM}(auto-detected provider)${RESET}"
+    fi
 else
-    eagle_update_ensure_defaults
-    eagle_ok "Config ${DIM}(already exists)${RESET}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would ensure config default variables are present"
+    else
+        eagle_update_ensure_defaults
+        eagle_ok "Config ${DIM}(already exists)${RESET}"
+    fi
 fi
-eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_update_config_allow))${RESET}"
+[ "$DRY_RUN" -eq 0 ] && eagle_ok "Auto-updates ${DIM}(mode=$(eagle_update_config_mode), allow=$(eagle_update_config_allow))${RESET}"
 
 # ─── Patch CLAUDE.md with Eagle Mem instructions ─────────
 
 if [ "$claude_found" = true ]; then
-    if eagle_patch_claude_md; then
-  eagle_ok "CLAUDE.md ${DIM}(Eagle Mem guidance added)${RESET}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would patch CLAUDE.md in current directory with Eagle Mem guidelines"
     else
-        eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
+        if eagle_patch_claude_md; then
+      eagle_ok "CLAUDE.md ${DIM}(Eagle Mem guidance added)${RESET}"
+        else
+            eagle_ok "CLAUDE.md ${DIM}(already has Eagle Mem section)${RESET}"
+        fi
     fi
 fi
 
 if [ "$codex_found" = true ]; then
-    if eagle_patch_codex_agents_md; then
-        eagle_ok "AGENTS.md ${DIM}(Codex clean-output memory instructions added)${RESET}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would patch AGENTS.md in current directory with Codex clean-output instructions"
     else
-        eagle_ok "AGENTS.md ${DIM}(already has Eagle Mem section)${RESET}"
+        if eagle_patch_codex_agents_md; then
+            eagle_ok "AGENTS.md ${DIM}(Codex clean-output memory instructions added)${RESET}"
+        else
+            eagle_ok "AGENTS.md ${DIM}(already has Eagle Mem section)${RESET}"
+        fi
     fi
 fi
 
 # ─── Save installed version ───────────────────────────────
 
 version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
-echo "$version" > "$EAGLE_MEM_DIR/.version"
-echo "$version" > "$EAGLE_MEM_DIR/.latest-version"
-if eagle_runtime_manifest_write "$PACKAGE_DIR" "install"; then
-    eagle_ok "Install manifest written"
+if [ "$DRY_RUN" -eq 1 ]; then
+    eagle_info "Would write version $version to version tracking files"
+    eagle_info "Would write runtime manifest for install"
 else
-    eagle_warn "Install manifest could not be written"
+    echo "$version" > "$EAGLE_MEM_DIR/.version"
+    echo "$version" > "$EAGLE_MEM_DIR/.latest-version"
+    if eagle_runtime_manifest_write "$PACKAGE_DIR" "install"; then
+        eagle_ok "Install manifest written"
+    else
+        eagle_warn "Install manifest could not be written"
+    fi
 fi
 
 # ─── Summary ───────────────────────────────────────────────
 
-eagle_footer "Eagle Mem installed successfully."
+if [ "$DRY_RUN" -eq 1 ]; then
+    eagle_footer "Dry run complete. No modifications were made to the system."
+else
+    eagle_footer "Eagle Mem installed successfully."
+fi
 
 eagle_kv "Database:" "$EAGLE_MEM_DIR/memory.db"
 eagle_kv "Hooks:" "$EAGLE_MEM_DIR/hooks/"

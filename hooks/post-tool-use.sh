@@ -39,8 +39,8 @@ case "$hook_event" in
             local_status="pending"
             [ "$hook_event" = "TaskCompleted" ] && local_status="completed"
 
-            # Synthetic file_path keyed on session+task — file_path is the UNIQUE column
-            synthetic_fp="event://${session_id}/${task_id}"
+            # Synthetic file_path keyed on task — file_path is the UNIQUE column
+            synthetic_fp="event://${task_id}"
 
             tid_sql=$(eagle_sql_escape "$task_id")
             fp_sql=$(eagle_sql_escape "$synthetic_fp")
@@ -155,7 +155,7 @@ case "$tool_name" in
         task_status=$(echo "$input" | jq -r '.tool_input.status // empty')
         tool_summary="TaskUpdate: ${task_id} → ${task_status}"
         if [ -n "$task_id" ] && [ -n "$task_status" ]; then
-            fp_sql=$(eagle_sql_escape "event://${session_id}/${task_id}")
+            fp_sql=$(eagle_sql_escape "event://${task_id}")
             stat_sql=$(eagle_sql_escape "$task_status")
             eagle_db_pipe <<SQL
 UPDATE agent_tasks SET status = '$stat_sql', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
