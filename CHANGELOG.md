@@ -4,6 +4,15 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.8 Graph Neighbors Hotfix
+
+This hotfix tightens the final graph-memory verification path:
+
+- **Exact Neighbor Matching**: `eagle-mem graph neighbors <node>` now prefers exact `node_name` matches before fuzzy matches, and prefers file nodes when names are otherwise ambiguous.
+- **Regression Coverage**: The graph-memory regression suite now verifies that `graph neighbors "a.sh"` selects the exact file node rather than a declaration node whose scoped name merely contains the file path.
+
+---
+
 ## v4.10.7 Graph Rebuild Hotfix
 
 This hotfix closes an installed-runtime failure found after the v4.10.6 graph-memory release:

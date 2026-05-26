@@ -906,7 +906,18 @@ memories_graph() {
             
             # Find node by name (fuzzy or exact)
             local matched
-            matched=$(eagle_db "SELECT id, node_type, node_name FROM graph_nodes WHERE project = '$(eagle_sql_escape "$project")' AND (node_name = '$(eagle_sql_escape "$target_name")' OR node_name LIKE '%$(eagle_sql_escape "$target_name")%') LIMIT 1;")
+            local project_sql target_sql
+            project_sql=$(eagle_sql_escape "$project")
+            target_sql=$(eagle_sql_escape "$target_name")
+            matched=$(eagle_db "SELECT id, node_type, node_name
+                                FROM graph_nodes
+                                WHERE project = '$project_sql'
+                                  AND (node_name = '$target_sql' OR node_name LIKE '%$target_sql%')
+                                ORDER BY
+                                  CASE WHEN node_name = '$target_sql' THEN 0 ELSE 1 END,
+                                  CASE WHEN node_type = 'file' THEN 0 ELSE 1 END,
+                                  id
+                                LIMIT 1;")
             if [ -z "$matched" ]; then
                 eagle_err "Node not found matching '$target_name'."
                 exit 1

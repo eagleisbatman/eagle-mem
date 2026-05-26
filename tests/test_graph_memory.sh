@@ -107,6 +107,16 @@ case "$overview_value" in
         ;;
 esac
 
+neighbors_output=$(cd "$repo" && "$EAGLE_BIN" graph neighbors "a.sh" | sed -E $'s/\x1b\\[[0-9;]*m//g')
+case "$neighbors_output" in
+    *"Node: a.sh  [file]"*) ;;
+    *)
+        echo "graph neighbors did not prefer exact file node match" >&2
+        echo "$neighbors_output" >&2
+        exit 1
+        ;;
+esac
+
 eagle_db "INSERT INTO sessions (id, project, cwd, model, status)
           VALUES ('session-graph-test', 'project', '$repo', 'test-model', 'completed');" >/dev/null
 eagle_db "INSERT INTO observations (session_id, project, tool_name, files_read, files_modified)
