@@ -238,10 +238,14 @@ COMMIT;"
         fi
 
         # 2. Parse local relative imports/requires/sources
-        # Matches paths starting with dot (./ or ../) or sourcing .sh files
-        local_imports=$(grep -oE "['\"](\.[^'\"]+)['\"]" "$full_path" 2>/dev/null | tr -d "'\"" || true)
-        # Also grab shell source files
-        shell_sources=$(grep -E "^[[:space:]]*(\.|source) " "$full_path" 2>/dev/null | sed -E "s/^[[:space:]]*(\.|source)[[:space:]]+(.*)/\\2/" || true)
+        # Matches quoted paths starting with ./ or ../ and shell source lines.
+        local_imports=$(grep -oE "['\"](\./[^'\"]+|\.\./[^'\"]+)['\"]" "$full_path" 2>/dev/null | tr -d "'\"" || true)
+        shell_sources=""
+        case "$file" in
+            *.sh|*.bash|*.zsh|*.envrc|.envrc)
+                shell_sources=$(grep -E "^[[:space:]]*(source[[:space:]]+|\. [^[:space:]])" "$full_path" 2>/dev/null | sed -E "s/^[[:space:]]*(source[[:space:]]+|\. )([^#[:space:]]+).*/\\2/" || true)
+                ;;
+        esac
         
         all_refs=$(printf "%s\n%s\n" "$local_imports" "$shell_sources" | sort -u)
         if [ -n "$all_refs" ]; then
@@ -250,9 +254,10 @@ COMMIT;"
                 # Clean up path variables in shell sources (e.g. $_eagle_db_dir/db-core.sh -> db-core.sh)
                 ref_clean=$(echo "$ref" | sed -E 's/.*\///; s/\.sh$//; s/\.js$//; s/\.ts$//')
                 [ -z "$ref_clean" ] && continue
+                ref_sql=$(eagle_sql_escape "$ref_clean")
                 
                 # Check if there is a known file node in our graph that matches this basename or path
-                matched_file=$(eagle_db "SELECT node_name FROM graph_nodes WHERE project = '$project_sql' AND node_type = 'file' AND (node_name LIKE '%/$ref_clean%' OR node_name = '$ref_clean') LIMIT 1;")
+                matched_file=$(eagle_db "SELECT node_name FROM graph_nodes WHERE project = '$project_sql' AND node_type = 'file' AND (node_name LIKE '%/$ref_sql%' OR node_name = '$ref_sql') LIMIT 1;")
                 if [ -n "$matched_file" ]; then
                     target_file_id=$(eagle_graph_get_node_id "$PROJECT" "file" "$matched_file")
                     if [ -n "$target_file_id" ]; then

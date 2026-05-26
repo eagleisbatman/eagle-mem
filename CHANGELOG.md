@@ -4,6 +4,16 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.7 Graph Rebuild Hotfix
+
+This hotfix closes an installed-runtime failure found after the v4.10.6 graph-memory release:
+
+- **Import Parser Hardening**: Restricts quoted local import detection to `./` and `../` paths, and limits shell `source` parsing to shell-like files so SQL columns named `source` are not mistaken for shell commands.
+- **SQL-Safe Import Lookup**: Escapes import lookup terms before querying graph file nodes, preventing single quotes in source files from breaking `eagle-mem graph rebuild`.
+- **Regression Coverage**: Extends the graph-memory regression test with a SQL fixture containing `source TEXT NOT NULL DEFAULT 'manual'`, matching the installed-runtime failure mode.
+
+---
+
 ## v4.10.6 Graph Memory Rebuild Release
 
 This patch turns the local graph-memory workarounds into supported product behavior:

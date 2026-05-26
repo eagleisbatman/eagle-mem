@@ -68,7 +68,16 @@ function CloudDictationPipeline() {
 }
 EOF
 
-git -C "$repo" add a.sh b.sh old.sh
+mkdir -p "$repo/db"
+cat > "$repo/db/source_column.sql" <<'EOF'
+CREATE TABLE graph_fixture (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL DEFAULT 'manual',
+  note TEXT DEFAULT './not-a-real-import'
+);
+EOF
+
+git -C "$repo" add a.sh b.sh old.sh db/source_column.sql
 
 "$EAGLE_BIN" scan --force "$repo" >/dev/null
 "$EAGLE_BIN" index --force "$repo" >/dev/null
