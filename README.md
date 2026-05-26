@@ -11,7 +11,7 @@
 
 Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code, Codex, and Google Antigravity hook-backed shared memory, gives Grok the same skills and CLI memory surface, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.10.3 and onward focuses on Graph Memory, Dream Cycle Curation, Grok, Google Antigravity support, and Compaction Survival:** Grok users get first-class skill linking and `eagle-mem grok-bootstrap`, while Antigravity users get native Python SDK hook integration via `google_antigravity_hook.py`. Claude Code, Codex, and Antigravity receive the deepest automatic lifecycle support through hooks; Grok currently uses the shared CLI and skill workflow.
+**v4.10.4 and onward focuses on Graph Memory, Dream Cycle Curation, Grok, Google Antigravity support, and Compaction Survival:** Grok users get first-class skill linking and `eagle-mem grok-bootstrap`, while Antigravity users get native Python SDK hook integration via `google_antigravity_hook.py`. Claude Code, Codex, and Antigravity receive the deepest automatic lifecycle support through hooks; Grok currently uses the shared CLI and skill workflow.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |

@@ -4,7 +4,7 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
-## v4.10.3 Minor Release
+## v4.10.4 Minor Release
 
 This release introduces native relational **Knowledge Graph Memories** and an automated background **Dream Cycle** curator to consolidate multi-agent developer context:
 
