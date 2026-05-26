@@ -51,6 +51,7 @@ run_check "Agent Orchestration (orchestrate help)" "\"$EAGLE_BIN\" orchestrate -
 run_check "Cross Agent Memory (memories query)" "\"$EAGLE_BIN\" memories --json > /dev/null"
 run_check "Installer And Updater (install / update syntax)" "bash -n \"$SCRIPTS_DIR/install.sh\" && bash -n \"$SCRIPTS_DIR/update.sh\""
 run_check "Code Scan And Index (scan / index syntax)" "bash -n \"$SCRIPTS_DIR/scan.sh\" && bash -n \"$SCRIPTS_DIR/index.sh\""
+run_check "Graph Memory Rebuild (isolated regression suite)" "bash \"$SCRIPTS_DIR/../tests/test_graph_memory.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

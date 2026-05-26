@@ -210,9 +210,9 @@ detect_framework "mix.exs" "Elixir/Mix" || true
 
 top_dirs=""
 if [ "$is_git" = true ]; then
-    git -C "$TARGET_DIR" ls-files --cached --others --exclude-standard | cut -d/ -f1 | sort -u | while read -r item; do
+    cut -d/ -f1 "$TMPFILE" | sort -u | while read -r item; do
         if [ -d "$TARGET_DIR/$item" ]; then
-            count=$(git -C "$TARGET_DIR" ls-files --cached --others --exclude-standard "$item/" 2>/dev/null | wc -l | tr -d ' ')
+            count=$(grep -c "^$item/" "$TMPFILE" 2>/dev/null || true)
             echo "$item/ ($count)"
         fi
     done > "${TMPFILE}.dirs"
@@ -372,7 +372,7 @@ eagle_graph_add_node "$PROJECT" "project" "$PROJECT" "$overview" ""
 project_node_id=$(eagle_graph_get_node_id "$PROJECT" "project" "$PROJECT")
 
 # Prune deleted/removed files from graph
-eagle_graph_prune_orphans "$PROJECT"
+eagle_graph_prune_orphans "$PROJECT" "$TARGET_DIR"
 
 file_node_count=0
 if [ -n "$project_node_id" ]; then

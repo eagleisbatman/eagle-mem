@@ -124,6 +124,10 @@ eagle_upsert_overview() {
                   content = excluded.content,
                   source = excluded.source,
                   updated_at = excluded.updated_at;"
+
+    if declare -F eagle_graph_sync_project_overview >/dev/null 2>&1; then
+        eagle_graph_sync_project_overview "$1" "$raw_content" || true
+    fi
 }
 
 eagle_get_overview_source() {

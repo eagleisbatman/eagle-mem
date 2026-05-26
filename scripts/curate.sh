@@ -563,41 +563,12 @@ if [ -n "$co_edit_data" ]; then
 fi
 
 # 7.2 Wire session nodes and access edges
-recent_sessions=$(eagle_db "SELECT id, started_at, model FROM sessions WHERE project = '$p_esc' ORDER BY started_at DESC LIMIT 15;")
+recent_sessions=$(eagle_db "SELECT id FROM sessions WHERE project = '$p_esc' ORDER BY started_at DESC LIMIT 15;")
 if [ -n "$recent_sessions" ]; then
-    session_wire_count=0
-    while IFS='|' read -r sid sstart smodel; do
-        if [ -z "$sid" ]; then continue; fi
-        if [ "$DRY_RUN" -eq 0 ]; then
-            eagle_graph_add_node "$project" "session" "$sid" "Session run on $sstart using $smodel" ""
-            sid_node=$(eagle_graph_get_node_id "$project" "session" "$sid")
-            if [ -n "$sid_node" ]; then
-                # Find read/modified files in this session from observations
-                session_files=$(eagle_db "SELECT files_read, files_modified FROM observations WHERE session_id = '$(eagle_sql_escape "$sid")';")
-                if [ -n "$session_files" ]; then
-                    while IFS='|' read -r f_read f_mod; do
-                        # Parse files_read JSON list
-                        if [ -n "$f_read" ] && [ "$f_read" != "[]" ]; then
-                            echo "$f_read" | grep -oE '"[^"]+"' | tr -d '"' | while read -r rf; do
-                                if [ -z "$rf" ]; then continue; fi
-                                rfid=$(eagle_graph_get_node_id "$project" "file" "$rf")
-                                [ -n "$rfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$rfid" "read" 1.0
-                            done
-                        fi
-                        # Parse files_modified JSON list
-                        if [ -n "$f_mod" ] && [ "$f_mod" != "[]" ]; then
-                            echo "$f_mod" | grep -oE '"[^"]+"' | tr -d '"' | while read -r mf; do
-                                if [ -z "$mf" ]; then continue; fi
-                                mfid=$(eagle_graph_get_node_id "$project" "file" "$mf")
-                                [ -n "$mfid" ] && eagle_graph_add_edge "$project" "$sid_node" "$mfid" "modified" 2.0
-                            done
-                        fi
-                    done <<< "$session_files"
-                fi
-            fi
-        fi
-        session_wire_count=$((session_wire_count + 1))
-    done <<< "$recent_sessions"
+    session_wire_count=$(printf '%s\n' "$recent_sessions" | awk 'NF {count++} END {print count + 0}')
+    if [ "$DRY_RUN" -eq 0 ]; then
+        session_wire_count=$(eagle_graph_wire_recent_session_edges "$project" 15)
+    fi
     eagle_ok "Wired $session_wire_count recent session nodes and edges"
 fi
 

@@ -6,16 +6,16 @@
 CREATE TRIGGER IF NOT EXISTS val_graph_nodes_insert BEFORE INSERT ON graph_nodes
 BEGIN
     SELECT CASE
-        WHEN NEW.node_type NOT IN ('project', 'file', 'feature', 'memory', 'task', 'session', 'tag', 'class', 'def')
-        THEN RAISE(ABORT, 'Data Integrity Error: Invalid node type. Must be one of project, file, feature, memory, task, session, tag, class, def')
+        WHEN NEW.node_type NOT IN ('project', 'file', 'feature', 'memory', 'task', 'session', 'tag', 'class', 'struct', 'function', 'func', 'fn', 'def')
+        THEN RAISE(ABORT, 'Data Integrity Error: Invalid node type. Must be one of project, file, feature, memory, task, session, tag, class, struct, function, func, fn, def')
     END;
 END;
 
 CREATE TRIGGER IF NOT EXISTS val_graph_nodes_update BEFORE UPDATE OF node_type ON graph_nodes
 BEGIN
     SELECT CASE
-        WHEN NEW.node_type NOT IN ('project', 'file', 'feature', 'memory', 'task', 'session', 'tag', 'class', 'def')
-        THEN RAISE(ABORT, 'Data Integrity Error: Invalid node type. Must be one of project, file, feature, memory, task, session, tag, class, def')
+        WHEN NEW.node_type NOT IN ('project', 'file', 'feature', 'memory', 'task', 'session', 'tag', 'class', 'struct', 'function', 'func', 'fn', 'def')
+        THEN RAISE(ABORT, 'Data Integrity Error: Invalid node type. Must be one of project, file, feature, memory, task, session, tag, class, struct, function, func, fn, def')
     END;
 END;
 

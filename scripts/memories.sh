@@ -48,6 +48,7 @@ show_help() {
     echo -e "    eagle-mem memories graph                    ${DIM}# view codebase knowledge graph summary${RESET}"
     echo -e "    eagle-mem memories graph query ${CYAN}<term>${RESET}      ${DIM}# search knowledge graph nodes${RESET}"
     echo -e "    eagle-mem memories graph neighbors ${CYAN}<name>${RESET}  ${DIM}# view a node's local network connections${RESET}"
+    echo -e "    eagle-mem memories graph rebuild           ${DIM}# rebuild current project's code graph and chunks${RESET}"
     echo ""
     echo -e "  ${BOLD}Options:${RESET}"
     echo -e "    ${CYAN}-p, --project${RESET} <name>  Filter by project (default: current project)"
@@ -942,6 +943,28 @@ memories_graph() {
                 eagle_dim "  None"
             fi
             echo ""
+            ;;
+        rebuild)
+            if [ -z "$project" ]; then
+                eagle_err "Cannot determine project for graph rebuild."
+                exit 1
+            fi
+
+            local target_dir file_count
+            target_dir=$(eagle_graph_project_root "$project")
+            if [ ! -d "$target_dir" ]; then
+                target_dir="$(pwd)"
+            fi
+
+            eagle_header "Knowledge Graph Rebuild"
+            eagle_info "Project: $project"
+            eagle_info "Path: $target_dir"
+            echo ""
+
+            file_count=$(eagle_graph_rebuild_codebase "$project" "$target_dir")
+            eagle_ok "Rebuilt file graph ($file_count files)"
+            bash "$SCRIPTS_DIR/index.sh" --force "$target_dir"
+            eagle_footer "Graph rebuild complete."
             ;;
         summary|*)
             eagle_header "Knowledge Graph Summary"

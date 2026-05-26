@@ -161,7 +161,28 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem test` | Run basic smoke tests for the memory layer |
 | `eagle-mem prune` | Clean old sessions and stale data |
 | `eagle-mem scan` | Scan codebase and generate overview |
-| `eagle-mem index` | Index source files for FTS5 code search |
+| `eagle-mem index` | Index source files for FTS5 code search and static graph declarations |
+| `eagle-mem index --force` | Rebuild current source chunks, declarations, and import edges |
+| `eagle-mem graph rebuild` | Clear and rebuild the current project's code graph and chunks |
+
+### Graph Memory
+
+Graph Memory has two layers:
+
+- `eagle-mem scan --force` refreshes the project overview and file graph from the current working tree.
+- `eagle-mem index --force` rebuilds FTS5 source chunks plus file-scoped declarations and import edges.
+- `eagle-mem graph rebuild` does both code-graph cleanup and forced indexing without requiring manual SQLite deletes.
+
+Useful checks:
+
+```bash
+eagle-mem graph
+eagle-mem graph query EscapeKeyMonitor
+eagle-mem graph neighbors lib/db-graph.sh
+eagle-mem overview set "Current project briefing..."
+```
+
+If graph search shows stale deleted files, run `eagle-mem graph rebuild` from the project root. The rebuild command filters missing tracked paths, clears stale code chunks and declaration nodes, preserves manual overviews, and rewires declarations with file-scoped names such as `apps/mac/DictationController.swift::finishDictation`.
 
 ### Trust and Recovery
 

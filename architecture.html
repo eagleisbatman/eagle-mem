@@ -1295,6 +1295,11 @@
                 <td>UserPromptSubmit, index CLI</td>
               </tr>
               <tr>
+                <td><code>graph_nodes</code>, <code>graph_edges</code>, <code>graph_nodes_fts</code></td>
+                <td>Which files, declarations, sessions, memories, and relationships make up the codebase graph?</td>
+                <td>graph CLI, scan, index, overview set, curator Dream Cycle</td>
+              </tr>
+              <tr>
                 <td><code>agent_memories</code>, <code>agent_plans</code>, <code>agent_tasks</code></td>
                 <td>What durable agent artifacts should be shared across Claude Code, Codex, Grok, and Antigravity?</td>
                 <td>PostToolUse, SessionEnd, skills, search CLI</td>
@@ -1316,6 +1321,11 @@
               </tr>
             </tbody>
           </table>
+
+          <div class="callout">
+            <h3>Graph rebuild path</h3>
+            <p><code>eagle-mem graph rebuild</code> is the supported recovery command when graph search shows stale deleted files or stale declarations. It filters missing tracked paths, clears code graph nodes and chunks for the current project, preserves the canonical overview, rewires file nodes, and runs <code>eagle-mem index --force</code> so declarations are file-scoped instead of colliding by bare function name.</p>
+          </div>
         </div>
       </section>
 
@@ -1792,6 +1802,7 @@ eagle-mem install</code></pre>
               <ul>
                 <li><code>lib/common.sh</code> - project detection, agent detection, command parsing, redaction, release command detection.</li>
                 <li><code>lib/db-core.sh</code> and <code>lib/db.sh</code> - SQLite connection setup and module loading.</li>
+                <li><code>lib/db-graph.sh</code> - graph node/edge helpers, code graph rebuild, file path normalization, and Dream Cycle batching.</li>
                 <li><code>lib/db-features.sh</code> - feature lookup, pending verification, verify/waive behavior.</li>
                 <li><code>db/*.sql</code> - schema and migrations for all persistent state.</li>
               </ul>

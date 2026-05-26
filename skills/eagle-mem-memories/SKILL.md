@@ -1,7 +1,8 @@
 ---
 name: eagle-mem-memories
 description: >
-  View and sync Claude Code and Codex memories, plans, and tasks mirrored in Eagle Mem. Use when:
+  View and sync Claude Code, Codex, Grok, and Antigravity memories, plans, tasks,
+  and graph memory mirrored in Eagle Mem. Use when:
   'eagle memories', 'show memories', 'sync memories', 'what does the agent remember',
   'show plans', 'show tasks', 'mirror memories', 'onboard project',
   'what did past sessions learn'. Uses the eagle-mem CLI.
@@ -11,9 +12,9 @@ description: >
 
 ## Purpose
 
-**For the user:** Claude Code and Codex remember across sessions. Decisions, preferences, project context, and architectural plans survive session boundaries. The user never has to re-explain "we chose Postgres because..." or "don't use semicolons in this project."
+**For the user:** Claude Code, Codex, Grok, and Antigravity remember across sessions. Decisions, preferences, project context, graph relationships, and architectural plans survive session boundaries. The user never has to re-explain "we chose Postgres because..." or "don't use semicolons in this project."
 
-**For you:** Access to what past Claude Code and Codex sessions learned about this project. Memories tell you *why* decisions were made. Plans tell you *what's coming*. Tasks tell you *what's in flight*. Together they're the knowledge bridge that makes you effective from message one.
+**For you:** Access to what past agent sessions learned about this project. Memories tell you *why* decisions were made. Plans tell you *what's coming*. Tasks tell you *what's in flight*. Graph memory tells you *which files, declarations, and sessions are connected*. Together they're the knowledge bridge that makes you effective from message one.
 
 ## Judgment
 
@@ -62,6 +63,14 @@ eagle-mem memories plans show <file_path>
 eagle-mem memories tasks                   # all tasks
 eagle-mem memories tasks search "refactor"
 eagle-mem memories tasks show <file_path>
+```
+
+**Graph memory** -- codebase file nodes, file-scoped declarations, session/file access edges, memory nodes, and relationship edges.
+```bash
+eagle-mem graph                            # graph summary
+eagle-mem graph query "finishDictation"    # search nodes
+eagle-mem graph neighbors "lib/db-graph.sh"
+eagle-mem graph rebuild                    # rebuild stale code graph + chunks
 ```
 
 ### 2. Understand how data flows in

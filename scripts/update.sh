@@ -20,6 +20,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 SETTINGS="$EAGLE_SETTINGS"
 claude_found=false
 codex_found=false
+grok_found=false
 
 eagle_header "Update"
 
@@ -39,18 +40,22 @@ fi
 if [ -d "$EAGLE_CODEX_DIR" ] || command -v codex &>/dev/null; then
     codex_found=true
 fi
+if [ -d "$EAGLE_GROK_DIR" ]; then
+    grok_found=true
+fi
 
 eagle_runtime_change_plan "update" "$PACKAGE_DIR" "$claude_found" "$codex_found"
 
 # ─── Update files ──────────────────────────────────────────
 
-mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts}
+mkdir -p "$EAGLE_MEM_DIR"/{hooks,lib,db,scripts,integrations}
 
 cp "$PACKAGE_DIR"/hooks/*.sh "$EAGLE_MEM_DIR/hooks/"
 cp "$PACKAGE_DIR"/lib/*.sh "$EAGLE_MEM_DIR/lib/"
 cp "$PACKAGE_DIR"/db/*.sh "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/db/*.sql "$EAGLE_MEM_DIR/db/"
 cp "$PACKAGE_DIR"/scripts/*.sh "$EAGLE_MEM_DIR/scripts/" 2>/dev/null
+cp -r "$PACKAGE_DIR"/integrations/* "$EAGLE_MEM_DIR/integrations/" 2>/dev/null || true
 
 chmod +x "$EAGLE_MEM_DIR"/hooks/*.sh
 chmod +x "$EAGLE_MEM_DIR"/db/migrate.sh
@@ -138,6 +143,25 @@ if [ "$codex_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
         ln -sf "$skill_dir" "$dst"
     done
     eagle_ok "Codex skills updated"
+fi
+
+if [ "$grok_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    mkdir -p "$EAGLE_GROK_SKILLS_DIR"
+    find "$EAGLE_GROK_SKILLS_DIR" -maxdepth 1 -name "eagle-mem-*" -type l 2>/dev/null | while read -r existing; do
+        skill_name=$(basename "$existing")
+        if [ ! -d "$PACKAGE_DIR/skills/$skill_name" ]; then
+            rm "$existing"
+            eagle_ok "Removed stale Grok skill: $skill_name"
+        fi
+    done
+    for skill_dir in "$PACKAGE_DIR"/skills/*/; do
+        [ ! -d "$skill_dir" ] && continue
+        skill_name=$(basename "$skill_dir")
+        dst="$EAGLE_GROK_SKILLS_DIR/$skill_name"
+        [ -L "$dst" ] && rm "$dst"
+        ln -sf "$skill_dir" "$dst"
+    done
+    eagle_ok "Grok skills updated"
 fi
 
 # ─── Refresh generated Claude statusline wrapper ───────────

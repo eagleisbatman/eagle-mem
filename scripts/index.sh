@@ -15,7 +15,28 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 eagle_ensure_db
 
-TARGET_DIR="${1:-.}"
+force=false
+args=()
+
+show_help() {
+    echo -e "  ${BOLD}eagle-mem index${RESET} — Index source files and wire code graph declarations"
+    echo ""
+    echo -e "  ${BOLD}Usage:${RESET}"
+    echo -e "    eagle-mem index [path]              ${DIM}# incrementally index changed files${RESET}"
+    echo -e "    eagle-mem index ${CYAN}--force${RESET} [path]      ${DIM}# rebuild chunks and static code graph edges${RESET}"
+    echo ""
+    exit 0
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --force|-f) force=true; shift ;;
+        --help|-h) show_help ;;
+        *) args+=("$1"); shift ;;
+    esac
+done
+
+TARGET_DIR="${args[0]:-.}"
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 PROJECT=$(eagle_project_from_cwd "$TARGET_DIR")
 
@@ -106,9 +127,19 @@ NEEDS_INDEX="$TMPDIR_IDX/needs_index"
 
 skipped_count=0
 
+if [ "$force" = true ]; then
+    eagle_info "Force rebuild requested: clearing chunks, declarations, and import edges"
+    eagle_graph_clear_index_state "$PROJECT"
+fi
+
 while IFS= read -r file; do
     full_path="$TARGET_DIR/$file"
     current_mtime=$(stat -f '%m' "$full_path" 2>/dev/null || stat -c '%Y' "$full_path" 2>/dev/null || echo "0")
+
+    if [ "$force" = true ]; then
+        echo "$file"
+        continue
+    fi
 
     stored_mtime=$(eagle_db "SELECT MAX(mtime) FROM code_chunks WHERE project = '$project_sql' AND file_path = '$(eagle_sql_escape "$file")';")
 
@@ -180,16 +211,26 @@ COMMIT;"
 
     # Static syntax relation extraction & graph wiring
     # Wire node & edge static parser
+    overview=$(eagle_get_overview "$PROJECT" 2>/dev/null || true)
+    eagle_graph_add_node "$PROJECT" "project" "$PROJECT" "$overview" ""
+    project_node_id=$(eagle_graph_get_node_id "$PROJECT" "project" "$PROJECT")
+    eagle_graph_add_node "$PROJECT" "file" "$file" "" "$full_path"
     file_node_id=$(eagle_graph_get_node_id "$PROJECT" "file" "$file")
     if [ -n "$file_node_id" ]; then
+        if [ -n "$project_node_id" ]; then
+            eagle_graph_add_edge "$PROJECT" "$project_node_id" "$file_node_id" "contains" 1.0 >/dev/null || true
+        fi
+        eagle_graph_reset_file_static_edges "$PROJECT" "$file" "$file_node_id"
+
         # 1. Parse function/class declarations
         # e.g., "def name", "class name", "fn name", "function name", "func name"
         declarations=$(grep -oE '\<(class|struct|function|def|fn|func)[[:space:]]+[A-Za-z0-9_]+' "$full_path" 2>/dev/null | awk '{print $1 ":" $2}' | sort -u || true)
         if [ -n "$declarations" ]; then
             while IFS=':' read -r dtype dname; do
                 [ -z "$dname" ] && continue
-                eagle_graph_add_node "$PROJECT" "$dtype" "$dname" "Declared in $file" "$file"
-                decl_node_id=$(eagle_graph_get_node_id "$PROJECT" "$dtype" "$dname")
+                decl_node_name=$(eagle_graph_declaration_node_name "$file" "$dname")
+                eagle_graph_add_node "$PROJECT" "$dtype" "$decl_node_name" "Declared $dname in $file" "$file"
+                decl_node_id=$(eagle_graph_get_node_id "$PROJECT" "$dtype" "$decl_node_name")
                 if [ -n "$decl_node_id" ]; then
                     eagle_graph_add_edge "$PROJECT" "$file_node_id" "$decl_node_id" "declares" 1.0
                 fi

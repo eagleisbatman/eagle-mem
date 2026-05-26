@@ -4,6 +4,20 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.6 Graph Memory Rebuild Release
+
+This patch turns the local graph-memory workarounds into supported product behavior:
+
+- **Official Graph Rebuild Path**: Added `eagle-mem graph rebuild` and `eagle-mem index --force` so stale code chunks, declaration nodes, file nodes, and import edges can be rebuilt without manual SQLite deletes.
+- **Graph Node Type Migration**: Added migration `db/038_graph_node_types.sql` to recreate graph node validation triggers with all declaration node types emitted by the indexer: `class`, `struct`, `function`, `func`, `fn`, and `def`.
+- **File-Scoped Declarations**: Declaration nodes now use file-scoped names like `path/to/file.sh::finishDictation`, avoiding collisions when multiple files define the same function/class name.
+- **Dream Cycle Batching**: Replaced per-edge sqlite subprocess calls in session-to-file graph wiring with one batched transaction, and normalized absolute observation paths back to project-relative graph file nodes.
+- **Stale File Filtering**: `eagle_collect_files` now filters deleted-but-tracked paths from `git ls-files`, so scans and rebuilds represent the current filesystem.
+- **Overview Graph Sync**: `eagle-mem overview set` now syncs the graph project node value, keeping graph search aligned with the canonical overview.
+- **Four-Agent Update Surface**: `eagle-mem update` now refreshes Antigravity integrations and Grok skill links in addition to Claude Code and Codex hooks/skills.
+
+---
+
 ## v4.10.5 Hardening Release
 
 This patch release hardens the database architecture, improves CLI usability, and increases programmatic test coverage for all core features:

@@ -1240,7 +1240,12 @@ eagle_collect_files() {
     local output_file="$2"
 
     if git -C "$target_dir" rev-parse --is-inside-work-tree &>/dev/null; then
-        git -C "$target_dir" ls-files --cached --others --exclude-standard > "$output_file"
+        git -C "$target_dir" ls-files --cached --others --exclude-standard \
+            | while IFS= read -r file; do
+                [ -n "$file" ] || continue
+                [ -f "$target_dir/$file" ] || continue
+                printf '%s\n' "$file"
+            done > "$output_file"
     else
         (cd "$target_dir" && find . -type f \
             -not -path '*/node_modules/*' \
