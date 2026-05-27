@@ -136,14 +136,11 @@ max_score=$((max_score + 15))
 
 provider=$(eagle_config_get "provider" "type" "none")
 if [ "$provider" != "none" ]; then
-    if [ "$provider" = "agent_cli" ]; then
-        model=$(_eagle_agent_cli_target)
-    else
-        model=$(eagle_config_get "$provider" "model" "default")
-    fi
-    eagle_ok "Provider: ${provider} (${model})"
+    provider_chain=$(eagle_llm_provider_label)
+    eagle_ok "Provider: ${provider_chain}"
     score=$((score + 15))
 else
+    provider_chain="none"
     eagle_fail "No LLM provider — curator and enrichment disabled"
     issues+=("Configure a provider: eagle-mem config init")
 fi
@@ -321,6 +318,7 @@ if [ "$JSON_OUT" -eq 1 ]; then
         --argjson enriched_summaries "${enriched_summaries:-0}" \
         --argjson features "${feature_count:-0}" \
         --arg provider "$provider" \
+        --arg provider_chain "$provider_chain" \
         --arg token_guard_rtk "$rtk_mode" \
         --arg token_guard_raw_bash "$raw_bash_mode" \
         --arg rtk_bin "${rtk_bin:-}" \
@@ -345,7 +343,7 @@ if [ "$JSON_OUT" -eq 1 ]; then
         '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
           capture:{sessions:$total_sessions, summaries:$total_summaries, heuristic:$heuristic_summaries},
           enrichment:$enriched_summaries,
-          features:$features, provider:$provider,
+          features:$features, provider:$provider, provider_chain:$provider_chain,
           token_guard:{rtk:$token_guard_rtk, raw_bash:$token_guard_raw_bash, rtk_bin:$rtk_bin},
           orchestration:{
             route:$orchestration_route,

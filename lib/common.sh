@@ -7,6 +7,7 @@
 EAGLE_MEM_DIR="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}"
 EAGLE_MEM_DB="$EAGLE_MEM_DIR/memory.db"
 EAGLE_MEM_LOG="$EAGLE_MEM_DIR/eagle-mem.log"
+EAGLE_RUNS_DIR="${EAGLE_RUNS_DIR:-$EAGLE_MEM_DIR/runs}"
 EAGLE_SETTINGS="${EAGLE_SETTINGS:-$HOME/.claude/settings.json}"
 EAGLE_SKILLS_DIR="${EAGLE_SKILLS_DIR:-$HOME/.claude/skills}"
 EAGLE_CLAUDE_PROJECTS_DIR="${EAGLE_CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
@@ -105,11 +106,105 @@ eagle_require_sqlite_fts5() {
 eagle_log() {
     local level="$1"
     shift
+    local ts msg
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    msg="[$ts] [$level] $*"
     # Ensure log file is owner-only (may contain debug data)
     if [ ! -f "$EAGLE_MEM_LOG" ]; then
         touch "$EAGLE_MEM_LOG" 2>/dev/null && chmod 600 "$EAGLE_MEM_LOG" 2>/dev/null
     fi
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [$level] $*" >> "$EAGLE_MEM_LOG" 2>/dev/null || true
+    echo "$msg" >> "$EAGLE_MEM_LOG" 2>/dev/null || true
+    if [ "${EAGLE_RUN_ACTIVE:-0}" = "1" ] && [ -n "${EAGLE_RUN_LOG:-}" ] && [ "$EAGLE_RUN_LOG" != "$EAGLE_MEM_LOG" ]; then
+        echo "$msg" >> "$EAGLE_RUN_LOG" 2>/dev/null || true
+    fi
+}
+
+eagle_run_slug() {
+    printf '%s' "${1:-command}" \
+        | tr -c 'A-Za-z0-9._-' '-' \
+        | sed 's/^-*//;s/-*$//' \
+        | cut -c1-48
+}
+
+eagle_run_prune_logs() {
+    local days="${1:-${EAGLE_RUN_LOG_RETENTION_DAYS:-14}}"
+    local keep="${2:-${EAGLE_RUN_LOG_MAX_COUNT:-50}}"
+    local rel_log
+
+    [ -d "$EAGLE_RUNS_DIR" ] || return 0
+    case "$days" in ""|*[!0-9]*) days=14 ;; esac
+    case "$keep" in ""|*[!0-9]*) keep=50 ;; esac
+
+    find "$EAGLE_RUNS_DIR" -type f -name '*.log' -print 2>/dev/null \
+        | while IFS= read -r stale_log; do
+            rel_log="${stale_log#"$EAGLE_RUNS_DIR"/}"
+            case "$rel_log" in
+                */*) rm -f -- "$stale_log" 2>/dev/null || true ;;
+            esac
+        done
+
+    if [ "$days" -gt 0 ]; then
+        find "$EAGLE_RUNS_DIR" -type f -name '*.log' -mtime +"$days" -print 2>/dev/null \
+            | while IFS= read -r stale_log; do
+                rm -f -- "$stale_log" 2>/dev/null || true
+            done
+    fi
+
+    if [ "$keep" -gt 0 ]; then
+        ls -t "$EAGLE_RUNS_DIR"/*.log 2>/dev/null \
+            | awk -v keep="$keep" 'NR > keep' \
+            | while IFS= read -r stale_log; do
+                rm -f -- "$stale_log" 2>/dev/null || true
+            done
+    fi
+}
+
+eagle_run_start() {
+    [ "${EAGLE_RUN_ACTIVE:-0}" = "1" ] && return 0
+
+    local command_name="$1" project="${2:-}" target="${3:-}"
+    local slug
+    slug=$(eagle_run_slug "$command_name")
+    [ -n "$slug" ] || slug="command"
+
+    mkdir -p "$EAGLE_RUNS_DIR" "$EAGLE_MEM_DIR" 2>/dev/null || true
+    eagle_run_prune_logs >/dev/null 2>&1 || true
+    EAGLE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-${slug}-$$"
+    EAGLE_RUN_LOG="$EAGLE_RUNS_DIR/${EAGLE_RUN_ID}.log"
+    EAGLE_RUN_COMMAND="$command_name"
+    EAGLE_RUN_PROJECT="$project"
+    EAGLE_RUN_TARGET="$target"
+    EAGLE_RUN_ACTIVE=1
+    export EAGLE_RUN_ID EAGLE_RUN_LOG EAGLE_RUN_COMMAND EAGLE_RUN_PROJECT EAGLE_RUN_TARGET EAGLE_RUN_ACTIVE
+
+    touch "$EAGLE_RUN_LOG" 2>/dev/null && chmod 600 "$EAGLE_RUN_LOG" 2>/dev/null || true
+    {
+        printf '[%s] [INFO] run_start id=%s command=%s project=%s target=%s cwd=%s\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$EAGLE_RUN_ID" "$command_name" "$project" "$target" "$(pwd)"
+    } >> "$EAGLE_RUN_LOG" 2>/dev/null || true
+
+    # Keep normal CLI output intact while also preserving a command-scoped log.
+    exec > >(tee -a "$EAGLE_RUN_LOG") 2> >(tee -a "$EAGLE_RUN_LOG" >&2)
+    eagle_log "INFO" "Run started: id=$EAGLE_RUN_ID command=$command_name project=$project log=$EAGLE_RUN_LOG"
+}
+
+eagle_run_step() {
+    [ "${EAGLE_RUN_ACTIVE:-0}" = "1" ] || return 0
+    printf '[%s] [STEP] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$EAGLE_RUN_LOG" 2>/dev/null || true
+}
+
+eagle_run_finish() {
+    [ "${EAGLE_RUN_ACTIVE:-0}" = "1" ] || return 0
+    local rc="${1:-0}" line="${2:-unknown}"
+    printf '[%s] [INFO] run_finish id=%s rc=%s line=%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$EAGLE_RUN_ID" "$rc" "$line" >> "$EAGLE_RUN_LOG" 2>/dev/null || true
+    if [ "$rc" -ne 0 ] 2>/dev/null; then
+        eagle_log "ERROR" "Run failed: id=$EAGLE_RUN_ID command=${EAGLE_RUN_COMMAND:-unknown} rc=$rc line=$line log=${EAGLE_RUN_LOG:-}"
+        printf '\nEagle Mem command failed: %s (exit %s, line %s)\nLog: %s\n' \
+            "${EAGLE_RUN_COMMAND:-unknown}" "$rc" "$line" "${EAGLE_RUN_LOG:-unknown}" >&2
+    else
+        eagle_log "INFO" "Run finished: id=$EAGLE_RUN_ID command=${EAGLE_RUN_COMMAND:-unknown} rc=0"
+    fi
 }
 
 eagle_normalize_project_path() {
@@ -763,7 +858,9 @@ eagle_project_file_path() {
 }
 
 eagle_extract_apply_patch_files() {
-    sed -n -E 's/^\*\*\* (Add|Update|Delete) File: //p'
+    sed -n -E \
+        -e 's/^\*\*\* (Add|Update|Delete) File: //p' \
+        -e 's/^\*\*\* Move to: //p'
 }
 
 eagle_agent_source() {
@@ -923,6 +1020,36 @@ eagle_token_guard_raw_bash_mode() {
     else
         eagle_config_get_light "token_guard" "raw_bash" "block"
     fi
+}
+
+eagle_read_guard_mode() {
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        eagle_config_get "read_guard" "mode" "advisory"
+    else
+        eagle_config_get_light "read_guard" "mode" "advisory"
+    fi
+}
+
+eagle_read_guard_score_threshold() {
+    local threshold
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        threshold=$(eagle_config_get "read_guard" "score_threshold" "70")
+    else
+        threshold=$(eagle_config_get_light "read_guard" "score_threshold" "70")
+    fi
+    case "$threshold" in *[!0-9]*|"") threshold=70 ;; esac
+    printf '%s\n' "$threshold"
+}
+
+eagle_read_guard_block_threshold() {
+    local threshold
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        threshold=$(eagle_config_get "read_guard" "block_threshold" "90")
+    else
+        threshold=$(eagle_config_get_light "read_guard" "block_threshold" "90")
+    fi
+    case "$threshold" in *[!0-9]*|"") threshold=90 ;; esac
+    printf '%s\n' "$threshold"
 }
 
 eagle_raw_output_command_needs_guard() {

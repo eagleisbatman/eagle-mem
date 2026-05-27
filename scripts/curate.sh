@@ -37,6 +37,45 @@ Options:
 EOF
 }
 
+parse_consolidations_json() {
+    local result="$1"
+    printf '%s' "$result" | jq -Rrs -c '
+        def text_trim: gsub("^\\s+|\\s+$"; "");
+        def parse_payload:
+            gsub("\r"; "")
+            | gsub("^\\s*```json\\s*\\n"; "")
+            | gsub("^\\s*```\\s*\\n"; "")
+            | gsub("\\n\\s*```\\s*$"; "")
+            | text_trim
+            | if . == "" or . == "NONE" or . == "none" or . == "null" then []
+              else
+                  try fromjson catch (
+                      ([match("(?s)(\\{.*\\}|\\[.*\\])")? | .string][0] // "[]") | fromjson
+                  )
+              end;
+        def trim: gsub("^\\s+|\\s+$"; "");
+        def names:
+            if type == "array" then map(tostring | trim) | map(select(length > 0))
+            elif type == "string" then split(",") | map(trim) | map(select(length > 0))
+            else []
+            end;
+        def root:
+            if type == "array" then .
+            elif type == "object" then (.consolidations // .items // .instructions // [])
+            else []
+            end;
+        parse_payload
+        | root
+        | map({
+            source_names: ((.source_names // .sourceNames // .source_memories // .sourceMemories // .original_names // .originalNames // .originals // .names) | names),
+            new_name: ((.new_name // .newName // .name // .title // "") | tostring | trim),
+            description: ((.description // "") | tostring),
+            value: ((.value // .content // .compiled_truth // .compiledTruth // "") | tostring)
+        })
+        | map(select((.source_names | length) > 0 and (.new_name | length) > 0))
+    ' 2>/dev/null
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         -h|--help)
@@ -60,19 +99,27 @@ fi
 
 p_esc=$(eagle_sql_escape "$project")
 
+cleanup_curate() {
+    local rc=$?
+    eagle_run_finish "$rc" "$LINENO"
+}
+eagle_run_start "curate" "$project" "$(pwd)"
+trap cleanup_curate EXIT
+
 # Verify provider is configured
 provider=$(eagle_config_get "provider" "type" "none")
 if [ "$provider" = "none" ]; then
     eagle_err "No LLM provider configured. Run: eagle-mem config init"
     exit 1
 fi
-eagle_info "Provider: $provider ($(eagle_config_get "$provider" "model" "unknown"))"
+eagle_info "Provider: $(eagle_llm_provider_label)"
 eagle_info "Project: $project"
 [ "$DRY_RUN" -eq 1 ] && eagle_info "Dry run — no changes will be made"
 echo ""
 
 # ─── 1. Analyze gotchas for promotion ─────────────────────
 
+eagle_run_step "promote_gotchas"
 eagle_info "Analyzing gotchas for promotion..."
 
 recent_gotchas=$(eagle_db "SELECT gotchas, created_at
@@ -559,7 +606,11 @@ if [ -n "$co_edit_data" ]; then
             co_wire_count=$((co_wire_count + 1))
         fi
     done <<< "$co_edit_data"
-    eagle_ok "Wired $co_wire_count co-edited file edges"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would wire $co_wire_count co-edited file edges"
+    else
+        eagle_ok "Wired $co_wire_count co-edited file edges"
+    fi
 fi
 
 # 7.2 Wire session nodes and access edges
@@ -569,19 +620,55 @@ if [ -n "$recent_sessions" ]; then
     if [ "$DRY_RUN" -eq 0 ]; then
         session_wire_count=$(eagle_graph_wire_recent_session_edges "$project" 15)
     fi
-    eagle_ok "Wired $session_wire_count recent session nodes and edges"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would wire $session_wire_count recent session nodes and edges"
+    else
+        eagle_ok "Wired $session_wire_count recent session nodes and edges"
+    fi
 fi
 
 # 7.3 Offline Memory Consolidation (Compiled Truth vs Evidence)
-active_memories=$(eagle_db "SELECT memory_name, memory_type, description, content FROM agent_memories WHERE project = '$p_esc';")
-if [ -n "$active_memories" ]; then
-    consolidation_prompt="Analyze these mirrored agent memories for project '$project'. Identify any memories that are redundant, overlap in scope, or describe the same subsystem/gotcha/concept.
-    
-MEMORIES:
-$active_memories
+active_memory_rows=$(eagle_db_json "SELECT memory_name, memory_type, description, content FROM agent_memories WHERE project = '$p_esc';" || {
+    eagle_log "WARN" "Unable to read active agent memories for consolidation"
+    echo "[]"
+})
+active_memory_count=$(printf '%s' "$active_memory_rows" | jq 'length' 2>/dev/null || echo 0)
+if [ "$active_memory_count" -gt 0 ]; then
+    wired_memory_count=0
+    memory_node_index=0
+    while [ "$memory_node_index" -lt "$active_memory_count" ]; do
+        mname=$(printf '%s' "$active_memory_rows" | jq -r ".[$memory_node_index].memory_name // empty")
+        mcontent=$(printf '%s' "$active_memory_rows" | jq -r ".[$memory_node_index].content // empty")
+        memory_node_index=$((memory_node_index + 1))
+        [ -n "$mname" ] || continue
+        if [ "$DRY_RUN" -eq 0 ]; then
+            eagle_graph_add_node "$project" "memory" "$mname" "$mcontent" ""
+        fi
+        wired_memory_count=$((wired_memory_count + 1))
+    done
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would wire $wired_memory_count agent memory graph nodes"
+    else
+        eagle_ok "Wired $wired_memory_count agent memory graph nodes"
+    fi
 
-For any memories that should be consolidated, merge them into a single 'Compiled Truth' summary.
-The consolidated memory MUST be formatted exactly as:
+    memory_prompt_json=$(printf '%s' "$active_memory_rows" | jq -c '[.[] | {
+        memory_name: .memory_name,
+        memory_type: .memory_type,
+        description: .description,
+        content: .content
+    }]')
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        eagle_info "Would analyze $wired_memory_count agent memories for consolidation"
+    else
+        consolidation_prompt="Analyze these mirrored agent memories for project '$project'. Identify memories that are redundant, overlap in scope, or describe the same subsystem/gotcha/concept.
+
+INPUT_MEMORIES_JSON:
+$memory_prompt_json
+
+For any memories that should be consolidated, merge them into a single Compiled Truth summary.
+The consolidated memory value MUST be formatted exactly as:
 --- Compiled Truth ---
 <A structured, clear, up-to-date summary of the topic, gotten by merging the duplicate/overlapping memories. Keep it extremely precise.>
 
@@ -589,55 +676,59 @@ The consolidated memory MUST be formatted exactly as:
 - <Original memory title 1>: <brief original description or timestamp>
 - <Original memory title 2>: <brief original description or timestamp>
 
-Format your output as a series of instructions:
-CONSOLIDATE: <original memory name 1>, <original memory name 2> -> <new consolidated memory name> | description: <new description> | value: <the merged compiled truth + evidence content>
+Return strict JSON only, with this schema:
+{
+  \"consolidations\": [
+    {
+      \"source_names\": [\"<exact source memory_name>\", \"<exact source memory_name>\"],
+      \"new_name\": \"<new consolidated memory name>\",
+      \"description\": \"<new description>\",
+      \"value\": \"<the merged compiled truth + evidence content>\"
+    }
+  ]
+}
 
-If no memories need consolidation, output: NONE"
+If no memories need consolidation, return {\"consolidations\":[]}."
 
-    consolidation_result=$(eagle_llm_call "$consolidation_prompt" "You consolidate software development memories into a single compiled truth. Be precise. Output CONSOLIDATE lines or NONE." 1024 || true)
+        consolidation_result=$(eagle_llm_call "$consolidation_prompt" "You consolidate software development memories into a single compiled truth. Return strict JSON only." 1024 || true)
+        if ! parsed_consolidations=$(parse_consolidations_json "$consolidation_result"); then
+            eagle_log "WARN" "Unable to parse memory consolidation provider response"
+            parsed_consolidations="[]"
+        fi
 
-    if [ -n "$consolidation_result" ] && ! echo "$consolidation_result" | grep -q "^NONE$"; then
-        cons_count=0
-        while IFS= read -r line; do
-            case "$line" in
-                CONSOLIDATE:*)
-                    cons_data=$(echo "$line" | sed 's/^CONSOLIDATE:[[:space:]]*//')
-                    
-                    # Parse matching: original_names -> new_name | description: desc | value: val
-                    names_part=$(echo "$cons_data" | cut -d'-' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                    rest_part=$(echo "$cons_data" | cut -d'>' -f2-)
-                    new_name=$(echo "$rest_part" | cut -d'|' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                    
-                    desc_part=$(echo "$rest_part" | grep -oE "description:[[:space:]]*[^|]+" | sed 's/description:[[:space:]]*//')
-                    val_part=$(echo "$rest_part" | grep -oE "value:[[:space:]]*.+" | sed 's/value:[[:space:]]*//')
-                    
-                    if [ -z "$new_name" ] || [ -z "$names_part" ]; then continue; fi
-                    
-                    if [ "$DRY_RUN" -eq 1 ]; then
-                        eagle_info "  Would consolidate: $names_part → $new_name"
+        consolidation_count=$(printf '%s' "$parsed_consolidations" | jq 'length' 2>/dev/null || echo 0)
+        if [ "$consolidation_count" -gt 0 ]; then
+            cons_count=0
+            consolidation_index=0
+            while [ "$consolidation_index" -lt "$consolidation_count" ]; do
+                consolidation_item=$(printf '%s' "$parsed_consolidations" | jq -c ".[$consolidation_index]")
+                consolidation_index=$((consolidation_index + 1))
+                new_name=$(printf '%s' "$consolidation_item" | jq -r '.new_name // empty')
+                val_part=$(printf '%s' "$consolidation_item" | jq -r '.value // empty')
+                [ -n "$new_name" ] || continue
+
+                eagle_graph_add_node "$project" "memory" "$new_name" "$val_part" ""
+                new_node_id=$(eagle_graph_get_node_id "$project" "memory" "$new_name")
+
+                old_count=$(printf '%s' "$consolidation_item" | jq '.source_names | length' 2>/dev/null || echo 0)
+                old_index=0
+                while [ "$old_index" -lt "$old_count" ]; do
+                    old_n=$(printf '%s' "$consolidation_item" | jq -r ".source_names[$old_index] // empty")
+                    old_index=$((old_index + 1))
+                    [ -n "$old_n" ] || continue
+                    old_node_id=$(eagle_graph_get_node_id "$project" "memory" "$old_n")
+                    if [ -n "$old_node_id" ] && [ -n "$new_node_id" ]; then
+                        eagle_graph_add_edge "$project" "$new_node_id" "$old_node_id" "supersedes" 1.0
                     else
-                        # 1. Add new consolidated memory node
-                        eagle_graph_add_node "$project" "memory" "$new_name" "$val_part" ""
-                        new_node_id=$(eagle_graph_get_node_id "$project" "memory" "$new_name")
-                        
-                        # 2. Wire supersedes edges from new node to old nodes, and mark old nodes as inactive/superseded
-                        IFS=',' read -ra name_arr <<< "$names_part"
-                        for old_n in "${name_arr[@]}"; do
-                            old_n=$(echo "$old_n" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-                            if [ -z "$old_n" ]; then continue; fi
-                            old_node_id=$(eagle_graph_get_node_id "$project" "memory" "$old_n")
-                            if [ -n "$old_node_id" ] && [ -n "$new_node_id" ]; then
-                                eagle_graph_add_edge "$project" "$new_node_id" "$old_node_id" "supersedes" 1.0
-                            fi
-                        done
-                        cons_count=$((cons_count + 1))
+                        eagle_log "WARN" "Unable to wire supersedes edge: source='$old_n' consolidated='$new_name'"
                     fi
-                    ;;
-            esac
-        done <<< "$consolidation_result"
-        eagle_ok "Consolidated $cons_count sets of overlapping agent memories"
-    else
-        eagle_ok "Agent memories are fully consolidated and up to date"
+                done
+                cons_count=$((cons_count + 1))
+            done
+            eagle_ok "Consolidated $cons_count sets of overlapping agent memories"
+        else
+            eagle_ok "Agent memories are fully consolidated and up to date"
+        fi
     fi
 else
     eagle_dim "  No active agent memories to consolidate"

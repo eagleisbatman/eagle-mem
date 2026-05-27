@@ -29,6 +29,15 @@ TARGET_DIR="${args[0]:-.}"
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 PROJECT=$(eagle_project_from_cwd "$TARGET_DIR")
 
+TMPFILE=""
+cleanup_scan() {
+    local rc=$?
+    [ -n "${TMPFILE:-}" ] && rm -f "$TMPFILE" "${TMPFILE}.analysis" 2>/dev/null || true
+    eagle_run_finish "$rc" "$LINENO"
+}
+eagle_run_start "scan" "$PROJECT" "$TARGET_DIR"
+trap cleanup_scan EXIT
+
 eagle_header "Scan"
 eagle_info "Scanning ${BOLD}$PROJECT${RESET} at $TARGET_DIR"
 echo ""
@@ -52,8 +61,8 @@ if git -C "$TARGET_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
 fi
 
 TMPFILE=$(mktemp)
-trap 'rm -f "$TMPFILE"' EXIT
 
+eagle_run_step "collect_files"
 eagle_collect_files "$TARGET_DIR" "$TMPFILE"
 
 total_files=$(wc -l < "$TMPFILE" | tr -d ' ')
@@ -67,6 +76,7 @@ eagle_ok "$total_files files found"
 
 # ─── Language breakdown (bash 3 compatible — no assoc arrays) ──
 
+eagle_run_step "language_breakdown"
 while IFS= read -r file; do
     ext="${file##*.}"
     [ "$ext" = "$file" ] && continue

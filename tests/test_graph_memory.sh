@@ -77,10 +77,69 @@ CREATE TABLE graph_fixture (
 );
 EOF
 
-git -C "$repo" add a.sh b.sh old.sh db/source_column.sql
+cat > "$repo/sqlite_cli_literal.sh" <<'EOF'
+EAGLE_DB_SETUP=".headers off
+.output /dev/null
+PRAGMA busy_timeout=10000;
+.output stdout"
+EOF
+
+{
+    printf '\n'
+    printf '%s\n' 'echo "starts after an intentional blank line"'
+    printf '%s\n' '   '
+} > "$repo/sql_literal_edges.sh"
+
+{
+    printf '%s\n' '   '
+    printf '\t\n'
+} > "$repo/space_only.sh"
+
+: > "$repo/empty.sh"
+
+git -C "$repo" add a.sh b.sh old.sh db/source_column.sql sqlite_cli_literal.sh sql_literal_edges.sh space_only.sh empty.sh
 
 "$EAGLE_BIN" scan --force "$repo" >/dev/null
 "$EAGLE_BIN" index --force "$repo" >/dev/null
+
+dot_command_chunk_count=$(eagle_db "SELECT COUNT(*)
+                                    FROM code_chunks
+                                    WHERE project = 'project'
+                                      AND file_path = 'sqlite_cli_literal.sh'
+                                      AND content LIKE '%.output stdout%';")
+if [ "$dot_command_chunk_count" != "1" ]; then
+    echo "index did not preserve sqlite dot-command-like source lines" >&2
+    exit 1
+fi
+
+leading_blank_hex=$(eagle_db "SELECT hex(substr(content, 1, 1))
+                              FROM code_chunks
+                              WHERE project = 'project'
+                                AND file_path = 'sql_literal_edges.sh'
+                              LIMIT 1;")
+if [ "$leading_blank_hex" != "0A" ]; then
+    echo "index did not preserve leading blank line in SQL literal expression" >&2
+    exit 1
+fi
+
+whitespace_chunk_count=$(eagle_db "SELECT COUNT(*)
+                                   FROM code_chunks
+                                   WHERE project = 'project'
+                                     AND file_path = 'space_only.sh'
+                                     AND length(content) > 0;")
+if [ "$whitespace_chunk_count" != "1" ]; then
+    echo "index did not preserve all-whitespace source chunk" >&2
+    exit 1
+fi
+
+empty_chunk_count=$(eagle_db "SELECT COUNT(*)
+                              FROM code_chunks
+                              WHERE project = 'project'
+                                AND file_path = 'empty.sh';")
+if [ "$empty_chunk_count" != "0" ]; then
+    echo "index should not create chunks for empty files" >&2
+    exit 1
+fi
 
 decl_count=$(eagle_db "SELECT COUNT(*)
                        FROM graph_nodes

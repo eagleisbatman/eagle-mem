@@ -152,6 +152,8 @@ eagle_config_init() {
 # Which LLM provider to use for the curator and analysis features
 # Options: "ollama" (free, local), "agent_cli" (Codex/Claude CLI auth), "anthropic", "openai"
 type = "$provider"
+# "auto" retries local/agent/API fallbacks when the primary provider fails.
+fallback = "auto"
 
 [ollama]
 url = "$ollama_url"
@@ -207,6 +209,12 @@ rtk = "auto"
 # "allow" keeps RTK advisory only.
 raw_bash = "block"
 
+[read_guard]
+# advisory = score repeated/expensive reads and nudge; block = deny high-score rereads.
+mode = "advisory"
+score_threshold = "70"
+block_threshold = "90"
+
 [redaction]
 # Additional secret patterns (regex) beyond built-in defaults
 # extra_patterns = ["MY_CUSTOM_SECRET_.*"]
@@ -223,14 +231,39 @@ eagle_llm_call() {
     local system_prompt="${2:-You are a helpful assistant that analyzes software development sessions.}"
     local max_tokens="${3:-1024}"
 
-    local provider
+    local provider chain candidate result rc tried=0
     provider=$(eagle_config_get "provider" "type" "none")
+    chain=$(_eagle_provider_chain "$provider")
 
+    if [ -z "$chain" ]; then
+        eagle_log "ERROR" "No LLM provider configured or available. Run: eagle-mem config"
+        return 1
+    fi
+
+    while IFS= read -r candidate; do
+        [ -z "$candidate" ] && continue
+        tried=$((tried + 1))
+        result=$(_eagle_call_provider_once "$candidate" "$prompt" "$system_prompt" "$max_tokens")
+        rc=$?
+        if [ "$rc" -eq 0 ] && [ -n "$result" ]; then
+            [ "$candidate" != "$provider" ] && eagle_log "INFO" "LLM provider fallback succeeded: primary=$provider used=$candidate"
+            printf '%s\n' "$result"
+            return 0
+        fi
+        eagle_log "WARN" "LLM provider candidate failed: primary=$provider candidate=$candidate rc=$rc"
+    done <<< "$chain"
+
+    eagle_log "ERROR" "All LLM provider candidates failed: primary=$provider tried=$tried"
+    return 1
+}
+
+_eagle_call_provider_once() {
+    local provider="$1" prompt="$2" system_prompt="$3" max_tokens="$4"
     case "$provider" in
-        ollama)   _eagle_call_ollama "$prompt" "$system_prompt" "$max_tokens" ;;
+        ollama)    _eagle_call_ollama "$prompt" "$system_prompt" "$max_tokens" ;;
         agent_cli) _eagle_call_agent_cli "$prompt" "$system_prompt" "$max_tokens" ;;
         anthropic) _eagle_call_anthropic "$prompt" "$system_prompt" "$max_tokens" ;;
-        openai)   _eagle_call_openai "$prompt" "$system_prompt" "$max_tokens" ;;
+        openai)    _eagle_call_openai "$prompt" "$system_prompt" "$max_tokens" ;;
         none)
             eagle_log "ERROR" "No LLM provider configured. Run: eagle-mem config"
             return 1
@@ -240,6 +273,79 @@ eagle_llm_call() {
             return 1
             ;;
     esac
+}
+
+_eagle_provider_chain() {
+    local primary="${1:-none}" fallback
+    fallback=$(eagle_config_get "provider" "fallback" "auto")
+
+    local chain=""
+    _eagle_provider_chain_add() {
+        local candidate="$1" required="${2:-available}"
+        [ -n "$candidate" ] || return 0
+        case " $chain " in *" $candidate "*) return 0 ;; esac
+        if [ "$required" = "available" ] && ! _eagle_provider_available "$candidate"; then
+            return 0
+        fi
+        chain="${chain}${chain:+ }$candidate"
+    }
+
+    if [ "$primary" != "none" ]; then
+        _eagle_provider_chain_add "$primary" "always"
+    fi
+
+    if [ "$fallback" != "off" ]; then
+        case "$primary" in
+            ollama)    _eagle_provider_chain_add "agent_cli"; _eagle_provider_chain_add "anthropic"; _eagle_provider_chain_add "openai" ;;
+            agent_cli) _eagle_provider_chain_add "ollama"; _eagle_provider_chain_add "anthropic"; _eagle_provider_chain_add "openai" ;;
+            anthropic) _eagle_provider_chain_add "ollama"; _eagle_provider_chain_add "agent_cli"; _eagle_provider_chain_add "openai" ;;
+            openai)    _eagle_provider_chain_add "ollama"; _eagle_provider_chain_add "agent_cli"; _eagle_provider_chain_add "anthropic" ;;
+            none|"")   _eagle_provider_chain_add "ollama"; _eagle_provider_chain_add "agent_cli"; _eagle_provider_chain_add "anthropic"; _eagle_provider_chain_add "openai" ;;
+        esac
+    fi
+
+    printf '%s\n' "$chain" | tr ' ' '\n' | sed '/^$/d'
+}
+
+_eagle_provider_available() {
+    case "$1" in
+        ollama)
+            [ -n "$(eagle_detect_ollama "$(eagle_config_get "ollama" "url" "$EAGLE_DEFAULT_OLLAMA_URL")" 2>/dev/null || true)" ]
+            ;;
+        agent_cli)
+            [ -n "$(_eagle_agent_cli_target_chain)" ]
+            ;;
+        anthropic)
+            [ -n "${ANTHROPIC_API_KEY:-}" ]
+            ;;
+        openai)
+            [ -n "${OPENAI_API_KEY:-}" ]
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+_eagle_provider_model_label() {
+    case "$1" in
+        ollama)    printf 'ollama:%s' "$(eagle_config_get "ollama" "model" "mistral")" ;;
+        agent_cli) printf 'agent_cli:%s' "$(_eagle_agent_cli_target_summary)" ;;
+        anthropic) printf 'anthropic:%s' "$(eagle_config_get "anthropic" "model" "claude-haiku-4-5-20251001")" ;;
+        openai)    printf 'openai:%s' "$(eagle_config_get "openai" "model" "gpt-4o-mini")" ;;
+        *)         printf '%s' "$1" ;;
+    esac
+}
+
+eagle_llm_provider_label() {
+    local provider chain labels="" candidate sep=""
+    provider=$(eagle_config_get "provider" "type" "none")
+    chain=$(_eagle_provider_chain "$provider")
+    while IFS= read -r candidate; do
+        [ -z "$candidate" ] && continue
+        labels="${labels}${sep}$(_eagle_provider_model_label "$candidate")"
+        sep=" -> "
+    done <<< "$chain"
+    [ -n "$labels" ] || labels="none"
+    printf '%s\n' "$labels"
 }
 
 _eagle_call_ollama() {
@@ -281,35 +387,60 @@ _eagle_call_ollama() {
 }
 
 _eagle_agent_cli_target() {
-    local preferred
+    local first
+    first=$(_eagle_agent_cli_target_chain | sed -n '1p')
+    if [ -n "$first" ]; then
+        printf '%s\n' "$first"
+    else
+        printf 'none\n'
+    fi
+}
+
+_eagle_agent_cli_target_chain() {
+    local preferred current preferred_target targets="" candidate
     preferred=$(eagle_config_get "agent_cli" "preferred" "current")
+    current=""
+    if [ -n "${EAGLE_AGENT_SOURCE:-${EAGLE_AGENT:-}}" ]; then
+        current=$(eagle_agent_source)
+    fi
 
     case "$preferred" in
-        codex|openai-codex) echo "codex"; return 0 ;;
-        claude|claude-code|cloud-code) echo "claude-code"; return 0 ;;
-        auto)
-            if [ -n "${EAGLE_AGENT_SOURCE:-${EAGLE_AGENT:-}}" ]; then
-                eagle_agent_source
-            elif command -v codex &>/dev/null; then
-                echo "codex"
-            elif command -v claude &>/dev/null; then
-                echo "claude-code"
-            else
-                echo "none"
-            fi
-            ;;
-        current|*)
-            if [ -n "${EAGLE_AGENT_SOURCE:-${EAGLE_AGENT:-}}" ]; then
-                eagle_agent_source
-            elif command -v codex &>/dev/null; then
-                echo "codex"
-            elif command -v claude &>/dev/null; then
-                echo "claude-code"
-            else
-                echo "none"
-            fi
+        codex|openai-codex) preferred_target="codex" ;;
+        claude|claude-code|cloud-code) preferred_target="claude-code" ;;
+        current) preferred_target="$current" ;;
+        auto|"") preferred_target="" ;;
+        *)
+            eagle_log "WARN" "agent_cli unsupported preferred target: $preferred"
+            preferred_target=""
             ;;
     esac
+
+    for candidate in "$preferred_target" "$current" codex claude-code; do
+        case "$candidate" in
+            codex|claude-code) ;;
+            *) continue ;;
+        esac
+        case "$candidate" in
+            codex) command -v codex >/dev/null 2>&1 || continue ;;
+            claude-code) command -v claude >/dev/null 2>&1 || continue ;;
+        esac
+        case " $targets " in *" $candidate "*) continue ;; esac
+        targets="${targets}${targets:+ }$candidate"
+    done
+
+    printf '%s\n' "$targets" | tr ' ' '\n' | sed '/^$/d'
+}
+
+_eagle_agent_cli_target_summary() {
+    local chain summary="" sep="" target
+    chain=$(_eagle_agent_cli_target_chain)
+    while IFS= read -r target; do
+        [ -z "$target" ] && continue
+        summary="${summary}${sep}${target}"
+        sep=" -> "
+    done <<< "$chain"
+    [ -n "$summary" ] || summary="none"
+    printf '%s\n' "$summary"
 }
 
 _eagle_agent_cli_prompt_file() {
@@ -327,17 +458,36 @@ _eagle_agent_cli_prompt_file() {
 
 _eagle_call_agent_cli() {
     local prompt="$1" system="$2" max_tokens="$3"
-    local target
-    target=$(_eagle_agent_cli_target)
+    local target targets result rc tried=0
+    targets=$(_eagle_agent_cli_target_chain)
 
-    case "$target" in
-        codex) _eagle_call_codex_cli "$prompt" "$system" "$max_tokens" ;;
-        claude-code) _eagle_call_claude_cli "$prompt" "$system" "$max_tokens" ;;
-        *)
-            eagle_log "ERROR" "agent_cli provider unavailable: no Codex or Claude CLI found"
-            return 1
-            ;;
-    esac
+    if [ -z "$targets" ]; then
+        eagle_log "ERROR" "agent_cli provider unavailable: no supported Codex or Claude CLI found"
+        return 1
+    fi
+
+    while IFS= read -r target; do
+        [ -z "$target" ] && continue
+        tried=$((tried + 1))
+        case "$target" in
+            codex) result=$(_eagle_call_codex_cli "$prompt" "$system" "$max_tokens"); rc=$? ;;
+            claude-code) result=$(_eagle_call_claude_cli "$prompt" "$system" "$max_tokens"); rc=$? ;;
+            *)
+                eagle_log "WARN" "agent_cli unsupported target: $target"
+                rc=1
+                result=""
+                ;;
+        esac
+        if [ "$rc" -eq 0 ] && [ -n "$result" ]; then
+            [ "$tried" -gt 1 ] && eagle_log "INFO" "agent_cli fallback succeeded with $target"
+            printf '%s\n' "$result"
+            return 0
+        fi
+        eagle_log "WARN" "agent_cli target failed: target=$target rc=$rc"
+    done <<< "$targets"
+
+    eagle_log "ERROR" "All agent_cli targets failed: targets=$(printf '%s' "$targets" | tr '\n' ',')"
+    return 1
 }
 
 _eagle_call_codex_cli() {
@@ -539,16 +689,19 @@ eagle_show_config() {
         return 1
     fi
 
-    local provider model
+    local provider model fallback
     provider=$(eagle_config_get "provider" "type" "none")
+    fallback=$(eagle_config_get "provider" "fallback" "auto")
     if [ "$provider" = "agent_cli" ]; then
-        model=$(_eagle_agent_cli_target)
+        model=$(_eagle_agent_cli_target_summary)
     else
         model=$(eagle_config_get "$provider" "model" "unknown")
     fi
 
     echo "Provider: $provider"
     echo "Model:    $model"
+    echo "Fallback: $fallback"
+    echo "Chain:    $(eagle_llm_provider_label)"
 
     if [ "$provider" = "ollama" ]; then
         local url
@@ -564,6 +717,7 @@ eagle_show_config() {
         fi
     elif [ "$provider" = "agent_cli" ]; then
         echo "Preferred: $(eagle_config_get "agent_cli" "preferred" "current")"
+        echo "Targets:   $(_eagle_agent_cli_target_summary)"
         echo "Codex:     $(command -v codex 2>/dev/null || echo "not found")"
         echo "Claude:    $(command -v claude 2>/dev/null || echo "not found")"
     fi

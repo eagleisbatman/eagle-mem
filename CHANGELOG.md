@@ -4,6 +4,52 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.12 Spectral Review Closure
+
+This patch closes the multi-CLI Spectral review findings on v4.10.11:
+
+- **Run Log Containment**: `eagle-mem logs show|tail` now resolves only run-log IDs, filenames, or absolute paths under `~/.eagle-mem/runs`, preventing arbitrary file reads through the logs subcommand.
+- **Run Log Retention**: Added `eagle-mem logs prune --days N --keep N` plus automatic pruning when command-scoped run logs start, defaulting to logs older than 14 days and retaining the latest 50.
+- **Run Log Diagnostics**: `eagle_log` messages now mirror into the active command run log, so failure log paths include provider and internal diagnostic messages instead of only command stdout/stderr.
+- **PostToolUse Tracker Locking**: Modification tracking now writes every modified file through the same lock path, retries lock acquisition, avoids unlocked appends to the trimmed tracker, and records all files from multi-file `apply_patch` operations.
+- **Curator JSON Robustness**: Dream Cycle consolidation parsing now tolerates provider text wrapped around the JSON payload while preserving strict `jq` validation.
+- **Regression Coverage**: Expanded reliability tests for log path rejection, log pruning, mirrored run diagnostics, unsupported agent target logging, and multi-file modification tracking.
+
+---
+
+## v4.10.11 Reliability Guards and Provider Fallback
+
+This patch closes the active reliability items that remained after the Dream Cycle hotfix:
+
+- **Command-Scoped Logs**: `scan`, `index`, and `curate` now write per-run logs under `~/.eagle-mem/runs`, preserve normal CLI output, and print the log path on command failure. Added `eagle-mem logs list|tail|show` for inspection.
+- **Provider Fallback Transparency**: Provider calls now use an explicit fallback chain. `agent_cli` can fall through from a failed preferred Codex call to Claude Code when available, and provider display now shows the actual chain instead of `unknown`.
+- **Read Prediction / Token Guard Scoring**: `PreToolUse` now scores repeated, large, or recently modified reads and emits a targeted read-score nudge. A configurable `read_guard.mode=block` path is available for stricter high-confidence duplicate-read gating.
+- **Auto-Scan Retry Reliability**: SessionStart auto-scan/index freshness markers are now cleared when the background job fails, so failed scans do not block retries for the next 24 hours.
+- **Hook Field Parsing**: Hook JSON field extraction now uses the intended unit separator in `PreToolUse`, `UserPromptSubmit`, and `Stop`, preserving clean `tool_name`, `session_id`, and `cwd` parsing.
+- **Regression Coverage**: Added an isolated reliability test for provider fallback, read scoring, auto-scan failure state cleanup, and run-log creation.
+
+---
+
+## v4.10.10 Dream Cycle Consolidation Hardening
+
+This patch closes the review findings from the multi-model Spectral pass:
+
+- **Structured Consolidation Parsing**: Dream Cycle memory consolidation now asks providers for strict JSON and validates the response with `jq`, removing the brittle `CONSOLIDATE:` text parser that could break on punctuation, arrows, pipes, or whitespace in memory names.
+- **Dry-Run Safety**: Memory graph consolidation dry-runs now preview graph wiring and skip the provider call, avoiding token spend and provider side effects during preview.
+- **Regression Coverage**: The Dream Cycle regression now covers JSON consolidation with punctuation-heavy names, `NONE` responses, malformed legacy text responses, idempotent reruns, and dry-run provider skipping.
+- **Indexer Edge Coverage**: Graph-memory indexing now verifies dot-command-like source lines, leading blank lines, all-whitespace chunks, and empty-file behavior.
+
+---
+
+## v4.10.9 Dream Cycle Graph Memory Hotfix
+
+This hotfix closes the remaining graph-memory curation gap:
+
+- **Memory Node Wiring**: Dream Cycle curation now creates graph `memory` nodes for active mirrored agent memories before consolidation runs, so consolidated memories can supersede real source memory nodes instead of depending on fuzzy or accidental matches.
+- **Regression Coverage**: The smoke suite now runs an isolated Dream Cycle graph-memory regression that proves multiline memory content does not become bogus graph nodes and that consolidated memories supersede both originals.
+
+---
+
 ## v4.10.8 Graph Neighbors Hotfix
 
 This hotfix tightens the final graph-memory verification path:

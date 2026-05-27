@@ -146,6 +146,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 | `eagle-mem search` | Search past sessions, memories, and code |
 | `eagle-mem health` | Diagnose pipeline health and background automation |
 | `eagle-mem doctor` | Verify installed runtime files, hooks, SQLite/FTS5, statusline, manifest, and drift |
+| `eagle-mem logs` | Inspect and prune command-scoped `scan`, `index`, and `curate` run logs |
 | `eagle-mem config` | View or change LLM provider and token-guard settings |
 | `eagle-mem updates` | View or change auto-update policy |
 | `eagle-mem guard` | Manage regression guardrails for files |
@@ -183,6 +184,8 @@ eagle-mem overview set "Current project briefing..."
 ```
 
 If graph search shows stale deleted files, run `eagle-mem graph rebuild` from the project root. The rebuild command filters missing tracked paths, clears stale code chunks and declaration nodes, preserves manual overviews, and rewires declarations with file-scoped names such as `apps/mac/DictationController.swift::finishDictation`.
+
+Dream Cycle curation also wires mirrored agent memories into graph `memory` nodes before consolidation, so `supersedes` relationships stay attached to the source memories rather than to incidental text inside memory content. Consolidation responses use a strict JSON contract, and dry-run previews skip the provider call for the memory-consolidation step.
 
 ### Trust and Recovery
 
@@ -344,6 +347,10 @@ eagle-mem config set agent_cli.preferred current
 
 Provider preference is local-first: Ollama is auto-detected when running, then Eagle Mem can use the installed Codex/Claude CLI via `agent_cli` before falling back to explicit Anthropic/OpenAI API providers. Eagle Mem works fully without a provider — LLM features gracefully degrade to heuristic fallbacks.
 
+Provider calls use an explicit fallback chain by default. For example, `agent_cli` can try the preferred/current agent first and then fall through to another supported local CLI when available. `eagle-mem config`, `eagle-mem health`, and `eagle-mem curate` display the resolved provider path so failed or unavailable agent CLIs are visible instead of appearing as `unknown`.
+
+Command-scoped run logs live under `~/.eagle-mem/runs`. Use `eagle-mem logs list`, `eagle-mem logs show <run-id>`, `eagle-mem logs tail <run-id>`, and `eagle-mem logs prune --days 14 --keep 50` to inspect or trim them. Log reads are constrained to the run-log directory.
+
 RTK is configured separately from the LLM provider:
 
 ```bash
@@ -351,6 +358,8 @@ eagle-mem config set token_guard.rtk auto      # default: use RTK when available
 eagle-mem config set token_guard.rtk enforce   # block known raw-output commands if RTK is missing
 eagle-mem config set token_guard.rtk off       # disable RTK behavior
 eagle-mem config set token_guard.raw_bash block
+eagle-mem config set read_guard.mode advisory  # score repeated reads and nudge
+eagle-mem config set read_guard.mode block     # optionally block high-confidence duplicate reads
 ```
 
 ## Long-term Direction

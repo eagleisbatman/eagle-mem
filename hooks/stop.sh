@@ -22,7 +22,7 @@ input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
 IFS=$'\x1f' read -r session_id cwd transcript_path agent_type <<< \
-    "$(echo "$input" | jq -r '[.session_id, .cwd, .transcript_path, .agent_type] | map(. // "") | join("")')"
+    "$(echo "$input" | jq -r '[.session_id, .cwd, .transcript_path, .agent_type] | map(. // "") | join("\u001f")')"
 last_assistant_message=$(echo "$input" | jq -r '.last_assistant_message // empty')
 agent=$(eagle_agent_source_from_json "$input")
 

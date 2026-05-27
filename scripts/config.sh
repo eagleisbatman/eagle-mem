@@ -36,6 +36,7 @@ show_help() {
     echo -e "    eagle-mem config set updates.allow patch"
     echo -e "    eagle-mem config set token_guard.rtk enforce"
     echo -e "    eagle-mem config set token_guard.raw_bash block"
+    echo -e "    eagle-mem config set read_guard.mode advisory"
     echo ""
     exit 0
 }
@@ -72,6 +73,7 @@ case "$subcommand" in
             eagle_info "  eagle-mem config set anthropic.model claude-haiku-4-5-20251001"
             eagle_info "  eagle-mem config set token_guard.rtk enforce"
             eagle_info "  eagle-mem config set token_guard.raw_bash block"
+            eagle_info "  eagle-mem config set read_guard.mode advisory"
             exit 1
         fi
         section="${key%%.*}"

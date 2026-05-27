@@ -52,6 +52,8 @@ run_check "Cross Agent Memory (memories query)" "\"$EAGLE_BIN\" memories --json 
 run_check "Installer And Updater (install / update syntax)" "bash -n \"$SCRIPTS_DIR/install.sh\" && bash -n \"$SCRIPTS_DIR/update.sh\""
 run_check "Code Scan And Index (scan / index syntax)" "bash -n \"$SCRIPTS_DIR/scan.sh\" && bash -n \"$SCRIPTS_DIR/index.sh\""
 run_check "Graph Memory Rebuild (isolated regression suite)" "bash \"$SCRIPTS_DIR/../tests/test_graph_memory.sh\""
+run_check "Dream Cycle Memory Graph Wiring (isolated regression suite)" "bash \"$SCRIPTS_DIR/../tests/test_curate_graph_memories.sh\""
+run_check "Reliability Guards (provider fallback, logs, autoscan, read scoring)" "bash \"$SCRIPTS_DIR/../tests/test_reliability_guards.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

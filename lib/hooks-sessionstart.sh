@@ -12,18 +12,23 @@ _eagle_state_slug() {
     printf '%s' "$1" | shasum | cut -c1-12
 }
 
+_eagle_state_file() {
+    local key="$1" project="$2"
+    local safe_project; safe_project=$(_eagle_state_slug "$project")
+    printf '%s/%s-%s\n' "$_state_dir" "$key" "$safe_project"
+}
+
 _eagle_state_fresh() {
     local key="$1" project="$2" max_age_days="${3:-1}"
-    local safe_project; safe_project=$(_eagle_state_slug "$project")
-    local state_file="$_state_dir/${key}-${safe_project}"
+    local state_file; state_file=$(_eagle_state_file "$key" "$project")
     [ -f "$state_file" ] && [ -z "$(find "$state_file" -mtime +${max_age_days} 2>/dev/null)" ]
 }
 
 _eagle_state_touch() {
     local key="$1" project="$2"
-    local safe_project; safe_project=$(_eagle_state_slug "$project")
+    local state_file; state_file=$(_eagle_state_file "$key" "$project")
     mkdir -p "$_state_dir" 2>/dev/null
-    touch "$_state_dir/${key}-${safe_project}"
+    touch "$state_file"
 }
 
 eagle_sessionstart_auto_provision() {
@@ -51,15 +56,63 @@ eagle_sessionstart_auto_provision() {
         eagle_log "INFO" "SessionStart: first-session provision — scan then index"
         _eagle_state_touch "scan" "$project"
         _eagle_state_touch "index" "$project"
-        nohup bash -c "bash '$scripts_dir/scan.sh' '$cwd' >> '$EAGLE_MEM_LOG' 2>&1; bash '$scripts_dir/index.sh' '$cwd' >> '$EAGLE_MEM_LOG' 2>&1" &
+        scan_state=$(_eagle_state_file "scan" "$project")
+        index_state=$(_eagle_state_file "index" "$project")
+        nohup bash -c '
+            scripts_dir="$1"; cwd="$2"; log="$3"; scan_state="$4"; index_state="$5"
+            bash "$scripts_dir/scan.sh" "$cwd" >> "$log" 2>&1
+            scan_rc=$?
+            if [ "$scan_rc" -eq 0 ]; then
+                touch "$scan_state" 2>/dev/null || true
+            else
+                rm -f "$scan_state" 2>/dev/null || true
+                printf "[%s] [ERROR] SessionStart: auto-scan failed rc=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$scan_rc" >> "$log" 2>/dev/null || true
+            fi
+
+            bash "$scripts_dir/index.sh" "$cwd" >> "$log" 2>&1
+            index_rc=$?
+            if [ "$index_rc" -eq 0 ]; then
+                touch "$index_state" 2>/dev/null || true
+            else
+                rm -f "$index_state" 2>/dev/null || true
+                printf "[%s] [ERROR] SessionStart: auto-index failed rc=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$index_rc" >> "$log" 2>/dev/null || true
+            fi
+
+            [ "$scan_rc" -eq 0 ] && exit "$index_rc"
+            exit "$scan_rc"
+        ' eagle-auto "$scripts_dir" "$cwd" "$EAGLE_MEM_LOG" "$scan_state" "$index_state" &
     elif [ "$needs_scan" = true ]; then
         eagle_log "INFO" "SessionStart: auto-scan triggered"
         _eagle_state_touch "scan" "$project"
-        nohup bash "$scripts_dir/scan.sh" "$cwd" >> "$EAGLE_MEM_LOG" 2>&1 &
+        scan_state=$(_eagle_state_file "scan" "$project")
+        nohup bash -c '
+            scripts_dir="$1"; cwd="$2"; log="$3"; scan_state="$4"
+            bash "$scripts_dir/scan.sh" "$cwd" >> "$log" 2>&1
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+                touch "$scan_state" 2>/dev/null || true
+            else
+                rm -f "$scan_state" 2>/dev/null || true
+                printf "[%s] [ERROR] SessionStart: auto-scan failed rc=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >> "$log" 2>/dev/null || true
+            fi
+            exit "$rc"
+        ' eagle-auto "$scripts_dir" "$cwd" "$EAGLE_MEM_LOG" "$scan_state" &
     elif [ "$needs_index" = true ]; then
         eagle_log "INFO" "SessionStart: auto-index triggered"
         _eagle_state_touch "index" "$project"
-        nohup bash "$scripts_dir/index.sh" "$cwd" >> "$EAGLE_MEM_LOG" 2>&1 &
+        index_state=$(_eagle_state_file "index" "$project")
+        nohup bash -c '
+            scripts_dir="$1"; cwd="$2"; log="$3"; index_state="$4"
+            bash "$scripts_dir/index.sh" "$cwd" >> "$log" 2>&1
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+                touch "$index_state" 2>/dev/null || true
+            else
+                rm -f "$index_state" 2>/dev/null || true
+                printf "[%s] [ERROR] SessionStart: auto-index failed rc=%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rc" >> "$log" 2>/dev/null || true
+            fi
+            exit "$rc"
+        ' eagle-auto "$scripts_dir" "$cwd" "$EAGLE_MEM_LOG" "$index_state" &
     fi
 }
 

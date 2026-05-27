@@ -40,6 +40,15 @@ TARGET_DIR="${args[0]:-.}"
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 PROJECT=$(eagle_project_from_cwd "$TARGET_DIR")
 
+TMPDIR_IDX=""
+cleanup_index() {
+    local rc=$?
+    [ -n "${TMPDIR_IDX:-}" ] && rm -rf "$TMPDIR_IDX" 2>/dev/null || true
+    eagle_run_finish "$rc" "$LINENO"
+}
+eagle_run_start "index" "$PROJECT" "$TARGET_DIR"
+trap cleanup_index EXIT
+
 CHUNK_SIZE="${EAGLE_MEM_CHUNK_SIZE:-80}"
 if ! [[ "$CHUNK_SIZE" =~ ^[0-9]+$ ]] || [ "$CHUNK_SIZE" -lt 1 ]; then
     CHUNK_SIZE=80
@@ -89,13 +98,32 @@ ext_to_lang() {
     esac
 }
 
+sql_literal_expr() {
+    awk '
+        BEGIN { first = 1 }
+        {
+            gsub(/\047/, "\047\047")
+            if (!first) {
+                printf "||char(10)||"
+            }
+            printf "\047%s\047", $0
+            first = 0
+        }
+        END {
+            if (first) {
+                printf "\047\047"
+            }
+        }
+    '
+}
+
 # ─── Collect files ─────────────────────────────────────────
 
 TMPDIR_IDX=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_IDX"' EXIT
 
 ALL_FILES="$TMPDIR_IDX/all_files"
 
+eagle_run_step "collect_files"
 eagle_collect_files "$TARGET_DIR" "$ALL_FILES"
 
 # Filter to source files only, skip large files
@@ -128,6 +156,7 @@ NEEDS_INDEX="$TMPDIR_IDX/needs_index"
 skipped_count=0
 
 if [ "$force" = true ]; then
+    eagle_run_step "force_clear_index_state"
     eagle_info "Force rebuild requested: clearing chunks, declarations, and import edges"
     eagle_graph_clear_index_state "$PROJECT"
 fi
@@ -164,6 +193,7 @@ if [ "$needs_count" -eq 0 ]; then
 fi
 
 eagle_info "$needs_count files to index"
+eagle_run_step "index_files count=$needs_count"
 
 # ─── Chunk and index files ─────────────────────────────────
 
@@ -194,11 +224,11 @@ DELETE FROM code_chunks WHERE project = '$project_sql' AND file_path = '$file_sq
         [ "$end" -gt "$total_lines" ] && end="$total_lines"
 
         content=$(sed -n "${start},${end}p" "$full_path" | eagle_redact)
-        content_sql=$(eagle_sql_escape "$content")
+        content_expr=$(printf '%s\n' "$content" | sql_literal_expr)
 
         txn_sql+="
 INSERT INTO code_chunks (project, file_path, language, start_line, end_line, content, mtime)
-VALUES ('$project_sql', '$file_sql', '$lang_sql', $start, $end, '$content_sql', $current_mtime);"
+VALUES ('$project_sql', '$file_sql', '$lang_sql', $start, $end, $content_expr, $current_mtime);"
 
         chunk_count=$((chunk_count + 1))
         start=$((end + 1))

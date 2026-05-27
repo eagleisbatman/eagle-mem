@@ -7,3 +7,4 @@ node_modules/
 .playwright-mcp/
 ghpages-*.png
 __pycache__/
+firebase-debug.log*

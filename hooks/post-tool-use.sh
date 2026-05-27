@@ -17,8 +17,52 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
+eagle_track_modified_path() {
+    local path="$1" sid="$2"
+    [ -n "$path" ] || return 0
+    [ -n "$sid" ] && eagle_validate_session_id "$sid" || return 0
+
+    local mod_dir mod_file mod_lock mod_tmp attempt
+    mod_dir="$EAGLE_MEM_DIR/mod-tracker"
+    mkdir -p "$mod_dir" 2>/dev/null || return 0
+    mod_file="$mod_dir/${sid}"
+    mod_lock="${mod_file}.lock"
+
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if mkdir "$mod_lock" 2>/dev/null; then
+            mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || mod_tmp="${mod_file}.$$"
+            (
+                cat "$mod_file" 2>/dev/null
+                for pending_file in "${mod_file}".pending.*; do
+                    [ -f "$pending_file" ] && cat "$pending_file" 2>/dev/null
+                done
+                printf '%s\n' "$path"
+            ) | tail -3 > "$mod_tmp"
+            mv "$mod_tmp" "$mod_file" 2>/dev/null || rm -f "$mod_tmp"
+            rm -f "${mod_file}".pending.* 2>/dev/null || true
+            rmdir "$mod_lock" 2>/dev/null || true
+            return 0
+        fi
+        sleep 0.05
+    done
+
+    printf '%s\n' "$path" >> "${mod_file}.pending.$$" 2>/dev/null || true
+    eagle_log "WARN" "PostToolUse: mod-tracker lock busy; queued pending modified file for session=$sid"
+}
+
+eagle_track_edit_history_path() {
+    local path="$1" sid="$2"
+    [ -n "$path" ] || return 0
+    [ -n "$sid" ] && eagle_validate_session_id "$sid" || return 0
+
+    local edit_dir
+    edit_dir="$EAGLE_MEM_DIR/edit-tracker"
+    mkdir -p "$edit_dir" 2>/dev/null || return 0
+    printf '%s\n' "$path" >> "$edit_dir/${sid}" 2>/dev/null || true
+}
+
 IFS=$'\x1f' read -r session_id cwd tool_name hook_event <<< \
-    "$(echo "$input" | jq -r '[.session_id, .cwd, .tool_name, .hook_event_name] | map(. // "") | join("")')"
+    "$(echo "$input" | jq -r '[.session_id, .cwd, .tool_name, .hook_event_name] | map(. // "") | join("\u001f")')"
 agent=$(eagle_agent_source_from_json "$input")
 
 if [ -z "$session_id" ]; then exit 0; fi
@@ -167,24 +211,16 @@ esac
 
 # ─── Track recent Edit/Write targets for Read-after-modify detection ──
 
-if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
+if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
     case "$tool_name" in
         Edit|Write|apply_patch)
-            mod_dir="$EAGLE_MEM_DIR/mod-tracker"
-            mkdir -p "$mod_dir" 2>/dev/null
-            mod_file="$mod_dir/${session_id}"
-            echo "$fp" >> "$mod_file"
-            # Keep only last 3 entries — use per-process tmp to avoid
-            # race when parallel PostToolUse hooks fire on same session
-            if [ -f "$mod_file" ]; then
-                _mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || _mod_tmp="${mod_file}.$$"
-                tail -3 "$mod_file" > "$_mod_tmp" && mv "$_mod_tmp" "$mod_file" || rm -f "$_mod_tmp"
-            fi
-
-            # Full edit history for stuck loop detection (not truncated)
-            edit_dir="$EAGLE_MEM_DIR/edit-tracker"
-            mkdir -p "$edit_dir" 2>/dev/null
-            echo "$fp" >> "$edit_dir/${session_id}"
+            modified_paths=$(printf '%s' "$files_modified" | jq -r '.[]?' 2>/dev/null)
+            [ -n "$modified_paths" ] || modified_paths="$fp"
+            while IFS= read -r modified_path; do
+                [ -z "$modified_path" ] && continue
+                eagle_track_modified_path "$modified_path" "$session_id"
+                eagle_track_edit_history_path "$modified_path" "$session_id"
+            done <<< "$modified_paths"
             ;;
     esac
 fi

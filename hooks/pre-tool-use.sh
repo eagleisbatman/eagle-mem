@@ -22,7 +22,7 @@ input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
 IFS=$'\x1f' read -r tool_name session_id cwd <<< \
-    "$(echo "$input" | jq -r '[.tool_name, .session_id, .cwd] | map(. // "") | join("")')"
+    "$(echo "$input" | jq -r '[.tool_name, .session_id, .cwd] | map(. // "") | join("\u001f")')"
 agent=$(eagle_agent_source_from_json "$input")
 
 case "$tool_name" in
@@ -295,11 +295,15 @@ Edit|Write|apply_patch)
 Read)
     fp=$(echo "$input" | jq -r '.tool_input.file_path // empty')
     if [ -n "$fp" ] && [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
+        read_score=0
+        read_reasons=""
 
         # ─── Read-after-modify detection ──────────────────────
         mod_file="$EAGLE_MEM_DIR/mod-tracker/${session_id}"
         if [ -f "$mod_file" ] && grep -qFx -- "$fp" "$mod_file" 2>/dev/null; then
             context+="Eagle Mem recall: '$(basename "$fp")' was just edited/written — the diff is already in context from the tool output. "
+            read_score=$((read_score + 45))
+            read_reasons="${read_reasons}recently modified; "
         fi
 
         # ─── Read dedup tracker (soft nudge) ──────────────────
@@ -311,6 +315,69 @@ Read)
         read_count=${read_count:-0}
         if [ "$read_count" -ge 3 ]; then
             context+="Eagle Mem recall: '$(basename "$fp")' has been read ${read_count} times this session. Its contents are likely already in context."
+        fi
+
+        if [ "$read_count" -ge 2 ]; then
+            repeat_score=$((20 + (read_count - 2) * 10))
+            [ "$repeat_score" -gt 40 ] && repeat_score=40
+            read_score=$((read_score + repeat_score))
+            read_reasons="${read_reasons}${read_count} reads this session; "
+        fi
+
+        hot_files=$(eagle_get_hot_files "$project" 2>/dev/null || true)
+        if [ -n "$hot_files" ]; then
+            fp_base=$(basename "$fp")
+            case ",$hot_files," in
+                *"/$fp_base,"*|*",$fp_base,"*)
+                    read_score=$((read_score + 10))
+                    read_reasons="${read_reasons}hot file; "
+                    ;;
+            esac
+        fi
+
+        full_fp="$fp"
+        if [ ! -f "$full_fp" ] && [ -n "$cwd" ] && [ -f "$cwd/$fp" ]; then
+            full_fp="$cwd/$fp"
+        fi
+        if [ -f "$full_fp" ]; then
+            file_size=$(wc -c < "$full_fp" 2>/dev/null | tr -d ' ')
+            file_size=${file_size:-0}
+            if [ "$file_size" -ge 500000 ] 2>/dev/null; then
+                read_score=$((read_score + 20))
+                read_reasons="${read_reasons}large file; "
+            elif [ "$file_size" -ge 150000 ] 2>/dev/null; then
+                read_score=$((read_score + 10))
+                read_reasons="${read_reasons}medium-large file; "
+            fi
+        fi
+
+        [ "$read_score" -gt 100 ] && read_score=100
+        score_threshold=$(eagle_read_guard_score_threshold)
+        block_threshold=$(eagle_read_guard_block_threshold)
+        read_guard_mode=$(eagle_read_guard_mode)
+        read_reasons=${read_reasons%; }
+        if [ "$read_score" -ge "$score_threshold" ] 2>/dev/null; then
+            context+=" Eagle Mem read score: ${read_score}/100 for '$(basename "$fp")'"
+            [ -n "$read_reasons" ] && context+=" (${read_reasons})"
+            context+=". Prefer the existing context, recent diff, or targeted search unless you need exact fresh lines."
+        fi
+        if [ "$read_guard_mode" = "block" ] && [ "$read_score" -ge "$block_threshold" ] 2>/dev/null && ! eagle_raw_bash_unlock_active; then
+            reason="Eagle Mem blocked this high-confidence duplicate read to save context tokens.
+
+File: $(basename "$fp")
+Score: ${read_score}/100
+Reason: ${read_reasons:-repeated read}
+
+Use the existing context, run a narrower search, or bypass once with:
+  touch $EAGLE_RAW_BASH_UNLOCK"
+            jq -nc --arg reason "$reason" '{
+                "hookSpecificOutput":{
+                    "hookEventName":"PreToolUse",
+                    "permissionDecision":"deny",
+                    "permissionDecisionReason":$reason
+                }
+            }'
+            exit 0
         fi
     fi
     ;;
