@@ -58,14 +58,25 @@ eagle_verify_feature() {
         WHERE project = '$project' AND name = '$name';"
 }
 
+eagle_feature_file_match_ff_sql() {
+    local file_path="$1"
+    local file_esc; file_esc=$(eagle_sql_escape "$file_path")
+    local file_like; file_like=$(eagle_like_escape "$file_esc")
+
+    cat <<SQL
+(
+            ff.file_path = '$file_esc'
+            OR ff.file_path LIKE '%/$file_like' ESCAPE '\\'
+            OR substr('$file_esc', -length('/' || ff.file_path)) = '/' || ff.file_path
+        )
+SQL
+}
+
 eagle_find_feature_impacts_for_file() {
     local project; project=$(eagle_sql_escape "$1")
     local file_path="$2"
-    local fname; fname=$(basename "$file_path")
-    local file_esc; file_esc=$(eagle_sql_escape "$file_path")
-    local fname_esc; fname_esc=$(eagle_sql_escape "$fname")
-    local file_like; file_like=$(eagle_like_escape "$file_esc")
-    local fname_like; fname_like=$(eagle_like_escape "$fname_esc")
+    local file_match_sql
+    file_match_sql=$(eagle_feature_file_match_ff_sql "$file_path")
 
     eagle_db "SELECT DISTINCT f.id, f.name, f.description, f.last_verified_at,
         ff.file_path,
@@ -75,13 +86,7 @@ eagle_find_feature_impacts_for_file() {
         JOIN feature_files ff ON ff.feature_id = f.id
         WHERE f.project = '$project'
         AND f.status = 'active'
-        AND (
-            ff.file_path = '$file_esc'
-            OR ff.file_path LIKE '%/$file_like' ESCAPE '\\'
-            OR '$file_esc' LIKE '%' || ff.file_path ESCAPE '\\'
-            OR ff.file_path LIKE '%$fname_like' ESCAPE '\\'
-            OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\'
-        )
+        AND $file_match_sql
         ORDER BY f.updated_at DESC
         LIMIT 10;"
 }
@@ -114,10 +119,8 @@ eagle_record_pending_feature_verifications() {
             WHERE project = '$p_esc'
               AND feature_id = $fid
               AND file_path = '$fp_esc'
-              AND (
-                  (change_fingerprint = '$fp_hash_esc' AND status = 'verified')
-                  OR status = 'waived'
-              )
+              AND change_fingerprint = '$fp_hash_esc'
+              AND status IN ('verified', 'waived')
             LIMIT 1;")
         [ -n "$already_resolved" ] && continue
 
@@ -341,8 +344,9 @@ eagle_count_active_features() {
 
 eagle_find_feature_for_push() {
     local project; project=$(eagle_sql_escape "$1")
-    local fname; fname=$(eagle_sql_escape "$2")
-    local fname_like; fname_like=$(eagle_like_escape "$fname")
+    local file_path="$2"
+    local file_match_sql
+    file_match_sql=$(eagle_feature_file_match_ff_sql "$file_path")
 
     eagle_db "SELECT DISTINCT f.name,
         (SELECT GROUP_CONCAT(fst.command, '; ')
@@ -354,15 +358,14 @@ eagle_find_feature_for_push() {
         JOIN feature_files ff ON ff.feature_id = f.id
         WHERE f.project = '$project'
         AND f.status = 'active'
-        AND (ff.file_path LIKE '%$fname_like' ESCAPE '\\' OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\');"
+        AND $file_match_sql;"
 }
 
 eagle_find_features_for_file() {
     local project; project=$(eagle_sql_escape "$1")
     local file_path="$2"
-    local fname; fname=$(basename "$file_path")
-    local fname_esc; fname_esc=$(eagle_sql_escape "$fname")
-    local fname_like; fname_like=$(eagle_like_escape "$fname_esc")
+    local file_match_sql
+    file_match_sql=$(eagle_feature_file_match_ff_sql "$file_path")
 
     eagle_db "SELECT f.name, f.description, f.last_verified_at,
         ff.role,
@@ -376,7 +379,7 @@ eagle_find_features_for_file() {
         JOIN feature_files ff ON ff.feature_id = f.id
         WHERE f.project = '$project'
         AND f.status = 'active'
-        AND (ff.file_path LIKE '%$fname_like' ESCAPE '\\' OR ff.file_path LIKE '%$fname_like%' ESCAPE '\\')
+        AND $file_match_sql
         ORDER BY f.updated_at DESC
         LIMIT 3;"
 }

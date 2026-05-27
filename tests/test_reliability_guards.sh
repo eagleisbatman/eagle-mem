@@ -67,6 +67,26 @@ grep -q "agent_cli unsupported preferred target: grok" "$provider_home/eagle-mem
     exit 1
 }
 
+EAGLE_MEM_DIR="$provider_home" bash -c "
+    . '$ROOT_DIR/lib/common.sh'
+    if eagle_is_release_boundary_command 'eagle-mem orchestrate init \"commit and npm publish\"'; then
+        echo 'release guard should ignore Eagle Mem orchestration descriptions' >&2
+        exit 1
+    fi
+    if ! eagle_is_release_boundary_command 'npm publish'; then
+        echo 'release guard should detect npm publish' >&2
+        exit 1
+    fi
+    if ! eagle_is_release_boundary_command 'git push origin main'; then
+        echo 'release guard should detect git push' >&2
+        exit 1
+    fi
+    if eagle_is_release_boundary_command 'npm publish --dry-run'; then
+        echo 'release guard should allow npm publish --dry-run' >&2
+        exit 1
+    fi
+"
+
 # PreToolUse parsing + read scoring: repeated large read after modification should emit scored context.
 hook_home="$tmp_dir/hook-home"
 repo="$tmp_dir/repo"

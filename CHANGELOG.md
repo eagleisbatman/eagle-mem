@@ -4,6 +4,18 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.10.13 Feature Gate Monorepo Hardening
+
+This hotfix closes the feature verification gate false positives found in monorepos with repeated basenames:
+
+- **Full-Path Feature Matching**: Feature impact lookup now matches exact paths and path-boundary suffixes instead of broad basename-only `%server.js%` patterns when feature files store full paths.
+- **LIKE Escaping Hardening**: Feature path matching now treats `%`, `_`, and backslashes literally, preventing stored feature paths from becoming accidental SQL `LIKE` wildcards.
+- **Waive Safety**: Waived pending verifications are now scoped to the current change fingerprint, so a future edit to the same feature file reopens verification instead of being permanently bypassed.
+- **Release Guard Precision**: Eagle Mem state commands such as `orchestrate` and `tasks` no longer trip the release-boundary guard just because their descriptive text mentions `npm publish` or `git push`.
+- **Regression Coverage**: Added end-to-end feature gate coverage for monorepo path collisions, literal wildcard characters in paths, PreToolUse `git push` denial output, and same-fingerprint verification/waive behavior.
+
+---
+
 ## v4.10.12 Spectral Review Closure
 
 This patch closes the multi-CLI Spectral review findings on v4.10.11:

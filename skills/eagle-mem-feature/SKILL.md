@@ -24,7 +24,7 @@ These are semantically different operations:
 
 **Verify** = "I tested this exact change and it works." Fingerprint-specific — tied to the current diff hash. If the file changes again, a new pending verification appears.
 
-**Waive** = "I accept changes to this feature+file pair." Fingerprint-agnostic — covers the current change AND all future changes to that file for that feature. Use when the change is known-safe (e.g., comment-only edit, unrelated code path).
+**Waive** = "I accept this current pending change without running the full smoke test." Fingerprint-specific — covers the current file fingerprint only. If that file changes again, Eagle Mem creates a fresh pending verification. Use when the current change is known-safe (e.g., comment-only edit, unrelated code path).
 
 **Decision rule:** Did you run the smoke test or manually confirm behavior? Use `verify`. Is the change structurally irrelevant to the feature? Use `waive`.
 
@@ -72,7 +72,7 @@ Or waive a single pending record by ID:
 eagle-mem feature waive <id> --reason "unrelated code path"
 ```
 
-**Prefer waive-by-name** over waive-by-ID. IDs are ephemeral (new edits create new IDs), but names are stable. Waiving by name resolves all pending records for that feature at once.
+**Prefer waive-by-name** over waive-by-ID. IDs are ephemeral (new edits create new IDs), but names are stable. Waiving by name resolves all current pending records for that feature at once.
 
 A reason is always required — it's the audit trail for why verification was skipped.
 
@@ -116,7 +116,7 @@ eagle-mem feature show <name>          # files, deps, smoke tests, last verified
 | `feature show <name>` | Full detail: files, dependencies, smoke tests |
 | `feature pending` | All unresolved pending verifications |
 | `feature verify <name>` | Mark feature verified (fingerprint-specific) |
-| `feature waive <name\|id>` | Waive verification (fingerprint-agnostic for name) |
+| `feature waive <name\|id>` | Waive current pending verification(s) |
 | `feature add <name>` | Register a new feature with files/deps/tests |
 | `--notes "text"` | Attach notes to verify/waive (audit trail) |
 | `--reason "text"` | Required for waive — explains why safe |

@@ -54,6 +54,7 @@ run_check "Code Scan And Index (scan / index syntax)" "bash -n \"$SCRIPTS_DIR/sc
 run_check "Graph Memory Rebuild (isolated regression suite)" "bash \"$SCRIPTS_DIR/../tests/test_graph_memory.sh\""
 run_check "Dream Cycle Memory Graph Wiring (isolated regression suite)" "bash \"$SCRIPTS_DIR/../tests/test_curate_graph_memories.sh\""
 run_check "Reliability Guards (provider fallback, logs, autoscan, read scoring)" "bash \"$SCRIPTS_DIR/../tests/test_reliability_guards.sh\""
+run_check "Feature Verification Gate (monorepo path collisions)" "bash \"$SCRIPTS_DIR/../tests/test_feature_verification_gate.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

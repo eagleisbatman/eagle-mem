@@ -1160,10 +1160,10 @@ eagle_is_release_boundary_command() {
             function has_dry_run_flag(line) {
                 return line ~ /(^|[[:space:]])--dry-run([[:space:]]|$|=([Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss])([[:space:]]|$))/
             }
-            function is_eagle_feature_command(line) {
-                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+feature[[:space:]]+(verify|waive|pending|list)([[:space:]]|$)/
+            function is_eagle_state_command(line) {
+                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+(feature[[:space:]]+(verify|waive|pending|list)|orchestrate|tasks)([[:space:]]|$)/
             }
-            is_eagle_feature_command($0) { next }
+            is_eagle_state_command($0) { next }
             /(^|[[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)/ ||
             /(^|[[:space:]])npm[[:space:]]+publish([[:space:]]|$)/ ||
             /(^|[[:space:]])pnpm[[:space:]]+publish([[:space:]]|$)/ ||
@@ -1185,10 +1185,10 @@ eagle_is_release_boundary_command() {
             function has_dry_run_flag(line) {
                 return line ~ /(^|[[:space:]])--dry-run([[:space:]]|$|=([Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss])([[:space:]]|$))/
             }
-            function is_eagle_feature_command(line) {
-                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+feature[[:space:]]+(verify|waive|pending|list)([[:space:]]|$)/
+            function is_eagle_state_command(line) {
+                return line ~ /(^|[[:space:]])([^[:space:]]*\/)?eagle-mem[[:space:]]+(feature[[:space:]]+(verify|waive|pending|list)|orchestrate|tasks)([[:space:]]|$)/
             }
-            is_eagle_feature_command($0) { next }
+            is_eagle_state_command($0) { next }
             /(^|[[:space:]])git[[:space:]]+push([[:space:]]|$)/ {
                 if (!has_dry_run_flag($0)) found = 1
             }
@@ -1301,10 +1301,10 @@ eagle_fts_sanitize() {
     printf '%s' "$1" | sed 's/[^A-Za-z0-9_]/ /g' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
-# Escape SQL LIKE wildcards (% and _) so literal filenames match exactly.
+# Escape SQL LIKE wildcards and the escape character so literal filenames match exactly.
 # Apply AFTER eagle_sql_escape, since this only handles LIKE metacharacters.
 eagle_like_escape() {
-    printf '%s' "$1" | sed 's/%/\\%/g; s/_/\\_/g'
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/%/\\%/g; s/_/\\_/g'
 }
 
 # Validate a session ID is safe for use in file paths (no traversal).

@@ -150,9 +150,8 @@ One-off developer bypass:
                     while IFS= read -r changed_file; do
                         [ -z "$changed_file" ] && continue
                         norm_file=$(eagle_project_file_path "$cwd" "$changed_file")
-                        fname=$(basename "$norm_file")
 
-                        feature_hits=$(eagle_find_feature_for_push "$project" "$fname")
+                        feature_hits=$(eagle_find_feature_for_push "$project" "$norm_file")
 
                         while IFS='|' read -r feat_name feat_smoke feat_deps feat_verified; do
                             [ -z "$feat_name" ] && continue
