@@ -13,6 +13,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
+. "$LIB_DIR/opencode-hooks.sh"
 
 mode="install-footprint"
 json_output=false
@@ -49,7 +50,10 @@ case "$mode" in
 esac
 
 package_version=$(jq -r .version "$PACKAGE_DIR/package.json" 2>/dev/null || echo "unknown")
-installed_version=$(tr -d '[:space:]' < "$EAGLE_MEM_DIR/.version" 2>/dev/null || true)
+installed_version=""
+if [ -f "$EAGLE_MEM_DIR/.version" ]; then
+    installed_version=$(tr -d '[:space:]' < "$EAGLE_MEM_DIR/.version" 2>/dev/null || true)
+fi
 [ -z "$installed_version" ] && installed_version="not installed"
 
 sqlite_bin=$(eagle_sqlite_path)
@@ -63,6 +67,11 @@ runtime_exists=false
 db_exists=false
 [ -d "$EAGLE_MEM_DIR" ] && runtime_exists=true
 [ -f "$EAGLE_MEM_DB" ] && db_exists=true
+db_integrity_check=$(eagle_db_integrity_status "$EAGLE_MEM_DB" 2>/dev/null || true)
+db_integrity_status="${db_integrity_check%%|*}"
+db_integrity_detail="${db_integrity_check#*|}"
+[ -n "$db_integrity_status" ] || db_integrity_status="unknown"
+[ -n "$db_integrity_detail" ] || db_integrity_detail="not checked"
 
 doctor_compare_group() {
     local group="$1"
@@ -149,10 +158,12 @@ if [ -f "$EAGLE_SETTINGS" ] && command -v jq >/dev/null 2>&1; then
     fi
 fi
 
+opencode_plugin=$(eagle_opencode_plugin_state)
+
 overall="Healthy"
 if [ "$runtime_exists" != true ] || [ "$db_exists" != true ]; then
     overall="Not installed"
-elif [ "$sqlite_fts5" != true ] || [ "$sum_missing" -gt 0 ] || [ "$sum_drift" -gt 0 ] || [ "$manifest_status" != "ok" ]; then
+elif [ "$sqlite_fts5" != true ] || [ "$db_integrity_status" != "ok" ] || [ "$sum_missing" -gt 0 ] || [ "$sum_drift" -gt 0 ] || [ "$manifest_status" != "ok" ]; then
     overall="Needs attention"
 fi
 
@@ -167,8 +178,12 @@ if [ "$json_output" = true ]; then
         --arg sqlite_bin "${sqlite_bin:-}" \
         --arg sqlite_version "${sqlite_version:-}" \
         --argjson sqlite_fts5 "$sqlite_fts5" \
+        --argjson db_exists "$db_exists" \
+        --arg db_integrity_status "$db_integrity_status" \
+        --arg db_integrity_detail "$db_integrity_detail" \
         --arg claude_hooks "$claude_hooks" \
         --arg codex_hooks "$codex_hooks" \
+        --arg opencode_plugin "$opencode_plugin" \
         --arg statusline "$statusline_state" \
         --arg hooks_cmp "$hooks_cmp" \
         --arg lib_cmp "$lib_cmp" \
@@ -186,7 +201,8 @@ if [ "$json_output" = true ]; then
         '{overall:$overall, package_dir:$package_dir, runtime_dir:$runtime_dir, db:$db,
           versions:{package:$package_version, installed:$installed_version},
           sqlite:{path:$sqlite_bin, version:$sqlite_version, fts5:$sqlite_fts5},
-          hooks:{claude:$claude_hooks, codex:$codex_hooks, statusline:$statusline},
+          database:{exists:$db_exists, integrity:{status:$db_integrity_status, detail:$db_integrity_detail}},
+          hooks:{claude:$claude_hooks, codex:$codex_hooks, opencode:$opencode_plugin, statusline:$statusline},
           runtime_drift:{hooks:$hooks_cmp, lib:$lib_cmp, db:$db_cmp, scripts:$scripts_cmp},
           manifest:{path:$manifest_path, status:$manifest_status, checked:$manifest_checked,
                     missing:$manifest_missing, drift:$manifest_drift, version:$manifest_version,
@@ -217,11 +233,22 @@ if [ -n "$sqlite_bin" ]; then
 else
     eagle_fail "SQLite not found"
 fi
+if [ "$db_exists" = true ]; then
+    if [ "$db_integrity_status" = "ok" ]; then
+        eagle_ok "Database integrity: ok"
+    else
+        eagle_fail "Database integrity: $db_integrity_status"
+        eagle_dim "  $db_integrity_detail"
+    fi
+else
+    eagle_fail "Database missing"
+fi
 echo ""
 
 echo -e "  ${BOLD}Hooks / Skills${RESET}"
 eagle_kv "Claude Code:" "$claude_hooks"
 eagle_kv "Codex:" "$codex_hooks"
+eagle_kv "OpenCode:" "$opencode_plugin"
 [ -d "$EAGLE_GROK_DIR" ] && eagle_kv "Grok skills:" "$EAGLE_GROK_SKILLS_DIR"
 eagle_kv "Statusline:" "$statusline_state"
 echo ""

@@ -1,0 +1,13 @@
+{
+  "type": "todo.updated",
+  "properties": {
+    "sessionID": "opencode-session-fixture",
+    "todos": [
+      {
+        "content": "Verify OAuth token refresh after OpenCode compact",
+        "status": "in_progress",
+        "priority": "high"
+      }
+    ]
+  }
+}

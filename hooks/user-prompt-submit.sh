@@ -30,11 +30,22 @@ recall_scope=$(eagle_recall_project_scope_from_cwd "$cwd" "$project")
 [ -z "$recall_scope" ] && recall_scope="$project"
 codex_compact=0
 [ "$agent" = "codex" ] && codex_compact=1
+eagle_hook_observability_begin "$input" "UserPromptSubmit"
 
 # ─── Context pressure detection (turn counter since last compact) ──
 # Must run before any early exits so every prompt is counted
 
 context=""
+summary_matches=0
+memory_matches=0
+code_matches=0
+summary_refs="[]"
+memory_refs="[]"
+code_refs="[]"
+
+count_pipe_rows() {
+    awk -F'|' '($1 != "" || $2 != "") { c++ } END { print c + 0 }'
+}
 
 if [ -n "$session_id" ] && eagle_validate_session_id "$session_id"; then
     counter_file="$EAGLE_MEM_DIR/.turn-counter.${session_id}"
@@ -85,6 +96,9 @@ fi
 # Skip short prompts — not enough signal for meaningful search
 word_count=$(echo "$user_prompt" | wc -w | tr -d ' ')
 if [ "$word_count" -lt 3 ]; then
+    eagle_insert_recall_event "$session_id" "$recall_scope" "$cwd" "$agent" "$user_prompt" "" 0 0 0 "${#context}" "skipped_short_prompt" "" >/dev/null 2>&1 || true
+    eagle_hook_observability_set_detail "$(jq -nc --arg recall_status "skipped_short_prompt" --argjson injected_chars "${#context}" '{recall_status:$recall_status, injected_chars:$injected_chars}')"
+    eagle_hook_observability_complete 0
     eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
     exit 0
 fi
@@ -105,6 +119,9 @@ fts_query=$(echo "$user_prompt" | tr -cs '[:alnum:]' ' ' | tr '[:upper:]' '[:low
     }')
 
 if [ -z "$fts_query" ]; then
+    eagle_insert_recall_event "$session_id" "$recall_scope" "$cwd" "$agent" "$user_prompt" "" 0 0 0 "${#context}" "skipped_no_query" "" >/dev/null 2>&1 || true
+    eagle_hook_observability_set_detail "$(jq -nc --arg recall_status "skipped_no_query" --argjson injected_chars "${#context}" '{recall_status:$recall_status, injected_chars:$injected_chars}')"
+    eagle_hook_observability_complete 0
     eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
     exit 0
 fi
@@ -113,19 +130,27 @@ fi
 
 lower_prompt=$(printf '%s' "$user_prompt" | tr '[:upper:]' '[:lower:]')
 if printf '%s\n' "$lower_prompt" | grep -Eq '(orchestrat|worker|parallel|multi-agent|multi agent|split|lane|scope out|plan and get started|broad|full codebase|release|publish|ship)'; then
+    auto_orchestration=$(eagle_auto_orchestrate_from_prompt "$project" "$session_id" "$agent" "$user_prompt" "$cwd" "broad_prompt" 2>/dev/null || true)
+    if [ -n "$auto_orchestration" ]; then
+        IFS='|' read -r auto_name auto_id auto_lane_count _auto_lanes_json <<< "$auto_orchestration"
+        context+="
+Eagle Mem orchestration: detected broad work and created durable orchestration '$auto_name' with $auto_lane_count lanes.
+- Inspect it with: eagle-mem orchestrate --name $auto_name
+- Lanes already exist as durable tasks; update them instead of relying on memory alone.
+"
+    fi
     if [ "$codex_compact" -eq 1 ]; then
         context+="
 Eagle Mem orchestration:
-- For broad work, you run eagle-mem orchestrate yourself.
-- Use durable lanes, opposite-agent workers, and concise user-visible status.
+- Continue from the durable lanes Eagle already created.
+- Keep lane/task status current as work progresses.
 "
     else
         context+="=== Eagle Mem: Orchestration Protocol ===
-If this request is broad enough to split into worker lanes, YOU run the orchestration commands. Do not ask the user to run them.
+Eagle has already detected broad work and registered durable orchestration state.
 
 Use:
-  eagle-mem orchestrate init \"<goal>\"
-  eagle-mem orchestrate lane add <key> --agent codex|claude-code --desc \"<self-contained scope>\" --validate \"<command>\"
+  eagle-mem orchestrate --name auto
   eagle-mem orchestrate lane start|block|complete <key>
 
 Keep this mostly invisible to the user; surface only concise status or handoff when useful.
@@ -146,6 +171,8 @@ memory_limit=3
 
 results=$(eagle_search_summaries "$fts_query" "$recall_scope" "$summary_limit")
 memory_results=$(eagle_search_agent_memories "$fts_query" "$recall_scope" "$memory_limit" 2>/dev/null || true)
+summary_matches=$(printf '%s\n' "$results" | count_pipe_rows)
+memory_matches=$(printf '%s\n' "$memory_results" | count_pipe_rows)
 
 if [ -n "$results" ] || [ -n "$memory_results" ]; then
     if [ "$codex_compact" -eq 1 ]; then
@@ -195,6 +222,13 @@ Eagle Mem recalls:
             context+="
 "
         fi
+        summary_refs=$(printf '%s' "$summary_refs" | jq -c \
+            --arg created_at "$created_at" \
+            --arg agent "$summary_agent" \
+            --arg request "$req" \
+            --arg completed "$completed" \
+            --arg learned "$learned" \
+            '. + [{created_at:$created_at, agent:$agent, request:$request, completed:$completed, learned:$learned}]' 2>/dev/null || printf '[]')
     done <<< "$results"
 
     while IFS='|' read -r mname mtype mdesc msnippet _mfile _mupdated morigin; do
@@ -219,6 +253,12 @@ Eagle Mem recalls:
             context+="
 "
         fi
+        memory_refs=$(printf '%s' "$memory_refs" | jq -c \
+            --arg name "$mname" \
+            --arg type "$mtype" \
+            --arg description "$mdesc" \
+            --arg agent "$morigin" \
+            '. + [{name:$name, type:$type, description:$description, agent:$agent}]' 2>/dev/null || printf '[]')
     done <<< "$memory_results"
 fi
 
@@ -226,6 +266,7 @@ fi
 has_chunks=$(eagle_count_code_chunks "$project")
 if [ "${has_chunks:-0}" -gt 0 ]; then
     code_results=$(eagle_search_code_chunks "$fts_query" "$project" "$code_limit")
+    code_matches=$(printf '%s\n' "$code_results" | count_pipe_rows)
 
     if [ -n "$code_results" ]; then
         if [ "$codex_compact" -eq 1 ]; then
@@ -246,11 +287,27 @@ Relevant code:
             [ -n "$lang" ] && context+=" ($lang)"
             context+="
 "
+            code_refs=$(printf '%s' "$code_refs" | jq -c \
+                --arg file "$fpath" \
+                --arg start_line "$sline" \
+                --arg end_line "$eline" \
+                --arg language "$lang" \
+                '. + [{file:$file, start_line:$start_line, end_line:$end_line, language:$language}]' 2>/dev/null || printf '[]')
         done <<< "$code_results"
     fi
 fi
 
-[ -z "$context" ] && exit 0
+if [ -z "$context" ]; then
+    eagle_insert_recall_event "$session_id" "$recall_scope" "$cwd" "$agent" "$user_prompt" "$fts_query" "$summary_matches" "$memory_matches" "$code_matches" 0 "no_context" "" "$summary_refs" "$memory_refs" "$code_refs" >/dev/null 2>&1 || true
+    eagle_hook_observability_set_detail "$(jq -nc \
+        --arg recall_status "no_context" \
+        --argjson summary_matches "${summary_matches:-0}" \
+        --argjson memory_matches "${memory_matches:-0}" \
+        --argjson code_matches "${code_matches:-0}" \
+        '{recall_status:$recall_status, summary_matches:$summary_matches, memory_matches:$memory_matches, code_matches:$code_matches, injected_chars:0}')"
+    eagle_hook_observability_complete 0
+    exit 0
+fi
 
 if [ "$codex_compact" -eq 1 ]; then
     context+="
@@ -263,6 +320,22 @@ IMPORTANT: If directly useful, start with one short Eagle Mem attribution line, 
 === Eagle Mem: Persistent Memory ===
 "
 fi
+
+eagle_insert_recall_event "$session_id" "$recall_scope" "$cwd" "$agent" "$user_prompt" "$fts_query" "$summary_matches" "$memory_matches" "$code_matches" "${#context}" "ok" "" "$summary_refs" "$memory_refs" "$code_refs" >/dev/null 2>&1 || true
+eagle_insert_event "$recall_scope" "$session_id" "$agent" "context_injected" "" "UserPromptSubmit" "ok" "$(jq -nc \
+    --argjson summary_matches "${summary_matches:-0}" \
+    --argjson memory_matches "${memory_matches:-0}" \
+    --argjson code_matches "${code_matches:-0}" \
+    --argjson injected_chars "${#context}" \
+    '{summary_matches:$summary_matches, memory_matches:$memory_matches, code_matches:$code_matches, injected_chars:$injected_chars}')" >/dev/null 2>&1 || true
+eagle_hook_observability_set_detail "$(jq -nc \
+    --arg recall_status "ok" \
+    --argjson summary_matches "${summary_matches:-0}" \
+    --argjson memory_matches "${memory_matches:-0}" \
+    --argjson code_matches "${code_matches:-0}" \
+    --argjson injected_chars "${#context}" \
+    '{recall_status:$recall_status, summary_matches:$summary_matches, memory_matches:$memory_matches, code_matches:$code_matches, injected_chars:$injected_chars}')"
+eagle_hook_observability_complete 0
 
 eagle_emit_context_for_agent "$agent" "UserPromptSubmit" "$context"
 exit 0

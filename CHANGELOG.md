@@ -4,6 +4,19 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.11.0 Agent Compatibility and Governance Surfaces
+
+This feature release expands Eagle Mem from Claude/Codex memory hooks into a broader multi-agent governance substrate:
+
+- **Agent Compatibility Docs**: Added official-doc-backed compatibility notes for Claude Code, Codex, and OpenCode hook/plugin behavior.
+- **OpenCode Integration**: Added a local OpenCode plugin adapter, hook normalization fixtures, and install/update checks.
+- **Compaction Survival**: Expanded compaction recovery tests across summaries, memories, tasks, feature verification, recall, and graph memory.
+- **Orchestration Events**: Added durable event tables for orchestration and hook observability, with dashboard and replay/inspect/repair utilities.
+- **Trust Surfaces**: Hardened doctor, statusline, JSON output, repair, and release verification behavior with new regression coverage.
+- **Web/Docs Refresh**: Updated README, architecture page, and compatibility docs to describe the current hook, plugin, dashboard, and governance model.
+
+---
+
 ## v4.10.13 Feature Gate Monorepo Hardening
 
 This hotfix closes the feature verification gate false positives found in monorepos with repeated basenames:

@@ -1,0 +1,15 @@
+{
+  "input": {
+    "tool": "read",
+    "sessionID": "opencode-session-fixture",
+    "callID": "opencode-call-fixture",
+    "args": {
+      "filePath": "/tmp/eagle-mem/project/lib/auth.ts"
+    }
+  },
+  "output": {
+    "title": "Read lib/auth.ts",
+    "output": "export function refreshToken() {}",
+    "metadata": {}
+  }
+}

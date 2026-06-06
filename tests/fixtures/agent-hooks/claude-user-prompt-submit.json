@@ -1,0 +1,9 @@
+{
+  "session_id": "claude-session-fixture",
+  "transcript_path": "/tmp/eagle-mem/claude-session-fixture.jsonl",
+  "cwd": "/tmp/eagle-mem/project",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Review the OAuth memory before editing auth files"
+}
+

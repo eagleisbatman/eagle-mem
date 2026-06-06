@@ -31,6 +31,7 @@ agent=$(eagle_agent_source_from_json "$input")
 
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
+eagle_hook_observability_begin "$input" "Stop"
 
 eagle_log "INFO" "Stop: session=$session_id project=$project transcript=$transcript_path agent=$agent"
 
@@ -237,7 +238,7 @@ if [ "$needs_enrichment" -eq 1 ]; then
     # lifecycle timeouts and make the hook look broken to users.
     if [ "${EAGLE_MEM_STOP_ENRICH:-0}" != "1" ]; then
         defer_enrichment=1
-        eagle_log "INFO" "Stop: LLM enrichment skipped — fast hook path (provider=$provider)"
+        eagle_log "INFO" "Stop: LLM enrichment skipped on fast hook path; provider=$provider"
     elif [ "$provider" != "none" ] && [ -n "$text_content" ]; then
         excerpt=$(echo "$text_content" | tail -c 3000)
 
@@ -399,10 +400,18 @@ fi
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
     if eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent"; then
         eagle_log "INFO" "Stop: summary saved for session=$session_id"
+        eagle_insert_event "$project" "$session_id" "$agent" "memory_created" "" "Stop" "ok" "$(jq -nc --arg source "summary" '{source:$source}')" >/dev/null 2>&1 || true
     else
         eagle_log "ERROR" "Stop: summary insert FAILED for session=$session_id — check DB constraints"
     fi
 fi
+eagle_hook_observability_set_detail "$(jq -nc \
+    --argjson files_read "$files_read" \
+    --argjson files_modified "$files_modified" \
+    --arg request "$request" \
+    --arg completed "$completed" \
+    '{request_chars:($request | length), completed_chars:($completed | length), files_read:$files_read, files_modified:$files_modified}')"
+eagle_hook_observability_complete 0
 
 if [ "$defer_enrichment" -eq 1 ] && [ "${EAGLE_MEM_STOP_BACKGROUND_ENRICH:-1}" = "1" ] && [ -n "$text_content" ]; then
     mkdir -p "$EAGLE_MEM_DIR/tmp" 2>/dev/null || true

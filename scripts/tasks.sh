@@ -71,6 +71,40 @@ project_sql=$(eagle_sql_escape "$project")
 [ -z "$agent" ] && agent=$(eagle_agent_source)
 agent_sql=$(eagle_sql_escape "$agent")
 
+tasks_fail() {
+    local error_code="$1"
+    local message="$2"
+    local db_status="${3:-unknown}"
+    local db_detail="${4:-}"
+
+    if [ "$json_output" = true ]; then
+        jq -nc \
+            --arg status "error" \
+            --arg command "tasks" \
+            --arg action "$action" \
+            --arg error "$error_code" \
+            --arg message "$message" \
+            --arg project "$project" \
+            --arg db_status "$db_status" \
+            --arg db_detail "$db_detail" \
+            '{status:$status, command:$command, action:$action, error:$error, message:$message,
+              project:$project, database:{integrity:{status:$db_status, detail:$db_detail}}}'
+    else
+        eagle_err "$message"
+        [ -n "$db_detail" ] && eagle_dim "  $db_detail"
+    fi
+    exit 1
+}
+
+db_integrity_check=$(eagle_db_integrity_status "$EAGLE_MEM_DB" 2>/dev/null || true)
+db_integrity_status="${db_integrity_check%%|*}"
+db_integrity_detail="${db_integrity_check#*|}"
+[ -n "$db_integrity_status" ] || db_integrity_status="unknown"
+[ -n "$db_integrity_detail" ] || db_integrity_detail="not checked"
+if [ "$db_integrity_status" != "ok" ]; then
+    tasks_fail "database_integrity" "Database integrity check failed; durable tasks are unavailable." "$db_integrity_status" "$db_integrity_detail"
+fi
+
 # ─── List tasks ───────────────────────────────────────────
 
 tasks_list() {

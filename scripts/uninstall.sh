@@ -11,6 +11,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$SCRIPTS_DIR/style.sh"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/codex-hooks.sh"
+. "$LIB_DIR/opencode-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 dry_run=false
@@ -64,6 +65,12 @@ if eagle_remove_codex_hooks; then
     [ -n "$codex_hooks_backup" ] && eagle_dim "  Backup: $codex_hooks_backup"
 else
     eagle_warn "Could not patch Codex hooks.json (jq not found or file missing)"
+fi
+
+if eagle_remove_opencode_plugin; then
+    eagle_ok "OpenCode plugin removed"
+else
+    eagle_info "OpenCode plugin not present or not Eagle Mem-owned"
 fi
 
 # ─── Remove instruction blocks and statusline integration ───
@@ -131,6 +138,8 @@ if [ -d "$EAGLE_GROK_SKILLS_DIR" ]; then
         eagle_ok "Grok skill removed: $(basename "$target")"
     done
 fi
+
+eagle_remove_opencode_skills >/dev/null 2>&1 || true
 
 # ─── Optionally wipe data ─────────────────────────────────
 

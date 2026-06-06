@@ -41,10 +41,11 @@ eagle_mem_statusline_stats() {
     local session_id="${2:-}"
     local statusline_input="${3:-}"
     local current_dir="${4:-}"
-    local em_db="$HOME/.eagle-mem/memory.db"
+    local em_db="${EAGLE_MEM_DIR:-$HOME/.eagle-mem}/memory.db"
     [ -f "$em_db" ] || return
 
     _eagle_statusline_load_common
+    em_db="$EAGLE_MEM_DB"
 
     local sqlite_bin
     sqlite_bin=$(eagle_sqlite_path)
@@ -58,7 +59,7 @@ eagle_mem_statusline_stats() {
     [ -z "$project_dir" ] && project_dir="$(pwd)"
     [ -z "$current_dir" ] && current_dir="$project_dir"
 
-    local project_key project_scope project_condition stats sessions memories last_raw turns version latest
+    local project_key project_scope project_condition stats stats_rc sessions memories last_raw turns version latest db_status db_detail
     project_key=$(eagle_project_from_statusline_input "$statusline_input" "$project_dir" "$current_dir" "$session_id")
     [ -n "$project_key" ] || return
     project_scope=$(eagle_recall_project_scope_from_cwd "${current_dir:-$project_dir}" "$project_key")
@@ -70,6 +71,20 @@ eagle_mem_statusline_stats() {
         COALESCE(MAX(COALESCE(last_activity_at, started_at)), 'never')
         FROM sessions
         WHERE $project_condition;" 2>/dev/null)
+    stats_rc=$?
+    db_status="ok"
+    db_detail="ok"
+    if [ "$stats_rc" -ne 0 ] || [ -z "$stats" ]; then
+        local integrity_check
+        integrity_check=$(eagle_db_integrity_status "$em_db" 2>/dev/null || true)
+        db_status="${integrity_check%%|*}"
+        db_detail="${integrity_check#*|}"
+        [ -n "$db_status" ] || db_status="error"
+        [ -n "$db_detail" ] || db_detail="database query failed"
+        if [ "$db_status" != "ok" ]; then
+            stats="__DB_ERROR__|0|db_error"
+        fi
+    fi
     IFS='|' read -r sessions memories last_raw <<< "${stats:-0|0|never}"
     sessions=${sessions:-0}
     memories=${memories:-0}
@@ -92,15 +107,20 @@ eagle_mem_statusline_stats() {
     [ -z "$version" ] && version="?"
     [ -z "$latest" ] && latest="$version"
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$project_key" "$version" "$latest" "$sessions" "$memories" "$turns" "$last_raw"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$project_key" "$version" "$latest" "$sessions" "$memories" "$turns" "$last_raw" "$db_status"
 }
 
 eagle_mem_statusline() {
-    local stats project_key version latest sessions memories turns last_raw
+    local stats project_key version latest sessions memories turns last_raw db_status
     stats=$(eagle_mem_statusline_stats "${1:-}" "${2:-}" "${3:-}" "${4:-}") || return
-    IFS=$'\t' read -r project_key version latest sessions memories turns last_raw <<< "$stats"
+    IFS=$'\t' read -r project_key version latest sessions memories turns last_raw db_status <<< "$stats"
 
     local R='\033[0m' CYAN='\033[96m' WHT='\033[97m' DIM='\033[2m'
+    if [ "${db_status:-ok}" != "ok" ]; then
+        printf "%bEagle%b %bv%s%b | %bDB error%b | turn %b%s%b" \
+            "$CYAN" "$R" "$WHT" "$version" "$DIM" "$WHT" "$DIM" "$WHT" "${turns:-0}" "$R"
+        return
+    fi
     printf "%bEagle%b %bv%s%b | %b%s%b sessions | %b%s%b memories | turn %b%s%b" \
         "$CYAN" "$R" \
         "$WHT" "$version" "$DIM" \
@@ -110,9 +130,9 @@ eagle_mem_statusline() {
 }
 
 eagle_mem_statusline_hud() {
-    local stats project_key version latest sessions memories turns last_raw last_label
+    local stats project_key version latest sessions memories turns last_raw last_label db_status
     stats=$(eagle_mem_statusline_stats "${1:-}" "${2:-}" "${3:-}" "${4:-}") || return
-    IFS=$'\t' read -r project_key version latest sessions memories turns last_raw <<< "$stats"
+    IFS=$'\t' read -r project_key version latest sessions memories turns last_raw db_status <<< "$stats"
     last_label=$(_eagle_statusline_relative_time "$last_raw")
 
     local R='\033[0m' CYAN='\033[96m' WHT='\033[97m' DIM='\033[2m'
@@ -134,6 +154,13 @@ eagle_mem_statusline_hud() {
         em_ver="${em_ver} ${ORG}↑${latest}${R}"
     elif [ -n "$latest" ] && [ "$latest" = "$version" ]; then
         em_ver="${em_ver} ${GRN}✓${R}"
+    fi
+
+    if [ "${db_status:-ok}" != "ok" ]; then
+        printf "%bEagle Mem%b %b %b│%b %bDatabase:%b %bERROR%b %b│%b %bTurns:%b %b%s/30%b %b(%s)%b" \
+            "$CYAN" "$R" "$em_ver" "$DIM" "$R" "$DIM" "$R" "$RED" "$R" "$DIM" "$R" \
+            "$DIM" "$R" "$turn_color" "$turns" "$R" "$turn_color" "$pressure_label" "$R"
+        return
     fi
 
     printf "%bEagle Mem%b %b %b│%b %bSessions:%b %b%s%b %b│%b %bMemories:%b %b%s%b %b│%b %bTurns:%b %b%s/30%b %b(%s)%b %b│%b %bUpdated:%b %b%s%b" \

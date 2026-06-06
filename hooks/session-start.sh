@@ -35,6 +35,7 @@ codex_compact=0
 
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
+eagle_hook_observability_begin "$input" "SessionStart"
 
 p_esc=$(eagle_sql_escape "$project")
 recall_scope=$(eagle_recall_project_scope_from_cwd "$cwd" "$project")
@@ -655,7 +656,13 @@ regression_risks: [risk, ...]
 fi
 
 if [ -n "$context" ]; then
+    eagle_hook_observability_set_detail "$(jq -nc \
+        --arg source_type "$source_type" \
+        --arg recall_scope "$recall_scope" \
+        --argjson injected_chars "${#context}" \
+        '{source_type:$source_type, recall_scope:$recall_scope, injected_chars:$injected_chars}')"
     eagle_emit_context_for_agent "$agent" "SessionStart" "$context"
 fi
+eagle_hook_observability_complete 0
 
 exit 0

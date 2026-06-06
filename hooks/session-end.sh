@@ -24,6 +24,7 @@ agent=$(eagle_agent_source_from_json "$input")
 cwd=$(echo "$input" | jq -r '.cwd // empty')
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
+eagle_hook_observability_begin "$input" "SessionEnd"
 
 # Final sweep: re-capture all task files to catch status changes
 # Claude Code may update task status without triggering PostToolUse
@@ -40,6 +41,8 @@ fi
 
 eagle_end_session "$session_id"
 eagle_log "INFO" "SessionEnd: session=$session_id marked completed"
+eagle_hook_observability_set_detail "$(jq -nc --arg action "session_completed" '{action:$action}')"
+eagle_hook_observability_complete 0
 
 # Prune observations older than 90 days (keeps DB size bounded)
 eagle_prune_observations 90 "$project"

@@ -1,0 +1,36 @@
+{
+  "sessionID": "opencode-session-fixture",
+  "input": {
+    "sessionID": "opencode-session-fixture",
+    "agent": "build",
+    "model": {
+      "providerID": "openai",
+      "modelID": "gpt-5"
+    },
+    "messageID": "opencode-user-message-fixture"
+  },
+  "output": {
+    "message": {
+      "id": "opencode-user-message-fixture",
+      "sessionID": "opencode-session-fixture",
+      "role": "user",
+      "time": {
+        "created": 1780372800000
+      },
+      "agent": "build",
+      "model": {
+        "providerID": "openai",
+        "modelID": "gpt-5"
+      }
+    },
+    "parts": [
+      {
+        "id": "opencode-text-part-fixture",
+        "sessionID": "opencode-session-fixture",
+        "messageID": "opencode-user-message-fixture",
+        "type": "text",
+        "text": "Review the OAuth memory before editing auth files"
+      }
+    ]
+  }
+}

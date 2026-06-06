@@ -33,6 +33,7 @@ esac
 [ ! -f "$EAGLE_MEM_DB" ] && exit 0
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
+eagle_hook_observability_begin "$input" "PreToolUse"
 
 context=""
 updated_input=""
@@ -382,15 +383,23 @@ Use the existing context, run a narrower search, or bypass once with:
     ;;
 esac
 
-[ -z "$context" ] && [ -z "$updated_input" ] && exit 0
+if [ -z "$context" ] && [ -z "$updated_input" ]; then
+    eagle_hook_observability_set_detail "$(jq -nc --arg tool "$tool_name" --arg action "no_action" '{tool_name:$tool, action:$action}')"
+    eagle_hook_observability_complete 0
+    exit 0
+fi
 
 # Codex PreToolUse now natively receives both blocking decisions and advisory context.
 # Removing the old early-exit to align Codex's pre-tool capabilities with Claude and Antigravity.
 
 if [ -n "$updated_input" ]; then
+    eagle_hook_observability_set_detail "$(jq -nc --arg tool "$tool_name" --arg action "updated_input" '{tool_name:$tool, action:$action}')"
+    eagle_hook_observability_complete 0
     jq -nc --arg ctx "$context" --argjson ui "$updated_input" \
         '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":$ui,"additionalContext":$ctx}}'
 else
+    eagle_hook_observability_set_detail "$(jq -nc --arg tool "$tool_name" --arg action "additional_context" '{tool_name:$tool, action:$action}')"
+    eagle_hook_observability_complete 0
     jq -nc --arg ctx "$context" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":$ctx}}'
 fi
 

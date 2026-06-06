@@ -301,6 +301,160 @@ SQL
     printf '%s\n' "${session_count:-0}"
 }
 
+eagle_graph_wire_project_context_edges() {
+    local project_raw="${1:-}"
+    [ -n "$project_raw" ] || { printf '0\n'; return 0; }
+
+    local project
+    project=$(eagle_sql_escape "$project_raw")
+
+    eagle_db_pipe <<SQL >/dev/null
+BEGIN;
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT project, 'session', id,
+       'Session run on ' || COALESCE(started_at, 'unknown') || ' using ' || COALESCE(model, 'unknown'),
+       ''
+FROM sessions
+WHERE project = '$project';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT project, 'decision', session_id || ':decision', decisions, ''
+FROM summaries
+WHERE project = '$project'
+  AND COALESCE(decisions, '') != '';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT project, 'feature', name, COALESCE(description, ''), ''
+FROM features
+WHERE project = '$project'
+  AND status = 'active';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT project, 'memory', memory_name, COALESCE(description, ''), COALESCE(file_path, '')
+FROM agent_memories
+WHERE project = '$project'
+  AND COALESCE(memory_name, '') != '';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT project, 'task', COALESCE(NULLIF(source_task_id, ''), subject), COALESCE(description, ''), COALESCE(file_path, '')
+FROM agent_tasks
+WHERE project = '$project'
+  AND COALESCE(COALESCE(NULLIF(source_task_id, ''), subject), '') != '';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT f.project, 'file', ff.file_path, '', ff.file_path
+FROM feature_files ff
+JOIN features f ON f.id = ff.feature_id
+WHERE f.project = '$project';
+
+INSERT OR IGNORE INTO graph_nodes (project, node_type, node_name, node_value, source_path)
+SELECT DISTINCT sf.project, 'file', sf.file_path, '', sf.file_path
+FROM (
+    SELECT project, json_each.value AS file_path
+    FROM summaries, json_each(CASE WHEN json_valid(files_read) THEN files_read ELSE '[]' END)
+    WHERE project = '$project'
+    UNION
+    SELECT project, json_each.value AS file_path
+    FROM summaries, json_each(CASE WHEN json_valid(files_modified) THEN files_modified ELSE '[]' END)
+    WHERE project = '$project'
+) sf
+WHERE COALESCE(sf.file_path, '') != '';
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', d.id, s.id, 'recorded_in', 1.0
+FROM summaries sm
+JOIN graph_nodes d ON d.project = sm.project AND d.node_type = 'decision' AND d.node_name = sm.session_id || ':decision'
+JOIN graph_nodes s ON s.project = sm.project AND s.node_type = 'session' AND s.node_name = sm.session_id
+WHERE sm.project = '$project'
+  AND COALESCE(sm.decisions, '') != ''
+  AND d.id != s.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', d.id, fnode.id, 'touches', 1.0
+FROM summaries sm
+JOIN graph_nodes d ON d.project = sm.project AND d.node_type = 'decision' AND d.node_name = sm.session_id || ':decision'
+JOIN (
+    SELECT session_id, project, json_each.value AS file_path
+    FROM summaries, json_each(CASE WHEN json_valid(files_read) THEN files_read ELSE '[]' END)
+    WHERE project = '$project'
+    UNION
+    SELECT session_id, project, json_each.value AS file_path
+    FROM summaries, json_each(CASE WHEN json_valid(files_modified) THEN files_modified ELSE '[]' END)
+    WHERE project = '$project'
+) sf ON sf.session_id = sm.session_id AND sf.project = sm.project
+JOIN graph_nodes fnode ON fnode.project = sf.project AND fnode.node_type = 'file' AND fnode.node_name = sf.file_path
+WHERE sm.project = '$project'
+  AND COALESCE(sm.decisions, '') != ''
+  AND COALESCE(sf.file_path, '') != ''
+  AND d.id != fnode.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', feat.id, file.id, 'covers', 1.0
+FROM features f
+JOIN feature_files ff ON ff.feature_id = f.id
+JOIN graph_nodes feat ON feat.project = f.project AND feat.node_type = 'feature' AND feat.node_name = f.name
+JOIN graph_nodes file ON file.project = f.project AND file.node_type = 'file' AND file.node_name = ff.file_path
+WHERE f.project = '$project'
+  AND feat.id != file.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', memory.id, session.id, 'originated_in', 1.0
+FROM agent_memories m
+JOIN graph_nodes memory ON memory.project = m.project AND memory.node_type = 'memory' AND memory.node_name = m.memory_name
+JOIN graph_nodes session ON session.project = m.project AND session.node_type = 'session' AND session.node_name = m.origin_session_id
+WHERE m.project = '$project'
+  AND COALESCE(m.origin_session_id, '') != ''
+  AND memory.id != session.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', memory.id, feat.id, 'mentions', 1.0
+FROM agent_memories m
+JOIN features f ON f.project = m.project AND f.status = 'active'
+JOIN graph_nodes memory ON memory.project = m.project AND memory.node_type = 'memory' AND memory.node_name = m.memory_name
+JOIN graph_nodes feat ON feat.project = f.project AND feat.node_type = 'feature' AND feat.node_name = f.name
+WHERE m.project = '$project'
+  AND LOWER(COALESCE(m.memory_name, '') || ' ' || COALESCE(m.description, '') || ' ' || COALESCE(m.content, '')) LIKE '%' || LOWER(f.name) || '%'
+  AND memory.id != feat.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', task.id, session.id, 'planned_in', 1.0
+FROM agent_tasks t
+JOIN graph_nodes task ON task.project = t.project AND task.node_type = 'task' AND task.node_name = COALESCE(NULLIF(t.source_task_id, ''), t.subject)
+JOIN graph_nodes session ON session.project = t.project AND session.node_type = 'session' AND session.node_name = t.source_session_id
+WHERE t.project = '$project'
+  AND COALESCE(t.source_session_id, '') != ''
+  AND task.id != session.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', task.id, feat.id, 'mentions', 1.0
+FROM agent_tasks t
+JOIN features f ON f.project = t.project AND f.status = 'active'
+JOIN graph_nodes task ON task.project = t.project AND task.node_type = 'task' AND task.node_name = COALESCE(NULLIF(t.source_task_id, ''), t.subject)
+JOIN graph_nodes feat ON feat.project = f.project AND feat.node_type = 'feature' AND feat.node_name = f.name
+WHERE t.project = '$project'
+  AND LOWER(COALESCE(t.subject, '') || ' ' || COALESCE(t.description, '')) LIKE '%' || LOWER(f.name) || '%'
+  AND task.id != feat.id;
+
+INSERT OR IGNORE INTO graph_edges (project, source_node_id, target_node_id, edge_type, weight)
+SELECT '$project', decision.id, feat.id, 'mentions', 1.0
+FROM summaries sm
+JOIN features f ON f.project = sm.project AND f.status = 'active'
+JOIN graph_nodes decision ON decision.project = sm.project AND decision.node_type = 'decision' AND decision.node_name = sm.session_id || ':decision'
+JOIN graph_nodes feat ON feat.project = f.project AND feat.node_type = 'feature' AND feat.node_name = f.name
+WHERE sm.project = '$project'
+  AND LOWER(COALESCE(sm.decisions, '')) LIKE '%' || LOWER(f.name) || '%'
+  AND decision.id != feat.id;
+
+COMMIT;
+SQL
+
+    eagle_db "SELECT COUNT(*)
+              FROM graph_nodes
+              WHERE project = '$project'
+                AND node_type IN ('feature', 'memory', 'task', 'session', 'decision');"
+}
+
 eagle_graph_emit_session_file_edge_sql() {
     local project_raw="${1:-}"
     local session_id="${2:-}"

@@ -29,6 +29,30 @@ if [ "$JSON_OUT" -eq 1 ]; then
     exec 3>&1 1>&2
 fi
 
+health_fail() {
+    local error_code="$1"
+    local message="$2"
+    local db_status="${3:-unknown}"
+    local db_detail="${4:-}"
+
+    if [ "$JSON_OUT" -eq 1 ]; then
+        jq -nc \
+            --arg status "error" \
+            --arg command "health" \
+            --arg error "$error_code" \
+            --arg message "$message" \
+            --arg project "${project:-}" \
+            --arg db_status "$db_status" \
+            --arg db_detail "$db_detail" \
+            '{status:$status, command:$command, error:$error, message:$message,
+              project:$project, database:{integrity:{status:$db_status, detail:$db_detail}}}' >&3
+    else
+        eagle_fail "$message"
+        [ -n "$db_detail" ] && eagle_dim "  $db_detail"
+    fi
+    exit 1
+}
+
 eagle_header "Health Check"
 
 if [ -z "$project" ]; then
@@ -40,7 +64,18 @@ if [ -z "$project" ]; then
     exit 1
 fi
 
-eagle_ensure_db
+if ! eagle_ensure_db; then
+    health_fail "database_unavailable" "Database is unavailable; SQLite/FTS5 setup failed." "unavailable" "eagle_ensure_db failed"
+fi
+
+db_integrity_check=$(eagle_db_integrity_status "$EAGLE_MEM_DB" 2>/dev/null || true)
+db_integrity_status="${db_integrity_check%%|*}"
+db_integrity_detail="${db_integrity_check#*|}"
+[ -n "$db_integrity_status" ] || db_integrity_status="unknown"
+[ -n "$db_integrity_detail" ] || db_integrity_detail="not checked"
+if [ "$db_integrity_status" != "ok" ]; then
+    health_fail "database_integrity" "Database integrity check failed; memory state is unreadable." "$db_integrity_status" "$db_integrity_detail"
+fi
 
 p_esc=$(eagle_sql_escape "$project")
 
@@ -340,7 +375,10 @@ if [ "$JSON_OUT" -eq 1 ]; then
         --arg updates_status "$updates_status" \
         --argjson noise_pct "$noise_pct" \
         --arg last_curated "${last_curated:-never}" \
-        '{project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
+        --arg db_integrity_status "$db_integrity_status" \
+        --arg db_integrity_detail "$db_integrity_detail" \
+        '{status:"ok", project:$project, score:$score, max:$max_score, pct:$pct, grade:$grade,
+          database:{integrity:{status:$db_integrity_status, detail:$db_integrity_detail}},
           capture:{sessions:$total_sessions, summaries:$total_summaries, heuristic:$heuristic_summaries},
           enrichment:$enriched_summaries,
           features:$features, provider:$provider, provider_chain:$provider_chain,

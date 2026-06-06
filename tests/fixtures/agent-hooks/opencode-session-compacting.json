@@ -1,0 +1,9 @@
+{
+  "input": {
+    "sessionID": "opencode-session-fixture"
+  },
+  "output": {
+    "context": [],
+    "prompt": null
+  }
+}

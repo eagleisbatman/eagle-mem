@@ -42,15 +42,20 @@ eagle_patch_hook() {
 
     # Check both command AND matcher to avoid skipping entries with different matchers
     # (e.g. PreToolUse with "Bash" vs "Read" matcher using the same script)
-    local match_query
     if [ -n "$matcher" ]; then
-        match_query=".hooks.${event}[]? | select(.matcher == \"$matcher\" and (.hooks[]?.command == \"$command\"))"
+        if jq -e --arg m "$matcher" --arg c "$command" \
+            ".hooks.${event}[]? | select(.matcher == \$m and (.hooks[]?.command == \$c))" \
+            "$settings" &>/dev/null; then
+            [ -n "$description" ] && eagle_ok "$description ${DIM}(already registered)${RESET}"
+            return 0
+        fi
     else
-        match_query=".hooks.${event}[]? | select(.matcher == null and (.hooks[]?.command == \"$command\"))"
-    fi
-    if jq -e "$match_query" "$settings" &>/dev/null; then
-        [ -n "$description" ] && eagle_ok "$description ${DIM}(already registered)${RESET}"
-        return 0
+        if jq -e --arg c "$command" \
+            ".hooks.${event}[]? | select(.matcher == null and (.hooks[]?.command == \$c))" \
+            "$settings" &>/dev/null; then
+            [ -n "$description" ] && eagle_ok "$description ${DIM}(already registered)${RESET}"
+            return 0
+        fi
     fi
 
     local entry

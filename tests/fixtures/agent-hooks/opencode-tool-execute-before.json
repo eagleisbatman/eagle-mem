@@ -1,0 +1,12 @@
+{
+  "input": {
+    "tool": "bash",
+    "sessionID": "opencode-session-fixture",
+    "callID": "opencode-call-fixture"
+  },
+  "output": {
+    "args": {
+      "command": "git push origin main"
+    }
+  }
+}

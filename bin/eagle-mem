@@ -22,6 +22,10 @@ case "$command" in
     search)     bash "$SCRIPTS_DIR/search.sh" "$@" ;;
     health)     bash "$SCRIPTS_DIR/health.sh" "$@" ;;
     doctor)     bash "$SCRIPTS_DIR/doctor.sh" "$PACKAGE_DIR" "$@" ;;
+    repair)     bash "$SCRIPTS_DIR/repair.sh" "$@" ;;
+    inspect)    bash "$SCRIPTS_DIR/inspect.sh" "$@" ;;
+    replay)     bash "$SCRIPTS_DIR/replay.sh" "$@" ;;
+    dashboard)  bash "$SCRIPTS_DIR/dashboard.sh" "$@" ;;
     logs)       bash "$SCRIPTS_DIR/logs.sh" "$@" ;;
     config)     bash "$SCRIPTS_DIR/config.sh" "$@" ;;
     updates)    bash "$SCRIPTS_DIR/updates.sh" "$@" ;;

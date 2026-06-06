@@ -16,11 +16,13 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$LIB_DIR/updater.sh"
 . "$LIB_DIR/hooks.sh"
 . "$LIB_DIR/codex-hooks.sh"
+. "$LIB_DIR/opencode-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 claude_found=false
 codex_found=false
 grok_found=false
+opencode_found=false
 
 eagle_header "Update"
 
@@ -43,8 +45,11 @@ fi
 if [ -d "$EAGLE_GROK_DIR" ]; then
     grok_found=true
 fi
+if eagle_opencode_detected; then
+    opencode_found=true
+fi
 
-eagle_runtime_change_plan "update" "$PACKAGE_DIR" "$claude_found" "$codex_found"
+eagle_runtime_change_plan "update" "$PACKAGE_DIR" "$claude_found" "$codex_found" "$opencode_found"
 
 # ─── Update files ──────────────────────────────────────────
 
@@ -82,11 +87,12 @@ fi
 
 if [ "$claude_found" = true ] && [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     # Clean old registrations before re-registering (handles matcher changes across versions)
+    eagle_clean_hook_entries "$SETTINGS" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
     eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
 
     eagle_patch_hook "$SETTINGS" "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
-    eagle_patch_hook "$SETTINGS" "Stop" "" "$EAGLE_MEM_DIR/hooks/stop.sh"
+    eagle_patch_hook "$SETTINGS" "Stop" "" "bash \"$EAGLE_MEM_DIR/hooks/stop.sh\""
     eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     eagle_patch_hook "$SETTINGS" "TaskCreated" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     eagle_patch_hook "$SETTINGS" "TaskCompleted" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
@@ -102,6 +108,12 @@ if [ "$codex_found" = true ] && command -v jq &>/dev/null; then
     eagle_ok "Codex hooks registered"
 elif [ "$codex_found" = false ]; then
     eagle_info "Codex hooks skipped ${DIM}(Codex not detected)${RESET}"
+fi
+
+if [ "$opencode_found" = true ]; then
+    eagle_install_opencode_plugin "$PACKAGE_DIR" "0"
+else
+    eagle_info "OpenCode plugin skipped ${DIM}(OpenCode not detected)${RESET}"
 fi
 
 # ─── Update skill symlinks ────────────────────────────────
@@ -162,6 +174,10 @@ if [ "$grok_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
         ln -sf "$skill_dir" "$dst"
     done
     eagle_ok "Grok skills updated"
+fi
+
+if [ "$opencode_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    eagle_install_opencode_skills "$PACKAGE_DIR" "0"
 fi
 
 # ─── Refresh generated Claude statusline wrapper ───────────

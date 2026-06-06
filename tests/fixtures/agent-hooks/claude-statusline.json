@@ -1,0 +1,32 @@
+{
+  "hook_event_name": "Status",
+  "session_id": "claude-status-fixture",
+  "transcript_path": "/tmp/eagle-mem/claude-status-fixture.jsonl",
+  "cwd": "/tmp/eagle-mem/project",
+  "model": {
+    "id": "claude-opus-4-1",
+    "display_name": "Opus"
+  },
+  "workspace": {
+    "current_dir": "/tmp/eagle-mem/project",
+    "project_dir": "/tmp/eagle-mem/project"
+  },
+  "version": "2.1.145",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 0.01234,
+    "total_duration_ms": 45000,
+    "total_api_duration_ms": 2300,
+    "total_lines_added": 12,
+    "total_lines_removed": 2
+  },
+  "thinking": {
+    "enabled": true
+  },
+  "effort": {
+    "level": "xhigh"
+  }
+}
+

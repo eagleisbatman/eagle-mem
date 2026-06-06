@@ -1,7 +1,7 @@
 {
   "name": "eagle-mem",
-  "version": "4.10.13",
-  "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code, Codex, Grok, and Google Antigravity",
+  "version": "4.11.0",
+  "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code, Codex, OpenCode, Grok, and Google Antigravity",
   "bin": {
     "eagle-mem": "bin/eagle-mem"
   },
@@ -20,11 +20,14 @@
     "docs/",
     "architecture.html",
     "integrations/*.py",
+    "integrations/*.js",
+    "tests/fixtures/",
     "CHANGELOG.md"
   ],
   "keywords": [
     "claude-code",
     "codex",
+    "opencode",
     "grok",
     "memory",
     "sqlite",

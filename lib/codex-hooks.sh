@@ -27,7 +27,7 @@ eagle_enable_codex_hooks() {
     if [ ! -f "$config" ]; then
         cat > "$config" << 'TOML'
 [features]
-codex_hooks = true
+hooks = true
 TOML
         chmod 600 "$config" 2>/dev/null || true
         return 0
@@ -45,26 +45,33 @@ TOML
         }
         /^[[:space:]]*\[/ && in_features {
             if (!saw_flag && !inserted) {
-                print "codex_hooks = true"
+                print "hooks = true"
                 inserted=1
             }
             in_features=0
         }
-        in_features && /^[[:space:]]*codex_hooks[[:space:]]*=/ {
-            print "codex_hooks = true"
+        in_features && /^[[:space:]]*hooks[[:space:]]*=/ {
+            print "hooks = true"
             saw_flag=1
+            next
+        }
+        in_features && /^[[:space:]]*codex_hooks[[:space:]]*=/ {
+            if (!saw_flag && !inserted) {
+                print "hooks = true"
+                saw_flag=1
+            }
             next
         }
         { print }
         END {
             if (in_features && !saw_flag && !inserted) {
-                print "codex_hooks = true"
+                print "hooks = true"
                 inserted=1
             }
             if (!saw_features) {
                 print ""
                 print "[features]"
-                print "codex_hooks = true"
+                print "hooks = true"
             }
         }
     ' "$config" > "$tmp" && mv "$tmp" "$config"

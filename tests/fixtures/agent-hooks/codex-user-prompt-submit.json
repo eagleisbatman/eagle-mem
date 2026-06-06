@@ -1,0 +1,7 @@
+{
+  "session_id": "codex-session-fixture",
+  "cwd": "/tmp/eagle-mem/project",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Review the OAuth memory before editing auth files"
+}
+

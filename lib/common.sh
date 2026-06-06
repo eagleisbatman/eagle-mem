@@ -21,6 +21,11 @@ EAGLE_CODEX_SKILLS_DIR="${EAGLE_CODEX_SKILLS_DIR:-$EAGLE_CODEX_DIR/skills}"
 EAGLE_CODEX_MEMORIES_DIR="${EAGLE_CODEX_MEMORIES_DIR:-$EAGLE_CODEX_DIR/memories}"
 EAGLE_GROK_DIR="${EAGLE_GROK_DIR:-$HOME/.grok}"
 EAGLE_GROK_SKILLS_DIR="${EAGLE_GROK_SKILLS_DIR:-$HOME/.grok/skills}"
+EAGLE_OPENCODE_DIR="${EAGLE_OPENCODE_DIR:-$HOME/.config/opencode}"
+EAGLE_OPENCODE_CONFIG="${EAGLE_OPENCODE_CONFIG:-$EAGLE_OPENCODE_DIR/opencode.json}"
+EAGLE_OPENCODE_PLUGINS_DIR="${EAGLE_OPENCODE_PLUGINS_DIR:-$EAGLE_OPENCODE_DIR/plugins}"
+EAGLE_OPENCODE_PLUGIN="${EAGLE_OPENCODE_PLUGIN:-$EAGLE_OPENCODE_PLUGINS_DIR/eagle-mem.js}"
+EAGLE_OPENCODE_SKILLS_DIR="${EAGLE_OPENCODE_SKILLS_DIR:-$EAGLE_OPENCODE_DIR/skills}"
 EAGLE_RAW_BASH_UNLOCK="${EAGLE_RAW_BASH_UNLOCK:-/tmp/eagle-mem-raw-bash-unlock}"
 
 _eagle_sqlite_candidate_paths() {
@@ -100,6 +105,50 @@ eagle_require_sqlite_fts5() {
         return 0
     fi
     eagle_print_sqlite_fts5_error
+    return 1
+}
+
+eagle_squash_ws() {
+    tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ //; s/ $//'
+}
+
+eagle_db_integrity_status() {
+    local db_path="${1:-$EAGLE_MEM_DB}"
+    local sqlite_bin output rc detail first_line
+
+    if [ ! -f "$db_path" ]; then
+        printf 'missing|database file not found\n'
+        return 1
+    fi
+
+    sqlite_bin=$(eagle_sqlite_path)
+    if [ -z "$sqlite_bin" ]; then
+        printf 'unavailable|sqlite3 with FTS5 not found\n'
+        return 1
+    fi
+
+    output=$({
+        echo ".output /dev/null"
+        echo "PRAGMA busy_timeout=5000;"
+        echo ".output stdout"
+        echo "PRAGMA quick_check;"
+    } | "$sqlite_bin" "$db_path" 2>&1)
+    rc=$?
+    detail=$(printf '%s' "$output" | eagle_squash_ws)
+    [ -n "$detail" ] || detail="no integrity output"
+
+    if [ "$rc" -ne 0 ]; then
+        printf 'error|%s\n' "$detail"
+        return "$rc"
+    fi
+
+    first_line=$(printf '%s\n' "$output" | awk 'NF { print; exit }')
+    if [ "$first_line" = "ok" ]; then
+        printf 'ok|ok\n'
+        return 0
+    fi
+
+    printf 'failed|%s\n' "$detail"
     return 1
 }
 
@@ -895,6 +944,7 @@ eagle_agent_source_from_json() {
 
     case "$agent_field" in
         antigravity*) echo "antigravity"; return ;;
+        opencode*) echo "opencode"; return ;;
     esac
 
     case "$transcript_path" in
@@ -911,6 +961,7 @@ eagle_agent_label() {
     case "${1:-$(eagle_agent_source)}" in
         codex) echo "Codex" ;;
         antigravity*) echo "Antigravity" ;;
+        opencode) echo "OpenCode" ;;
         *) echo "Claude Code" ;;
     esac
 }
@@ -1516,6 +1567,7 @@ eagle_runtime_change_plan() {
     local package_dir="${2:-}"
     local claude_found="${3:-false}"
     local codex_found="${4:-false}"
+    local opencode_found="${5:-false}"
 
     echo ""
     echo -e "  ${BOLD:-}What will change${RESET:-}"
@@ -1549,6 +1601,15 @@ eagle_runtime_change_plan() {
         echo -e "    ${DIM:-}-> Codex not detected; Codex hooks/skills skipped${RESET:-}"
     fi
 
+    if [ "$opencode_found" = true ]; then
+        echo -e "    ${CYAN:-}->${RESET:-} Update OpenCode"
+        echo -e "       ${DIM:-}plugin:${RESET:-} $EAGLE_OPENCODE_PLUGIN"
+        echo -e "       ${DIM:-}skills:${RESET:-} $EAGLE_OPENCODE_SKILLS_DIR/eagle-mem-*"
+        echo -e "       ${DIM:-}mode:  ${RESET:-} global local plugin; OpenCode --pure disables external plugins"
+    else
+        echo -e "    ${DIM:-}-> OpenCode not detected; OpenCode plugin/skills skipped${RESET:-}"
+    fi
+
     if [ "$action" = "update" ]; then
         echo -e "    ${CYAN:-}->${RESET:-} Refresh installed version metadata"
     fi
@@ -1562,9 +1623,11 @@ eagle_uninstall_change_plan() {
     echo ""
     echo -e "    ${CYAN:-}->${RESET:-} Remove Claude hooks from $EAGLE_SETTINGS"
     echo -e "    ${CYAN:-}->${RESET:-} Remove Codex hooks from $EAGLE_CODEX_HOOKS"
+    echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem OpenCode plugin from $EAGLE_OPENCODE_PLUGIN"
     echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem skill links from:"
     echo -e "       ${DIM:-}$EAGLE_SKILLS_DIR${RESET:-}"
     echo -e "       ${DIM:-}$EAGLE_CODEX_SKILLS_DIR${RESET:-}"
+    echo -e "       ${DIM:-}$EAGLE_OPENCODE_SKILLS_DIR${RESET:-}"
     echo -e "    ${CYAN:-}->${RESET:-} Remove Eagle Mem instruction blocks from:"
     echo -e "       ${DIM:-}$HOME/.claude/CLAUDE.md${RESET:-}"
     echo -e "       ${DIM:-}$EAGLE_CODEX_AGENTS_MD${RESET:-}"

@@ -109,6 +109,17 @@ if [ "$cross_project" = false ] && [ "$project_was_explicit" = false ]; then
     project=$(eagle_recall_project_scope_from_cwd "$(pwd)" "$project")
 fi
 
+db_integrity_check=$(eagle_db_integrity_status "$EAGLE_MEM_DB" 2>/dev/null || true)
+db_integrity_status="${db_integrity_check%%|*}"
+db_integrity_detail="${db_integrity_check#*|}"
+[ -n "$db_integrity_status" ] || db_integrity_status="unknown"
+[ -n "$db_integrity_detail" ] || db_integrity_detail="not checked"
+if [ "$db_integrity_status" != "ok" ]; then
+    eagle_err "Database integrity check failed; memories and graph are unavailable."
+    eagle_dim "  $db_integrity_detail"
+    exit 1
+fi
+
 eagle_age_label() {
     local updated="${1:-}"
     [ -z "$updated" ] && { printf 'unknown'; return; }
@@ -975,6 +986,8 @@ memories_graph() {
             file_count=$(eagle_graph_rebuild_codebase "$project" "$target_dir")
             eagle_ok "Rebuilt file graph ($file_count files)"
             bash "$SCRIPTS_DIR/index.sh" --force "$target_dir"
+            context_count=$(eagle_graph_wire_project_context_edges "$project")
+            eagle_ok "Wired durable context graph ($context_count nodes)"
             eagle_footer "Graph rebuild complete."
             ;;
         summary|*)

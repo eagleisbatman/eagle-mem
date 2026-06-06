@@ -12,8 +12,6 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/db.sh"
 
-eagle_ensure_db
-
 # ─── Help ────────────────────────────────────────────────
 
 show_help() {
@@ -76,6 +74,44 @@ while [ $# -gt 0 ]; do
             query="$1"; shift ;;
     esac
 done
+
+search_fail() {
+    local error_code="$1"
+    local message="$2"
+    local db_status="${3:-unknown}"
+    local db_detail="${4:-}"
+
+    if [ "$json_output" = true ]; then
+        jq -nc \
+            --arg status "error" \
+            --arg command "search" \
+            --arg mode "$mode" \
+            --arg error "$error_code" \
+            --arg message "$message" \
+            --arg project "${project:-}" \
+            --arg db_status "$db_status" \
+            --arg db_detail "$db_detail" \
+            '{status:$status, command:$command, mode:$mode, error:$error, message:$message,
+              project:$project, database:{integrity:{status:$db_status, detail:$db_detail}}}'
+    else
+        eagle_err "$message"
+        [ -n "$db_detail" ] && eagle_dim "  $db_detail"
+    fi
+    exit 1
+}
+
+if ! eagle_ensure_db; then
+    search_fail "database_unavailable" "Database is unavailable; SQLite/FTS5 setup failed." "unavailable" "eagle_ensure_db failed"
+fi
+
+db_integrity_check=$(eagle_db_integrity_status "$EAGLE_MEM_DB" 2>/dev/null || true)
+db_integrity_status="${db_integrity_check%%|*}"
+db_integrity_detail="${db_integrity_check#*|}"
+[ -n "$db_integrity_status" ] || db_integrity_status="unknown"
+[ -n "$db_integrity_detail" ] || db_integrity_detail="not checked"
+if [ "$db_integrity_status" != "ok" ]; then
+    search_fail "database_integrity" "Database integrity check failed; memory search is unavailable." "$db_integrity_status" "$db_integrity_detail"
+fi
 
 [ -z "$project" ] && project=$(eagle_project_from_cwd "$(pwd)")
 project_scope="$project"
@@ -438,7 +474,12 @@ search_stats() {
             --argjson observations "${observations:-0}" \
             --argjson tasks "${tasks:-0}" \
             --argjson code_chunks "${chunks:-0}" \
-            '{project: $project, sessions: $sessions, sessions_claude: $sessions_claude, sessions_codex: $sessions_codex, summaries: $summaries, observations: $observations, tasks: $tasks, code_chunks: $code_chunks}'
+            --arg db_integrity_status "$db_integrity_status" \
+            --arg db_integrity_detail "$db_integrity_detail" \
+            '{status:"ok", project: $project,
+              database:{integrity:{status:$db_integrity_status, detail:$db_integrity_detail}},
+              sessions: $sessions, sessions_claude: $sessions_claude, sessions_codex: $sessions_codex,
+              summaries: $summaries, observations: $observations, tasks: $tasks, code_chunks: $code_chunks}'
         return
     fi
 

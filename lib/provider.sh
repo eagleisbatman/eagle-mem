@@ -513,7 +513,7 @@ _eagle_call_codex_cli() {
             --ephemeral \
             --skip-git-repo-check \
             --ignore-rules \
-            -c features.codex_hooks=false \
+            -c features.hooks=false \
             --sandbox read-only \
             --cd "${EAGLE_AGENT_CWD:-$(pwd)}" \
             --model "$model" \
@@ -525,7 +525,7 @@ _eagle_call_codex_cli() {
             --ephemeral \
             --skip-git-repo-check \
             --ignore-rules \
-            -c features.codex_hooks=false \
+            -c features.hooks=false \
             --sandbox read-only \
             --cd "${EAGLE_AGENT_CWD:-$(pwd)}" \
             --output-last-message "$out_file" \

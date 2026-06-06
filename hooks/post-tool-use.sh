@@ -122,6 +122,7 @@ esac
 
 project=$(eagle_project_from_hook_input "$input")
 [ -z "$project" ] && exit 0
+eagle_hook_observability_begin "$input" "PostToolUse"
 
 # Ensure session row exists before inserting observations (FK constraint).
 # PostToolUse can race SessionStart — the session row might not exist yet.
@@ -249,5 +250,12 @@ eagle_posttool_decision_surface "$tool_name" "$fp" "$project" "$agent"
 if ! eagle_insert_observation "$session_id" "$project" "$tool_name" "$tool_summary" "$files_read" "$files_modified" "$output_bytes" "$output_lines" "$command_category" "$agent"; then
     eagle_log "ERROR" "PostToolUse: observation insert failed for session=$session_id tool=$tool_name"
 fi
+eagle_hook_observability_set_detail "$(jq -nc \
+    --arg tool "$tool_name" \
+    --arg summary "$tool_summary" \
+    --arg files_read "$files_read" \
+    --arg files_modified "$files_modified" \
+    '{tool_name:$tool, summary:$summary, files_read:($files_read | fromjson? // []), files_modified:($files_modified | fromjson? // [])}')"
+eagle_hook_observability_complete 0
 
 exit 0

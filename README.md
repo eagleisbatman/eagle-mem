@@ -7,11 +7,11 @@
 
 # Eagle Mem
 
-**Shared memory, release guardrails, and worker lanes for Claude Code, Codex, Grok, and Google Antigravity.**
+**Shared memory, release guardrails, and worker lanes for Claude Code, Codex, OpenCode, Grok, and Google Antigravity.**
 
-Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code, Codex, and Google Antigravity hook-backed shared memory, gives Grok the same skills and CLI memory surface, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
+Eagle Mem turns AI coding sessions into compounding project knowledge. It gives Claude Code, Codex, OpenCode, and Google Antigravity hook-backed shared memory, gives Grok the same skills and CLI memory surface, labels which agent created each memory, blocks risky release commands until affected features are verified, and lets broad work split into durable worker lanes.
 
-**v4.10.5 and onward focuses on Graph Memory, Dream Cycle Curation, Grok, Google Antigravity support, and Compaction Survival:** Grok users get first-class skill linking and `eagle-mem grok-bootstrap`, while Antigravity users get native Python SDK hook integration via `google_antigravity_hook.py`. Claude Code, Codex, and Antigravity receive the deepest automatic lifecycle support through hooks; Grok currently uses the shared CLI and skill workflow.
+**v4.10.5 and onward focuses on Graph Memory, Dream Cycle Curation, OpenCode, Grok, Google Antigravity support, and Compaction Survival:** OpenCode users get a global local plugin plus linked skills, Grok users get first-class skill linking and `eagle-mem grok-bootstrap`, and Antigravity users get native Python SDK hook integration via `google_antigravity_hook.py`. Claude Code, Codex, OpenCode, and Antigravity receive the deepest automatic lifecycle support through hooks or plugins; Grok currently uses the shared CLI and skill workflow.
 
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
@@ -22,12 +22,12 @@ Eagle Mem turns AI coding sessions into compounding project knowledge. It gives 
 - **Start warmer** - every new session can recall project overviews, decisions, gotchas, summaries, hot files, mirrored memories, plans, and tasks.
 - **Ship safer** - feature-mapped changes create pending verification records, and release-boundary commands stay blocked until the current diff is verified or waived.
 - **Waste fewer tokens** - Eagle Mem injects compact context, nudges duplicate reads, and can route noisy shell output through RTK.
-- **Coordinate agents** - Claude, Codex, Grok, and Antigravity can share one project memory while worker lanes record owner, model, effort, worktree, logs, validation, and handoff.
+- **Coordinate agents** - Claude, Codex, OpenCode, Grok, and Antigravity can share one project memory while worker lanes record owner, model, effort, worktree, logs, validation, and handoff.
 - **Stay local** - no daemon, no hosted memory service, no vector database. The core is hooks plus SQLite/FTS5.
 
 ## The Problem
 
-Claude Code, Codex, Grok, and Google Antigravity start every session with amnesia. They don't remember what you built yesterday, what decisions you made, what files matter, or what broke last time. Every `/compact` wipes context. Every new session is a cold start. You waste tokens re-explaining your project, re-reading files, and watching agents repeat mistakes you already corrected.
+Claude Code, Codex, OpenCode, Grok, and Google Antigravity start every session with amnesia. They don't remember what you built yesterday, what decisions you made, what files matter, or what broke last time. Every `/compact` wipes context. Every new session is a cold start. You waste tokens re-explaining your project, re-reading files, and watching agents repeat mistakes you already corrected.
 
 The longer you work with Claude Code, the worse this gets. Projects accumulate history — decisions, gotchas, architectural patterns, feature dependencies — and none of it survives across sessions.
 
@@ -41,7 +41,7 @@ Eagle Mem is a local runtime layer for AI coding agents. It adds three things th
 | **Guardrails** | "The agent cannot casually undo known decisions or push unverified feature changes." | Surfaces decisions before edits and enforces feature verification on push, PR, and publish boundaries. |
 | **Lanes** | "A big task can survive compaction and split across agents." | Persists orchestrations, worker lanes, worktrees, logs, validation commands, and handoffs. |
 
-Claude Code, Codex, and Google Antigravity share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code`, `Codex`, or `Antigravity`. Grok uses the same database through skills and CLI commands.
+Claude Code, Codex, OpenCode, and Google Antigravity share the same SQLite database at `~/.eagle-mem/memory.db`, and captured rows are source-attributed as `Claude Code`, `Codex`, `OpenCode`, or `Antigravity`. Grok uses the same database through skills and CLI commands.
 
 **Zero per-instance overhead.** No daemon, no vector DB, no MCP server. Just bash/python hooks, sqlite3 (WAL mode, FTS5 full-text search), and jq.
 
@@ -66,17 +66,17 @@ eagle-mem install
 eagle-mem doctor
 ```
 
-That's it. `doctor` should report a healthy install. Open Claude Code or Codex, or import the Antigravity hook in your agent config, and Eagle Mem activates automatically. For Grok, run `eagle-mem grok-bootstrap` after install to confirm the linked skills and CLI workflow.
+That's it. `doctor` should report a healthy install. Open Claude Code, Codex, or OpenCode, or import the Antigravity hook in your agent config, and Eagle Mem activates automatically. For Grok, run `eagle-mem grok-bootstrap` after install to confirm the linked skills and CLI workflow.
 
-For Claude Code, Codex, and Google Antigravity, everything is automatic. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors memories and tasks (including planning-mode artifacts like `implementation_plan.md`, `task.md`, and `walkthrough.md`), learns which commands are noisy, and prunes stale data — all in the background via hooks.
+For Claude Code, Codex, OpenCode, and Google Antigravity, everything is automatic. Eagle Mem scans your codebase, indexes source files, captures session summaries, mirrors memories and tasks (including planning-mode artifacts like `implementation_plan.md`, `task.md`, and `walkthrough.md`), learns which commands are noisy, and prunes stale data — all in the background via hooks or plugins.
 
-For Google Antigravity, the installer copies the native Python integration to `~/.eagle-mem/integrations/google_antigravity_hook.py`. For Codex, the installer enables `codex_hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md`. For Claude Code, it integrates with `~/.claude/settings.json`, `CLAUDE.md`, and `~/.claude/skills`. Grok users get skill symlinks into `~/.grok/skills/` and can run `eagle-mem grok-bootstrap` for setup guidance and self-linking.
+For Google Antigravity, the installer copies the native Python integration to `~/.eagle-mem/integrations/google_antigravity_hook.py`. For OpenCode, it installs a global local plugin at `~/.config/opencode/plugins/eagle-mem.js` and symlinks skills into `~/.config/opencode/skills`. For Codex, the installer enables `hooks` in `~/.codex/config.toml`, registers hooks in `~/.codex/hooks.json`, symlinks Eagle Mem skills into `~/.codex/skills`, and patches `~/.codex/AGENTS.md`. For Claude Code, it integrates with `~/.claude/settings.json`, `CLAUDE.md`, and `~/.claude/skills`. Grok users get skill symlinks into `~/.grok/skills/` and can run `eagle-mem grok-bootstrap` for setup guidance and self-linking.
 
 ### Prerequisites
 
 - `sqlite3` with FTS5 support (ships with macOS; Eagle Mem prefers known system/Homebrew SQLite binaries before PATH shims)
 - `jq` (the installer offers to install if missing)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, Google Antigravity SDK, or a Grok environment (`~/.grok/`)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Codex, OpenCode, Google Antigravity SDK, or a Grok environment (`~/.grok/`)
 
 ## How It Works
 
@@ -91,7 +91,7 @@ Hooks fire automatically at different points in the agent lifecycle:
 | **Stop** | agent turn ends | Saves fast heuristic summaries and extracts `<eagle-summary>` blocks when present. LLM enrichment runs later in the background so the agent lifecycle is not blocked. |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
 
-Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths.
+Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths. OpenCode uses a global local plugin to normalize `chat.message`, `tool.execute.before`, `tool.execute.after`, `todo.updated`, `session.idle`, and compaction events into the same Eagle Mem hook payloads.
 Codex recall is emitted as compact hook JSON, so local Codex sessions get shared memory without the multi-screen hook dumps.
 
 ### Background Automation
@@ -110,7 +110,7 @@ Eagle Mem actively reduces token consumption:
 
 ### Compaction Survival
 
-One of the core promises of Eagle Mem is protecting against `/compact` and session amnesia. Compaction Survival is project-level: it reads shared Eagle Mem state such as durable tasks, enriched summaries, stale work, and orchestration lanes. Claude Code, Codex, and Google Antigravity get automatic hook-backed recovery through `SessionStart`, `Stop`/`post_turn`, and context-pressure nudges. Grok can inspect and use the same state through `eagle-mem compaction`, `eagle-mem tasks`, and the linked skills.
+One of the core promises of Eagle Mem is protecting against `/compact` and session amnesia. Compaction Survival is project-level: it reads shared Eagle Mem state such as durable tasks, enriched summaries, stale work, and orchestration lanes. Claude Code, Codex, OpenCode, and Google Antigravity get automatic hook-backed or plugin-backed recovery through session start, turn-end, and compaction events. Grok can inspect and use the same state through `eagle-mem compaction`, `eagle-mem tasks`, and the linked skills.
 
 Run `eagle-mem compaction` anytime to check readiness.
 
@@ -134,7 +134,7 @@ Eagle Mem prevents Claude from repeating past mistakes:
 - **Gotcha surfacing** — past surprises and gotchas are surfaced when editing related files
 - **Stale memory detection** — warns when edits may contradict stored memories
 - **Token guard** — when `rtk` is installed, raw shell output commands are rewritten or blocked with an RTK equivalent so large output is compacted before it enters agent context
-- **Orchestration lanes** — long-running work can be split into durable worker lanes with owners, validation commands, worktree paths, status notes, and handoff output shared across Claude Code, Codex, Grok, and Google Antigravity
+- **Orchestration lanes** — long-running work can be split into durable worker lanes with owners, validation commands, worktree paths, status notes, and handoff output shared across Claude Code, Codex, OpenCode, Grok, and Google Antigravity
 
 ## Commands
 
@@ -199,7 +199,7 @@ eagle-mem uninstall --dry-run
 
 Install and update print the files/configs they intend to touch before they change the runtime. The installed runtime writes `~/.eagle-mem/install-manifest.json` with file sizes, modes, and SHA-256 hashes, so `doctor` can tell whether hooks, scripts, libraries, and database helpers still match the package that installed them.
 
-Uninstall removes Claude Code, Codex, Grok, and Google Antigravity hook registrations, Eagle Mem instruction blocks, custom Claude statusline integration, and skill links. It backs up user config files before editing them and keeps `~/.eagle-mem/memory.db` unless you explicitly confirm data deletion.
+Uninstall removes Claude Code, Codex, OpenCode, Grok, and Google Antigravity hook/plugin registrations, Eagle Mem instruction blocks, custom Claude statusline integration, and skill links. It backs up user config files before editing them and keeps `~/.eagle-mem/memory.db` unless you explicitly confirm data deletion.
 
 ### Download Counts, Privacy, and Telemetry
 
@@ -256,7 +256,7 @@ Dry-run validation stays unblocked. For example, `gh pr create --dry-run` and `n
 
 ### Orchestrator/Worker Lanes
 
-Use orchestration when a broad task is split across Claude Code, Codex, subagents, or separate worktrees. These are **agent-run commands**: Eagle Mem injects the protocol into Claude Code/Codex, and the active agent runs the lane/status/spawn commands itself. Users should not have to operate this manually.
+Use orchestration when a broad task is split across Claude Code, Codex, OpenCode, subagents, or separate worktrees. These are **agent-run commands**: Eagle Mem injects the protocol into Claude Code, Codex, and OpenCode, and the active agent runs the lane/status/spawn commands itself. Users should not have to operate this manually.
 
 By default Eagle Mem uses the opposite-agent worker model:
 
@@ -284,14 +284,14 @@ Each lane is stored in `orchestration_lanes` and mirrored into `agent_tasks`, so
 
 Both agents write to `~/.eagle-mem/memory.db`:
 
-- `sessions.agent` records whether a session came from Claude Code, Codex, or Antigravity
+- `sessions.agent` records whether a session came from Claude Code, Codex, OpenCode, or Antigravity
 - `summaries.agent` records which agent produced the session summary
 - mirrored memories, plans, and tasks include `origin_agent`
-- SessionStart recall labels sources as `Claude Code`, `Codex`, or `Antigravity`
+- SessionStart recall labels sources as `Claude Code`, `Codex`, `OpenCode`, or `Antigravity`
 
-That means opening the same project in Claude Code, Codex, and Google Antigravity does not create isolated memory worlds. They recall the same project history while preserving the source of each memory. Grok can search, inspect, and update that same project memory through the linked skills and CLI commands.
+That means opening the same project in Claude Code, Codex, OpenCode, and Google Antigravity does not create isolated memory worlds. They recall the same project history while preserving the source of each memory. Grok can search, inspect, and update that same project memory through the linked skills and CLI commands.
 
-## Skills (Inside Claude Code, Codex, and Grok)
+## Skills (Inside Claude Code, Codex, OpenCode, and Grok)
 
 | Skill | What It Does |
 |-------|-------------|
@@ -299,7 +299,7 @@ That means opening the same project in Claude Code, Codex, and Google Antigravit
 | `/eagle-mem-overview` | Build a rich project briefing from README, entry points, and git history |
 | `/eagle-mem-memories` | View and search mirrored agent memories and plans |
 | `/eagle-mem-tasks` | TaskAware Compact Loop — break complex work into tasks that survive `/compact` |
-| `/eagle-mem-orchestrate` | Orchestrator/worker lane handoffs across Claude Code, Codex, Grok, and Google Antigravity |
+| `/eagle-mem-orchestrate` | Orchestrator/worker lane handoffs across Claude Code, Codex, OpenCode, Grok, and Google Antigravity |
 
 ## Data
 

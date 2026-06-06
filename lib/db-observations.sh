@@ -35,6 +35,40 @@ eagle_insert_observation() {
               );"
 }
 
+eagle_insert_recall_event() {
+    local session_id; session_id=$(eagle_sql_escape "${1:-}")
+    local project; project=$(eagle_sql_escape "${2:-}")
+    local cwd; cwd=$(eagle_sql_escape "${3:-}")
+    local agent; agent=$(eagle_sql_escape "${4:-$(eagle_agent_source)}")
+    local prompt_snippet; prompt_snippet=$(eagle_sql_escape "$(eagle_trim_text "${5:-}" 240)")
+    local fts_query; fts_query=$(eagle_sql_escape "${6:-}")
+    local summary_matches; summary_matches=$(eagle_sql_int "${7:-0}")
+    local memory_matches; memory_matches=$(eagle_sql_int "${8:-0}")
+    local code_matches; code_matches=$(eagle_sql_int "${9:-0}")
+    local injected_chars; injected_chars=$(eagle_sql_int "${10:-0}")
+    local status; status=$(eagle_sql_escape "${11:-ok}")
+    local error; error=$(eagle_sql_escape "${12:-}")
+    local summary_refs; summary_refs=$(eagle_sql_escape "${13:-[]}")
+    local memory_refs; memory_refs=$(eagle_sql_escape "${14:-[]}")
+    local code_refs; code_refs=$(eagle_sql_escape "${15:-[]}")
+    local injected_token_estimate=$(( (injected_chars + 3) / 4 ))
+
+    [ -n "$project" ] || project="unknown"
+
+    eagle_db "INSERT INTO recall_events (
+                  session_id, project, cwd, agent, prompt_snippet, fts_query,
+                  summary_matches, memory_matches, code_matches,
+                  summary_refs, memory_refs, code_refs, injected_chars,
+                  injected_token_estimate, status, error
+              )
+              VALUES (
+                  '$session_id', '$project', '$cwd', '$agent', '$prompt_snippet', '$fts_query',
+                  $summary_matches, $memory_matches, $code_matches,
+                  '$summary_refs', '$memory_refs', '$code_refs', $injected_chars,
+                  $injected_token_estimate, '$status', '$error'
+              );"
+}
+
 eagle_prune_observations() {
     local days; days=$(eagle_sql_int "${1:-90}")
     local project_filter=""

@@ -50,6 +50,7 @@ LIB_DIR="$SCRIPTS_DIR/../lib"
 . "$LIB_DIR/common.sh"
 . "$LIB_DIR/hooks.sh"
 . "$LIB_DIR/codex-hooks.sh"
+. "$LIB_DIR/opencode-hooks.sh"
 
 SETTINGS="$EAGLE_SETTINGS"
 
@@ -184,6 +185,7 @@ ensure_rtk
 claude_found=false
 codex_found=false
 grok_found=false
+opencode_found=false
 
 if [ -d "$HOME/.claude" ]; then
     eagle_ok "Claude Code ${DIM}(~/.claude/)${RESET}"
@@ -209,10 +211,17 @@ else
     eagle_warn "Grok not found ${DIM}(~/.grok/ does not exist)${RESET}"
 fi
 
-if [ "$claude_found" = false ] && [ "$codex_found" = false ] && [ "$grok_found" = false ]; then
+if eagle_opencode_detected; then
+    opencode_found=true
+    eagle_ok "OpenCode ${DIM}($EAGLE_OPENCODE_DIR/)${RESET}"
+else
+    eagle_warn "OpenCode not found ${DIM}(~/.config/opencode/ missing and opencode not on PATH)${RESET}"
+fi
+
+if [ "$claude_found" = false ] && [ "$codex_found" = false ] && [ "$grok_found" = false ] && [ "$opencode_found" = false ]; then
     eagle_fail "No supported agent install found"
     echo ""
-    eagle_dim "Install Claude Code, Codex, or ensure ~/.grok/ exists, then re-run."
+    eagle_dim "Install Claude Code, Codex, OpenCode, or ensure ~/.grok/ exists, then re-run."
     echo ""
     exit 1
 fi
@@ -223,7 +232,7 @@ if [ "$prereqs_ok" = false ]; then
     exit 1
 fi
 
-eagle_runtime_change_plan "install" "$PACKAGE_DIR" "$claude_found" "$codex_found"
+eagle_runtime_change_plan "install" "$PACKAGE_DIR" "$claude_found" "$codex_found" "$opencode_found"
 
 echo ""
 
@@ -278,13 +287,14 @@ if [ "$claude_found" = true ]; then
             "$EAGLE_MEM_DIR/hooks/session-start.sh" \
             "SessionStart hook"
 
-        eagle_patch_hook "$SETTINGS" "Stop" "" \
-            "$EAGLE_MEM_DIR/hooks/stop.sh" \
-            "Stop hook"
-
         # Clean old registrations before re-registering (handles matcher changes across versions)
+        eagle_clean_hook_entries "$SETTINGS" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
         eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
         eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+
+        eagle_patch_hook "$SETTINGS" "Stop" "" \
+            "bash \"$EAGLE_MEM_DIR/hooks/stop.sh\"" \
+            "Stop hook"
 
         eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" \
             "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
@@ -322,6 +332,12 @@ if [ "$codex_found" = true ]; then
     fi
 else
     eagle_info "Codex hooks skipped ${DIM}(Codex not detected)${RESET}"
+fi
+
+if [ "$opencode_found" = true ]; then
+    eagle_install_opencode_plugin "$PACKAGE_DIR" "$DRY_RUN"
+else
+    eagle_info "OpenCode plugin skipped ${DIM}(OpenCode not detected)${RESET}"
 fi
 
 # ─── Install skills ────────────────────────────────────────
@@ -372,6 +388,10 @@ if [ "$grok_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
             eagle_ok "Grok skill: $skill_name"
         done
     fi
+fi
+
+if [ "$opencode_found" = true ] && [ -d "$PACKAGE_DIR/skills" ]; then
+    eagle_install_opencode_skills "$PACKAGE_DIR" "$DRY_RUN"
 fi
 
 # ─── Statusline integration ───────────────────────────────
@@ -510,11 +530,15 @@ eagle_kv "Hooks:" "$EAGLE_MEM_DIR/hooks/"
 [ "$claude_found" = true ] && eagle_kv "Claude settings:" "$SETTINGS"
 [ "$codex_found" = true ] && eagle_kv "Codex hooks:" "$EAGLE_CODEX_HOOKS"
 [ "$grok_found" = true ] && eagle_kv "Grok skills:" "$EAGLE_GROK_SKILLS_DIR"
+[ "$opencode_found" = true ] && eagle_kv "OpenCode plugin:" "$EAGLE_OPENCODE_PLUGIN"
 eagle_kv "Antigravity Hook:" "$EAGLE_MEM_DIR/integrations/google_antigravity_hook.py"
 
 echo ""
 if [ "$grok_found" = true ]; then
     eagle_dim "Grok skills installed. Run 'eagle-mem grok-bootstrap' for setup guidance and recall."
+fi
+if [ "$opencode_found" = true ]; then
+    eagle_dim "Start a new OpenCode session without --pure — Eagle Mem will activate through the global local plugin."
 fi
 if [ "$claude_found" = true ] || [ "$codex_found" = true ]; then
     eagle_dim "Start a new Claude Code or Codex session — Eagle Mem will activate automatically."

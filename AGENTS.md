@@ -44,6 +44,7 @@ Agent Specific Planning & Sync Modes:
 - **Claude Code**: Uses `CLAUDE.md` summary instructions (`--agent claude-code`).
 - **Google Antigravity**: Uses standard planning mode artifacts (`implementation_plan.md`, `task.md`, `walkthrough.md`) in its brain directory, which are automatically indexed and synced by `eagle-mem` (`--agent antigravity`).
 - **Grok**: Uses symlinked skills and CLI workflows (`--agent grok`).
+- **OpenCode**: Uses the global local plugin under `~/.config/opencode/plugins/eagle-mem.js` plus symlinked skills (`--agent opencode`).
 
 Use durable Eagle Mem task records when any of these are true:
 
@@ -57,13 +58,24 @@ For small single-turn fixes, keep the visible ledger and final summary clear; Ea
 
 ## Religious Hook Operation & Graph Memory Utilization
 
-To ensure that the self-wiring codebase graph is fully utilized, all four agents (Claude Code, Codex, Grok, and Google Antigravity) MUST execute hooks and query the knowledge graph religiously:
+To ensure that the self-wiring codebase graph is fully utilized, all supported agents (Claude Code, Codex, OpenCode, Grok, and Google Antigravity) MUST execute hooks/plugins and query the knowledge graph religiously:
 
 1. **Verify Hook Settings**: Do not bypass, disable, or mock the hook pipelines (`session-start`, `pre-tool-use`, `post-tool-use`, `session-end`) under any conditions. They are the core engine of `eagle-mem`.
 2. **Consult Codebase Graph First**: Before starting any development task or formulating implementation plans, run `eagle-mem graph` or `eagle-mem graph query` to inspect dependencies, declares, and semantic references of the target files.
 3. **Compiled Truth Memory Structure**: When writing agent memories, align with the curated structure:
    - Place a `--- Compiled Truth ---` section at the top detailing the best, structured, up-to-date understanding of the subsystem or gotchas.
    - Place a `--- Evidence Trail ---` separator with chronological logs/timeline entries below it. This enables the background "Dream Cycle" curator to cluster and merge redundant memories cleanly.
+
+## Agent Compatibility Gate
+
+Before modifying any hook integration, coding-agent integration, statusline integration, config installation logic, or agent instruction injection:
+
+1. Read the current official documentation for the affected agent surface.
+2. Update `docs/agent-compatibility/<agent>.md` with the verification date, source URLs, exact behavior relied on, dependent Eagle Mem files, and fixture or golden-test coverage.
+3. Add or update a fixture or regression test before changing implementation behavior.
+4. Do not implement Claude Code, Codex, or OpenCode hook/plugin/statusline/config behavior from memory.
+
+Run `tests/test_agent_compatibility_docs_gate.sh` before marking these changes complete.
 
 ## Sync Discipline
 
@@ -104,7 +116,7 @@ eagle-mem tasks update <id> --agent <agent-tag> --desc "Updated context, decisio
 eagle-mem tasks complete <id> --agent <agent-tag>
 ```
 
-*(Note: Replace `<agent-tag>` with `codex`, `claude-code`, `grok`, or `antigravity` based on the active agent)*
+*(Note: Replace `<agent-tag>` with `codex`, `claude-code`, `opencode`, `grok`, or `antigravity` based on the active agent)*
 ```
 
 Good Eagle Mem task descriptions must be self-contained. A future context window should be able to read the task description alone and continue without rediscovering the plan.
