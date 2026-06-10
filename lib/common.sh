@@ -1114,6 +1114,62 @@ eagle_read_guard_block_threshold() {
     printf '%s\n' "$threshold"
 }
 
+# Generous ceiling (chars) on the recall body SessionStart injects. Typical
+# recall is a few KB; this only clips pathological projects (huge/many
+# summaries, lanes, etc.). It is NOT meant to shrink normal output. Default
+# 24000 chars (~6K tokens).
+eagle_sessionstart_inject_budget() {
+    local budget
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        budget=$(eagle_config_get "context_budget" "sessionstart_chars" "24000")
+    else
+        budget=$(eagle_config_get_light "context_budget" "sessionstart_chars" "24000")
+    fi
+    case "$budget" in *[!0-9]*|"") budget=24000 ;; esac
+    # Refuse a self-defeating tiny budget; floor keeps the top sections intact.
+    [ "$budget" -lt 4000 ] 2>/dev/null && budget=4000
+    printf '%s\n' "$budget"
+}
+
+# Trim a SessionStart recall body to a char budget by dropping whole
+# "=== Eagle Mem: ..." sections from the END (lowest priority appended last)
+# until the body fits. The body is passed on stdin; trimmed body is printed on
+# stdout; the count of dropped sections is printed on fd 3 if open, else to
+# the EAGLE_INJECT_TRIM_COUNT file when set. Sections are never split — a
+# section is kept whole or dropped whole, so no surface is half-emitted.
+eagle_trim_inject_body() {
+    local budget="$1"
+    local body; body=$(cat)
+    local dropped=0
+
+    if [ "${#body}" -le "$budget" ] 2>/dev/null; then
+        printf '%s' "$body"
+        [ -n "${EAGLE_INJECT_TRIM_COUNT:-}" ] && printf '0' > "$EAGLE_INJECT_TRIM_COUNT" 2>/dev/null
+        return 0
+    fi
+
+    # Iteratively remove the last "=== Eagle Mem:" section (and everything
+    # after it) until we fit or only the first section remains.
+    while [ "${#body}" -gt "$budget" ] 2>/dev/null; do
+        # Byte offset of the last section header.
+        local last_idx="${body##*=== Eagle Mem:}"
+        # No (more) section headers, or only one section left → stop trimming.
+        if [ "$last_idx" = "$body" ]; then
+            break
+        fi
+        local head="${body%=== Eagle Mem:*}"
+        # If trimming would leave nothing, keep at least the first section.
+        case "$head" in
+            *"=== Eagle Mem:"*) body="$head"; dropped=$((dropped + 1)) ;;
+            *) break ;;
+        esac
+    done
+
+    printf '%s' "$body"
+    [ -n "${EAGLE_INJECT_TRIM_COUNT:-}" ] && printf '%s' "$dropped" > "$EAGLE_INJECT_TRIM_COUNT" 2>/dev/null
+    return 0
+}
+
 eagle_raw_output_command_needs_guard() {
     local cmd="$1"
     local first

@@ -620,6 +620,28 @@ Files you were modifying before compact.
     fi
 fi
 
+# ─── Global injection ceiling (safety only — trims pathological cases) ──
+# Recall sections are appended high→low priority (overview, recent, memories,
+# plans, tasks, lanes, pending features, core files, working set). If the body
+# is pathologically large, drop whole low-priority sections from the bottom so
+# the top surfaces survive. The Active/instructions block is appended AFTER
+# this and is never trimmed.
+
+inject_budget=$(eagle_sessionstart_inject_budget)
+inject_trimmed=0
+if [ "${#context}" -gt "$inject_budget" ] 2>/dev/null; then
+    pre_trim_chars=${#context}
+    EAGLE_INJECT_TRIM_COUNT="$EAGLE_MEM_DIR/.inject-trim-count.${session_id}"
+    context=$(printf '%s' "$context" | eagle_trim_inject_body "$inject_budget")
+    [ -f "$EAGLE_INJECT_TRIM_COUNT" ] && inject_trimmed=$(cat "$EAGLE_INJECT_TRIM_COUNT" 2>/dev/null | tr -d '[:space:]')
+    rm -f "$EAGLE_INJECT_TRIM_COUNT" 2>/dev/null
+    unset EAGLE_INJECT_TRIM_COUNT
+    inject_trimmed=${inject_trimmed:-0}
+    if [ "$inject_trimmed" -gt 0 ] 2>/dev/null; then
+        eagle_log "WARN" "SessionStart: injection over budget (${pre_trim_chars}>${inject_budget} chars); trimmed ${inject_trimmed} low-priority section(s) for session=$session_id project=$project"
+    fi
+fi
+
 # ─── Instructions (compressed) ───────────────────────────
 
 if [ "$agent" = "codex" ]; then
@@ -651,7 +673,8 @@ if [ -n "$context" ]; then
         --arg source_type "$source_type" \
         --arg recall_scope "$recall_scope" \
         --argjson injected_chars "${#context}" \
-        '{source_type:$source_type, recall_scope:$recall_scope, injected_chars:$injected_chars}')"
+        --argjson sections_trimmed "${inject_trimmed:-0}" \
+        '{source_type:$source_type, recall_scope:$recall_scope, injected_chars:$injected_chars, sections_trimmed:$sections_trimmed}')"
     eagle_emit_context_for_agent "$agent" "SessionStart" "$context"
 fi
 eagle_hook_observability_complete 0

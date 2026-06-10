@@ -75,3 +75,12 @@ Phase 3 reliability hardening touched SessionStart auto-provisioning and Session
 
 Covered by `tests/test_reliability_retention.sh`.
 
+### Evidence: SessionStart injection ceiling (2026-06-10)
+
+Phase 4 token-economy hardening added a generous global size ceiling on the recall body that SessionStart injects, without changing any Claude Code contract — the hook still emits the same `additionalContext` via the existing `eagle_emit_context_for_agent` path, with unchanged stdin field reads (`session_id`, `cwd`, `source`, `model`) and exit semantics. Specifically:
+
+- `lib/common.sh`: added `eagle_sessionstart_inject_budget` (config key `context_budget.sessionstart_chars`, default 24000 chars / ~6K tokens, floored at 4000) and `eagle_trim_inject_body`, which drops whole `=== Eagle Mem: ...` sections from the END (lowest priority appended last) until the body fits. Sections are never split, so no recall surface is half-emitted, and the top-priority sections (overview, recent recall, memories) always survive.
+- `hooks/session-start.sh`: applies the ceiling to the accumulated recall body for the non-Codex path BEFORE the trailing Active/instructions block is appended, so capture instructions are never trimmed. When it trims it logs an observable `WARN` ("injection over budget … trimmed N low-priority section(s)") and records `sections_trimmed` in the hook observability detail. Normal-sized recall is emitted byte-for-byte unchanged (verified by test).
+
+Covered by `tests/test_context_budget.sh`.
+
