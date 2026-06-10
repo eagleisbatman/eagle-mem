@@ -4,6 +4,16 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.12.1 Deploy-Path Fixes for v4.12.0
+
+Two install/update-path bugs that defeated or destabilized the v4.12.0 rollout:
+
+- **CLAUDE.md capture doctrine never updated (critical)**: `eagle_patch_claude_md` detected the outdated section with `grep -qF 'request: \[what user asked\] | completed:'`. Under `grep -F` the backslashes are literal, so the pattern never matched the real `[what user asked]` text — the installed CLAUDE.md kept telling agents to emit `<eagle-summary>`, silently defeating the whole clean-capture feature. Detection now keys on the *absence* of the current section's unique `session save --session-id` sentinel, so any pre-CLI-first section is rewritten (and the rewrite is idempotent). New regression test `tests/test_claude_md_capture_doctrine.sh`.
+- **Migration runner fail-open on lock**: `db/migrate.sh`'s "already applied?" guard ran a fresh `sqlite3` without `busy_timeout`; a momentary `SQLITE_BUSY` (a hook touching the DB mid-update) made it exit non-zero, the `|| echo 0` fail-open then re-ran an already-applied migration and the body errored with `duplicate column` / UNIQUE-constraint failures. The guard now sets `busy_timeout=5000` and waits for the lock instead of guessing.
+- Registered `tests/test_clean_session_capture.sh` and the new doctrine test in `scripts/test.sh` (both were running only when invoked directly).
+
+---
+
 ## v4.12.0 Clean, Branded Session Capture
 
 Session endings are now clean across every agent — no more raw `<eagle-summary>` XML blocks in the visible reply.

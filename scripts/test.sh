@@ -68,6 +68,8 @@ run_check "Trust Surfaces (DB integrity, JSON errors, statusline)" "bash \"$SCRI
 run_check "Recall Observability (UserPromptSubmit recall event)" "bash \"$SCRIPTS_DIR/../tests/test_recall_observability.sh\""
 run_check "Eagle Event Log (hook/action observability)" "bash \"$SCRIPTS_DIR/../tests/test_eagle_events.sh\""
 run_check "Dashboard Surface (local HTML memory view)" "bash \"$SCRIPTS_DIR/../tests/test_dashboard.sh\""
+run_check "Clean Session Capture (capture_source, fill-only upsert, no clobber)" "bash \"$SCRIPTS_DIR/../tests/test_clean_session_capture.sh\""
+run_check "CLAUDE.md Capture Doctrine (installer rewrites outdated section)" "bash \"$SCRIPTS_DIR/../tests/test_claude_md_capture_doctrine.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

@@ -1919,11 +1919,13 @@ eagle_patch_claude_md() {
     mkdir -p "$HOME/.claude"
 
     if [ -f "$claude_md" ] && grep -qF "$marker" "$claude_md" 2>/dev/null; then
-        # Rewrite when the section uses an outdated capture doctrine:
-        #   - the old pipe-separated <eagle-summary> template, or
-        #   - the superseded "collapsed <details>" recommendation (pre-CLI-first).
-        if grep -qF 'request: \[what user asked\] | completed:' "$claude_md" 2>/dev/null \
-            || grep -qF 'collapsed `<details>` element' "$claude_md" 2>/dev/null; then
+        # Rewrite whenever the section predates the CLI-first capture doctrine.
+        # The current section is the only one that mentions `session save --session-id`,
+        # so its ABSENCE is a reliable "this section is outdated" signal — this catches
+        # the old `<eagle-summary>` template AND the superseded `<details>` recommendation
+        # without fragile fixed-string matching (the prior `grep -F '...\[...\]...'` never
+        # matched because -F treats the backslashes literally).
+        if ! grep -qF 'session save --session-id' "$claude_md" 2>/dev/null; then
             # Replace the outdated section: remove old, append new
             local tmp_md
             tmp_md=$(mktemp)

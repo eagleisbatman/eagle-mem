@@ -33,8 +33,14 @@ run_migration() {
     local name="$1"
     local file="$2"
 
+    # The guard query MUST set busy_timeout: without it a momentary SQLITE_BUSY
+    # (a hook touching the DB mid-update) makes sqlite3 exit non-zero, the `|| echo 0`
+    # fail-open then re-runs an already-applied migration and the body explodes with
+    # "duplicate column" / UNIQUE-constraint errors. busy_timeout makes the guard wait
+    # for the lock instead of guessing. tail -n1 drops the PRAGMA echo line.
     local already_applied
-    already_applied=$("$SQLITE_BIN" "$DB" "SELECT COUNT(*) FROM _migrations WHERE name = '$name';" 2>/dev/null || echo "0")
+    already_applied=$("$SQLITE_BIN" "$DB" "PRAGMA busy_timeout=5000; SELECT COUNT(*) FROM _migrations WHERE name = '$name';" 2>/dev/null | tail -n1)
+    [ -z "$already_applied" ] && already_applied="0"
 
     if [ "$already_applied" = "0" ]; then
         # Strip PRAGMAs from migration body (they can't run inside transactions

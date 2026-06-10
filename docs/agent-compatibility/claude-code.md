@@ -28,6 +28,7 @@ Last verified: 2026-06-10
 - The installer adds `permissions.allow: ["Bash(eagle-mem session save:*)"]` to Claude settings so the capture runs without a permission prompt. The instruction must use that exact command prefix (no leading path, no `cd &&`) for the permission to match.
 - Agent-authored captures are authoritative (`capture_source = agent`). The `Stop` hook still parses any `<eagle-summary>` block for backward compatibility, but when an agent row already exists its heuristics only fill empty fields and background enrichment is skipped — neither can clobber agent data.
 - `UserPromptSubmit` context-pressure nudges (≥20 / ≥30 turns) also point at `eagle-mem session save`, not the raw block.
+- On install/update the managed `## Eagle Mem — Persistent Memory` section in `~/.claude/CLAUDE.md` is rewritten to this CLI-first doctrine whenever it predates it. Detection keys on the absence of the current section's `session save --session-id` sentinel (v4.12.1 fixed a `grep -F` escaping bug that left the section — and therefore the clean-capture behavior — un-updated). Covered by `tests/test_claude_md_capture_doctrine.sh`.
 
 ## Eagle Mem Files Depending On This
 
