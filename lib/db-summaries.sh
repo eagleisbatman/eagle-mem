@@ -42,7 +42,10 @@ VALUES (
     '$capture_source'
 )
 ON CONFLICT(session_id) DO UPDATE SET
-    project        = excluded.project,
+    project        = CASE
+                        WHEN summaries.capture_source = 'agent' THEN summaries.project
+                        ELSE excluded.project
+                     END,
     agent          = COALESCE(NULLIF(excluded.agent, ''), summaries.agent),
     request        = COALESCE(NULLIF(excluded.request, ''), summaries.request),
     investigated   = COALESCE(NULLIF(excluded.investigated, ''), summaries.investigated),

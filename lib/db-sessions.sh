@@ -53,7 +53,12 @@ eagle_upsert_session() {
     fi
 
     if [ "$needs_project_repair" = "1" ]; then
-        eagle_db_pipe <<SQL >/dev/null 2>&1
+        # Capture rc instead of >/dev/null 2>&1 swallowing it: a failed repair
+        # must be distinguishable from success. eagle_db_pipe (.bail on) already
+        # mirrors sqlite stderr to EAGLE_MEM_LOG; we additionally log a clear
+        # marker so a half-applied repair is greppable. Happy path is unchanged.
+        local _repair_rc
+        eagle_db_pipe >/dev/null <<SQL
 BEGIN;
 UPDATE summaries SET project = '$project' WHERE session_id = '$session_id' AND project != '$project';
 UPDATE observations SET project = '$project' WHERE session_id = '$session_id' AND project != '$project';
@@ -146,6 +151,10 @@ UPDATE pending_feature_verifications SET project = '$project' WHERE source_sessi
 UPDATE sessions SET project = '$project' WHERE id = '$session_id' AND project != '$project';
 COMMIT;
 SQL
+        _repair_rc=$?
+        if [ "$_repair_rc" -ne 0 ]; then
+            eagle_log "ERROR" "session project repair failed (rc=$_repair_rc) session=$session_id_raw project=$project_raw — child rows may remain under a stale project key; see prior sqlite errors in this log"
+        fi
     fi
 }
 

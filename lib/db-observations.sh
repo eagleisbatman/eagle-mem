@@ -24,7 +24,13 @@ eagle_insert_observation() {
         extra_vals=", $(eagle_sql_int "$output_bytes"), $(eagle_sql_int "$output_lines"), '$command_category'"
     fi
 
-    eagle_db "INSERT INTO observations (session_id, project, agent, tool_name, tool_input_summary, files_read, files_modified${extra_cols})
+    # BEGIN IMMEDIATE serializes the check-then-insert under the write lock so
+    # two concurrent hooks can't both pass NOT EXISTS and double-insert (the
+    # second blocks via busy_timeout, then sees the first row). Without it the
+    # 5-second dedup window is racy. eagle_db_strict (.bail on) ensures a failed
+    # INSERT aborts before COMMIT so the transaction rolls back cleanly.
+    eagle_db_strict "BEGIN IMMEDIATE;
+              INSERT INTO observations (session_id, project, agent, tool_name, tool_input_summary, files_read, files_modified${extra_cols})
               SELECT '$session_id', '$project', '$agent', '$tool_name', '$tool_input_summary', '$files_read', '$files_modified'${extra_vals}
               WHERE NOT EXISTS (
                   SELECT 1 FROM observations
@@ -32,7 +38,8 @@ eagle_insert_observation() {
                   AND tool_name = '$tool_name'
                   AND tool_input_summary = '$tool_input_summary'
                   AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 seconds')
-              );"
+              );
+              COMMIT;"
 }
 
 eagle_insert_recall_event() {

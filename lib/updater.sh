@@ -195,9 +195,16 @@ eagle_update_backup_runtime() {
         local sqlite_bin
         sqlite_bin=$(eagle_sqlite_path)
         if [ -n "$sqlite_bin" ]; then
-            "$sqlite_bin" "$EAGLE_MEM_DB" ".backup '$backup_dir/memory.db'" >/dev/null 2>&1 || cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null || true
+            # busy_timeout so a concurrent hook holding the lock doesn't make
+            # .backup fail immediately and fall through to a raw cp. The raw cp
+            # last-resort copies the -wal/-shm too so the snapshot stays
+            # internally consistent (a bare cp of a WAL DB drops uncommitted WAL).
+            "$sqlite_bin" "$EAGLE_MEM_DB" "PRAGMA busy_timeout=10000; .backup '$backup_dir/memory.db'" >/dev/null 2>&1 \
+                || { cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null \
+                     && cp "$EAGLE_MEM_DB-wal" "$backup_dir/memory.db-wal" 2>/dev/null; cp "$EAGLE_MEM_DB-shm" "$backup_dir/memory.db-shm" 2>/dev/null; true; }
         else
-            cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null || true
+            cp "$EAGLE_MEM_DB" "$backup_dir/memory.db" 2>/dev/null \
+                && { cp "$EAGLE_MEM_DB-wal" "$backup_dir/memory.db-wal" 2>/dev/null; cp "$EAGLE_MEM_DB-shm" "$backup_dir/memory.db-shm" 2>/dev/null; true; }
         fi
     fi
 }
@@ -218,7 +225,14 @@ eagle_update_restore_runtime() {
     done
 
     if [ -f "$backup_dir/memory.db" ]; then
+        # Drop any live sidecars first so a restored main DB is never paired with
+        # a stale -wal/-shm. Then restore the main DB and (if the raw-cp fallback
+        # captured them) its sidecars, keeping the snapshot internally consistent.
+        rm -f "$EAGLE_MEM_DB-wal" "$EAGLE_MEM_DB-shm" 2>/dev/null || true
         cp "$backup_dir/memory.db" "$EAGLE_MEM_DB" 2>/dev/null || true
+        [ -f "$backup_dir/memory.db-wal" ] && cp "$backup_dir/memory.db-wal" "$EAGLE_MEM_DB-wal" 2>/dev/null
+        [ -f "$backup_dir/memory.db-shm" ] && cp "$backup_dir/memory.db-shm" "$EAGLE_MEM_DB-shm" 2>/dev/null
+        true
     fi
 }
 

@@ -65,7 +65,11 @@ eagle_mem_statusline_stats() {
     project_scope=$(eagle_recall_project_scope_from_cwd "${current_dir:-$project_dir}" "$project_key")
     project_condition=$(eagle_sql_project_scope_condition "project" "$project_scope")
 
-    stats=$("$sqlite_bin" "$em_db" "SELECT
+    # busy_timeout so a momentary SQLITE_BUSY (this is the hottest standalone
+    # query during live sessions) waits for the lock instead of exiting non-zero,
+    # which would otherwise escalate to an integrity-status mislabel below.
+    stats=$("$sqlite_bin" "$em_db" "PRAGMA busy_timeout=10000;
+        SELECT
         COUNT(*) || '|' ||
         (SELECT COUNT(*) FROM agent_memories WHERE $project_condition) || '|' ||
         COALESCE(MAX(COALESCE(last_activity_at, started_at)), 'never')

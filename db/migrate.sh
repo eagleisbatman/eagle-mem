@@ -44,7 +44,17 @@ run_migration() {
 
     if [ "$already_applied" = "0" ]; then
         # Strip PRAGMAs from migration body (they can't run inside transactions
-        # and are already set on every connection via lib/db.sh EAGLE_DB_SETUP)
+        # and are already set on every connection via lib/db.sh EAGLE_DB_SETUP).
+        #
+        # FUTURE-MIGRATION FOOTGUN: EVERY line matching `^\s*PRAGMA ` is removed
+        # from the body before it runs inside the BEGIN/COMMIT below. A migration
+        # that genuinely needs a persistent/connection PRAGMA (e.g. a one-shot
+        # `PRAGMA user_version=N;` or a `PRAGMA foreign_key_check;` validation)
+        # will have that line SILENTLY DROPPED — it will appear to succeed while
+        # doing nothing. Do not rely on PRAGMA statements inside a migration file;
+        # set connection PRAGMAs in EAGLE_DB_SETUP, and run any standalone schema
+        # PRAGMA as a separate `"$SQLITE_BIN" "$DB" "PRAGMA ...;"` call outside
+        # run_migration. This stripping behavior is intentional — do not remove it.
         local body
         body=$(grep -v -E '^[[:space:]]*PRAGMA ' "$file")
 

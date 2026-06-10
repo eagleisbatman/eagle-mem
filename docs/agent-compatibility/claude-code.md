@@ -57,3 +57,12 @@ Last verified: 2026-06-10
 
 When editing Claude Code hooks, update this file with the new verification date and include the exact hook event names, input fields, and output semantics used by the implementation. When editing brand visibility or statusline behavior, re-read the statusline reference first and update `claude-statusline.json` if the stdin schema changed.
 
+### Evidence: data-integrity hardening (2026-06-10)
+
+Phase 2 data-integrity hardening touched the PostToolUse hook and the statusline without changing any Claude Code contract — no hook event names, stdin field reads, or stdout/exit semantics changed; `claude-statusline.json` is unaffected. Specifically:
+
+- `hooks/post-tool-use.sh`: the `mod-tracker`/`edit-tracker` writers (internal `~/.eagle-mem` state, not Claude I/O) gained a stale-lock TTL reclaim, an atomic mv-based pending drain so a concurrent append is never lost, and a lock around the edit-history append. The PostToolUse stdin parse (`session_id`, `cwd`, `tool_name`, `hook_event_name`, `tool_input`) is unchanged.
+- `scripts/statusline-em.sh`: the hottest standalone stats query now runs `PRAGMA busy_timeout=10000;` so a momentary `SQLITE_BUSY` waits for the lock instead of being misread as a DB-integrity error. Statusline stdin schema and output rendering are unchanged.
+
+Covered by `tests/test_mod_tracker_concurrency.sh` and `tests/test_trust_surfaces.sh` (statusline integrity-status path).
+

@@ -153,10 +153,13 @@ tasks_list() {
             in_progress)
                 icon="${CYAN}>${RESET}"
                 marker=" ${CYAN}[in_progress]${RESET}"
-                # Staleness check for discipline
+                # Staleness check for discipline. Route through eagle_db (busy_timeout
+                # + FTS5-capable sqlite3) and escape $updated_at — it is a DB-read value
+                # interpolated back into SQL, so a quote would be second-order injection.
                 if [ -n "$updated_at" ]; then
-                    local age_days
-                    age_days=$(echo "SELECT (julianday('now') - julianday('$updated_at'))" | sqlite3 "$EAGLE_MEM_DB" 2>/dev/null | cut -d. -f1)
+                    local age_days updated_at_sql
+                    updated_at_sql=$(eagle_sql_escape "$updated_at")
+                    age_days=$(eagle_db "SELECT (julianday('now') - julianday('$updated_at_sql'));" 2>/dev/null | cut -d. -f1)
                     if [ -n "$age_days" ] && [ "$age_days" -gt 7 ]; then
                         marker+=" ${RED}[STALE - ${age_days}d]${RESET}"
                     fi

@@ -17,34 +17,72 @@ LIB_DIR="$SCRIPT_DIR/../lib"
 input=$(eagle_read_stdin)
 [ -z "$input" ] && exit 0
 
+# Stale lock TTL (seconds). A hook killed between mkdir and rmdir would
+# otherwise leak its lock dir forever and wedge every later writer; reclaim a
+# lock dir older than this so the tracker self-heals.
+EAGLE_MOD_LOCK_TTL="${EAGLE_MOD_LOCK_TTL:-30}"
+
+# Acquire a mkdir-based lock with stale-lock reclaim. Echoes 0 on success.
+# Returns non-zero (without acquiring) if the lock stays held by a live holder.
+eagle_acquire_dir_lock() {
+    local lock_dir="$1" attempt lock_age now mtime
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if mkdir "$lock_dir" 2>/dev/null; then
+            return 0
+        fi
+        # Reclaim a stale lock: if the dir is older than the TTL, the holder
+        # almost certainly died mid-critical-section. rmdir + retry.
+        now=$(date +%s 2>/dev/null) || now=""
+        mtime=$(stat -f %m "$lock_dir" 2>/dev/null || stat -c %Y "$lock_dir" 2>/dev/null || echo "")
+        if [ -n "$now" ] && [ -n "$mtime" ]; then
+            lock_age=$(( now - mtime ))
+            if [ "$lock_age" -ge "$EAGLE_MOD_LOCK_TTL" ]; then
+                rmdir "$lock_dir" 2>/dev/null || true
+                eagle_log "WARN" "PostToolUse: reclaimed stale tracker lock ${lock_dir##*/} (age=${lock_age}s)"
+                continue
+            fi
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
 eagle_track_modified_path() {
     local path="$1" sid="$2"
     [ -n "$path" ] || return 0
     [ -n "$sid" ] && eagle_validate_session_id "$sid" || return 0
 
-    local mod_dir mod_file mod_lock mod_tmp attempt
+    local mod_dir mod_file mod_lock mod_tmp pending_file drain_file
     mod_dir="$EAGLE_MEM_DIR/mod-tracker"
     mkdir -p "$mod_dir" 2>/dev/null || return 0
     mod_file="$mod_dir/${sid}"
     mod_lock="${mod_file}.lock"
 
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
-        if mkdir "$mod_lock" 2>/dev/null; then
-            mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || mod_tmp="${mod_file}.$$"
-            (
-                cat "$mod_file" 2>/dev/null
-                for pending_file in "${mod_file}".pending.*; do
-                    [ -f "$pending_file" ] && cat "$pending_file" 2>/dev/null
-                done
-                printf '%s\n' "$path"
-            ) | tail -3 > "$mod_tmp"
-            mv "$mod_tmp" "$mod_file" 2>/dev/null || rm -f "$mod_tmp"
-            rm -f "${mod_file}".pending.* 2>/dev/null || true
-            rmdir "$mod_lock" 2>/dev/null || true
-            return 0
-        fi
-        sleep 0.05
-    done
+    if eagle_acquire_dir_lock "$mod_lock"; then
+        mod_tmp=$(mktemp "${mod_file}.XXXXXX" 2>/dev/null) || mod_tmp="${mod_file}.$$"
+        # Drain pending atomically: mv each pending file to a private .draining
+        # name BEFORE reading it. A concurrent append landing in a NEW .pending.*
+        # after this glob is simply left for the next lock holder — never deleted
+        # mid-flight, so no append is ever lost between snapshot and cleanup.
+        for pending_file in "${mod_file}".pending.*; do
+            [ -e "$pending_file" ] || continue
+            drain_file="${pending_file}.draining.$$"
+            mv "$pending_file" "$drain_file" 2>/dev/null || continue
+        done
+        (
+            cat "$mod_file" 2>/dev/null
+            # Read every draining file (including any orphaned by a holder that
+            # died mid-drain) — we hold the lock, so we are the sole reader.
+            for drain_file in "${mod_file}".pending.*.draining.*; do
+                [ -e "$drain_file" ] && cat "$drain_file" 2>/dev/null
+            done
+            printf '%s\n' "$path"
+        ) | tail -3 > "$mod_tmp"
+        mv "$mod_tmp" "$mod_file" 2>/dev/null || rm -f "$mod_tmp"
+        rm -f "${mod_file}".pending.*.draining.* 2>/dev/null || true
+        rmdir "$mod_lock" 2>/dev/null || true
+        return 0
+    fi
 
     printf '%s\n' "$path" >> "${mod_file}.pending.$$" 2>/dev/null || true
     eagle_log "WARN" "PostToolUse: mod-tracker lock busy; queued pending modified file for session=$sid"
@@ -55,10 +93,21 @@ eagle_track_edit_history_path() {
     [ -n "$path" ] || return 0
     [ -n "$sid" ] && eagle_validate_session_id "$sid" || return 0
 
-    local edit_dir
+    local edit_dir edit_file edit_lock
     edit_dir="$EAGLE_MEM_DIR/edit-tracker"
     mkdir -p "$edit_dir" 2>/dev/null || return 0
-    printf '%s\n' "$path" >> "$edit_dir/${sid}" 2>/dev/null || true
+    edit_file="$edit_dir/${sid}"
+    edit_lock="${edit_file}.lock"
+
+    # Lock the append so it shares the mod-tracker's serialization discipline:
+    # mixing locked and unlocked writers can interleave/overwrite under load.
+    # Fall back to a bare append (atomic for small lines) if the lock is wedged.
+    if eagle_acquire_dir_lock "$edit_lock"; then
+        printf '%s\n' "$path" >> "$edit_file" 2>/dev/null || true
+        rmdir "$edit_lock" 2>/dev/null || true
+        return 0
+    fi
+    printf '%s\n' "$path" >> "$edit_file" 2>/dev/null || true
 }
 
 IFS=$'\x1f' read -r session_id cwd tool_name hook_event <<< \
