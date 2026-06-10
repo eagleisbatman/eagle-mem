@@ -47,4 +47,14 @@ eagle_hook_observability_complete 0
 # Prune observations older than 90 days (keeps DB size bounded)
 eagle_prune_observations 90 "$project"
 
+# Prune hook-observability events older than 30 days. This telemetry table is
+# written on every hook fire and was previously never pruned (unbounded growth).
+eagle_prune_events 30 "$project"
+
+# NOTE: pending_feature_verifications is deliberately NOT pruned/TTL'd here. A
+# pending verification is an explicit "this changed and was not yet verified or
+# waived" gate; silently expiring it would let an unverified change ship. It is
+# resolved only by `eagle-mem feature verify|waive` (or reconciliation when the
+# diff fingerprint no longer matches), never by age.
+
 exit 0

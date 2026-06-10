@@ -66,3 +66,12 @@ Phase 2 data-integrity hardening touched the PostToolUse hook and the statusline
 
 Covered by `tests/test_mod_tracker_concurrency.sh` and `tests/test_trust_surfaces.sh` (statusline integrity-status path).
 
+### Evidence: reliability/self-healing hardening (2026-06-10)
+
+Phase 3 reliability hardening touched SessionStart auto-provisioning and SessionEnd without changing any Claude Code contract — hook event names, stdin field reads, and stdout/exit semantics are unchanged. Specifically:
+
+- `lib/hooks-sessionstart.sh` (sourced by SessionStart): auto-scan/auto-index now debounce concurrent spawns with a short-lived in-flight marker and set the durable freshness marker ONLY when the background job genuinely succeeds, so a crashed/output-less scan no longer blocks retry for ~24h. Pure background-state behavior; no change to injected context format or stdin parse.
+- `hooks/session-end.sh`: now also prunes `eagle_events` (hook-observability telemetry) older than 30 days; `pending_feature_verifications` is deliberately left un-pruned (documented inline). SessionEnd input/exit semantics unchanged.
+
+Covered by `tests/test_reliability_retention.sh`.
+

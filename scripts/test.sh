@@ -73,6 +73,7 @@ run_check "CLAUDE.md Capture Doctrine (installer rewrites outdated section)" "ba
 run_check "Redaction Coverage (provider input, recall events, enrich job, autonomy, log paths)" "bash \"$SCRIPTS_DIR/../tests/test_redaction_coverage.sh\""
 run_check "Data Integrity Hardening (migrate idempotency, SQL escaping, summary precedence)" "bash \"$SCRIPTS_DIR/../tests/test_data_integrity_hardening.sh\""
 run_check "Mod-Tracker Concurrency (lock TTL, no lost append, observation dedup race)" "bash \"$SCRIPTS_DIR/../tests/test_mod_tracker_concurrency.sh\""
+run_check "Reliability Retention (scan in-flight vs freshness, eagle_events prune)" "bash \"$SCRIPTS_DIR/../tests/test_reliability_retention.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

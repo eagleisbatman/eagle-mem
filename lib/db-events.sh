@@ -41,6 +41,19 @@ eagle_insert_event() {
               );" >/dev/null 2>&1 || true
 }
 
+# eagle_events is hook-observability telemetry written on every hook fire, so it
+# grows much faster than any user-data table and was previously never pruned.
+# Bound it by age at SessionEnd (mirrors eagle_prune_observations).
+eagle_prune_events() {
+    local days; days=$(eagle_sql_int "${1:-30}")
+    local project_filter=""
+    if [ -n "${2:-}" ]; then
+        local proj; proj=$(eagle_sql_escape "$2")
+        project_filter="AND project = '$proj'"
+    fi
+    eagle_db "DELETE FROM eagle_events WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-$days days') $project_filter;" >/dev/null 2>&1 || true
+}
+
 eagle_hook_observability_begin() {
     local input="$1"
     local default_hook="$2"
