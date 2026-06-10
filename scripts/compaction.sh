@@ -157,7 +157,7 @@ if [ "$readiness" = "strong" ]; then
 elif [ "$readiness" = "moderate" ]; then
     eagle_info "Compaction Survival: Moderate — add more durable tasks and summaries"
 else
-    eagle_warn "Compaction Survival: Weak — start using durable tasks and <eagle-summary> blocks"
+    eagle_warn "Compaction Survival: Weak — start using durable tasks and 'eagle-mem session save' captures"
 fi
 
 echo ""

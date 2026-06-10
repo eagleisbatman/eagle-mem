@@ -90,8 +90,14 @@ gotchas=$(extract_section "$enrich_result" "GOTCHAS" | eagle_redact)
 key_files=$(extract_section "$enrich_result" "KEY_FILES" | eagle_redact)
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ] || [ -n "$decisions" ] || [ -n "$gotchas" ] || [ -n "$key_files" ]; then
-    eagle_insert_summary "$session_id" "$project" "$request" "" "$learned" "$completed" "" "[]" "[]" "" "$decisions" "$gotchas" "$key_files" "$agent"
-    eagle_log "INFO" "Summary enrichment saved for session=$session_id provider=$provider"
+    existing_source=$(eagle_summary_capture_source "$session_id" 2>/dev/null || true)
+    if [ "$existing_source" = "agent" ]; then
+        # An agent-authored row exists — only fill gaps, never overwrite it.
+        eagle_insert_summary_fill_only "$session_id" "$project" "$request" "" "$learned" "$completed" "" "[]" "[]" "" "$decisions" "$gotchas" "$key_files" "$agent" "enrich"
+    else
+        eagle_insert_summary "$session_id" "$project" "$request" "" "$learned" "$completed" "" "[]" "[]" "" "$decisions" "$gotchas" "$key_files" "$agent" "enrich"
+    fi
+    eagle_log "INFO" "Summary enrichment saved for session=$session_id provider=$provider source=${existing_source:-none}"
 fi
 
 rm -f "$job_file" 2>/dev/null || true

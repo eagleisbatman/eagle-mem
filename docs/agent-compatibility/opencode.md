@@ -1,6 +1,6 @@
 # OpenCode Compatibility
 
-Last verified: 2026-06-02
+Last verified: 2026-06-10
 
 ## Official Sources
 
@@ -37,6 +37,7 @@ Last verified: 2026-06-02
 - `session.idle` maps to Eagle Mem `Stop` using the latest assistant text accumulated from message events.
 - `session.deleted` maps to Eagle Mem `SessionEnd`.
 - `experimental.session.compacting` maps to Eagle Mem compact recall by running `SessionStart` with `source=compact` and appending the returned context.
+- Session capture follows the shared clean-capture flow: the agent may run `eagle-mem session save --session-id <id> ...` at wrap-up (sets `capture_source = agent`, authoritative) and keep replies prose-only. The `session.idle` → `Stop` path then only fills gaps and never clobbers an agent-authored row.
 
 ## Eagle Mem Files Depending On This
 

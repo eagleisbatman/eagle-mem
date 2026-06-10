@@ -319,6 +319,11 @@ if [ "$claude_found" = true ]; then
         eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" \
             "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
             "PreToolUse hook"
+
+        # Allow agent-issued session capture to run without a permission prompt
+        if eagle_patch_permission_allow "$SETTINGS" "Bash(eagle-mem session save:*)"; then
+            eagle_ok "Capture permission ${DIM}(eagle-mem session save)${RESET}"
+        fi
     fi
 else
     eagle_info "Claude hooks skipped ${DIM}(Claude Code not detected)${RESET}"

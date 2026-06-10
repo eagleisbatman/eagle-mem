@@ -4,6 +4,18 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.12.0 Clean, Branded Session Capture
+
+Session endings are now clean across every agent — no more raw `<eagle-summary>` XML blocks in the visible reply.
+
+- **CLI-first capture**: Agents persist structured summaries by running `eagle-mem session save --session-id <id> ...` (a pre-approved, quiet Bash call), then end with a short human recap plus one branded line: `Eagle Mem | Session captured — N decisions, M gotchas`. The installer adds a `permissions.allow` entry so the capture runs without a prompt.
+- **Extended `session save`**: New flags `--session-id`, `--completed`, `--investigated`, `--files-read`, `--files-modified`, `--affected-features`, `--verified-features`, `--regression-risks`. With `--session-id` the capture merges into the live session row instead of creating a standalone `manual-*` row, and no longer marks the session completed.
+- **Capture-integrity fixes**: New `capture_source` column (`agent`/`hook`/`enrich`) with an atomic fill-only upsert. Agent-authored captures are authoritative — Stop-hook heuristics and background LLM enrichment now only fill empty gaps and can never clobber richer data (previously the winning-COALESCE upsert could overwrite it). Enrichment queueing is skipped once a session is agent-authored.
+- **Cross-agent**: Claude Code, Codex, OpenCode, Grok, and Antigravity all capture through the same CLI. Instruction text updated in SessionStart/UserPromptSubmit (Claude + Codex), the installed CLAUDE.md/AGENTS.md sections, and `compaction.sh`.
+- **Backward compatible**: The Stop hook still parses any `<eagle-summary>` block it finds; agents are simply no longer instructed to emit one.
+
+---
+
 ## v4.11.0 Agent Compatibility and Governance Surfaces
 
 This feature release expands Eagle Mem from Claude/Codex memory hooks into a broader multi-agent governance substrate:

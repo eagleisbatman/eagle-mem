@@ -1,6 +1,6 @@
 # Codex Compatibility
 
-Last verified: 2026-06-02
+Last verified: 2026-06-10
 
 ## Official Sources
 
@@ -21,6 +21,12 @@ Last verified: 2026-06-02
 - `UserPromptSubmit` and `Stop` do not support matchers; configured matchers are ignored for those events.
 - Hook `timeout` is measured in seconds; `statusMessage` is optional.
 - Codex memory files are generated state. Required team guidance belongs in `AGENTS.md` or checked-in documentation, not only in local memories.
+
+## Session Capture Behavior
+
+- Codex replies stay prose-only; Eagle Mem never asks Codex to print summary blocks, XML, or hook payloads. The `Stop` hook captures a summary from the Codex rollout transcript automatically.
+- For a richer structured capture, Codex may run `eagle-mem session save --session-id <session_id> --agent codex ...` once at wrap-up (injected by `SessionStart` and the `AGENTS.md` section). This sets `capture_source = agent`, which is authoritative: later Stop-hook heuristics only fill empty fields and background enrichment is skipped, so the capture is never clobbered.
+- Modified-file lists are most reliable when Codex passes `--files-modified` explicitly; the transcript heuristic is Claude-shaped and may not populate file lists from Codex rollout tool calls.
 
 ## Eagle Mem Files Depending On This
 

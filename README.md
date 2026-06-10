@@ -88,7 +88,7 @@ Hooks fire automatically at different points in the agent lifecycle:
 | **PreToolUse** | before Bash/shell, Read, Edit, Write, apply_patch | Surfaces guardrails and decisions before edits. Blocks release-boundary commands while feature verification is pending. Rewrites noisy commands through RTK when available. Detects redundant reads, nudges co-edit partners, detects stuck loops. |
 | **UserPromptSubmit** | user sends a message | FTS5 search across past sessions and indexed code for relevant context |
 | **PostToolUse** | after tool calls | Records file touches, mirrors memory/plan/task writes, surfaces decision history and feature impacts on reads, stale memory warnings on edits |
-| **Stop** | agent turn ends | Saves fast heuristic summaries and extracts `<eagle-summary>` blocks when present. LLM enrichment runs later in the background so the agent lifecycle is not blocked. |
+| **Stop** | agent turn ends | Saves the session summary. Agent-authored captures from `eagle-mem session save` are authoritative; heuristic extraction only fills gaps and LLM enrichment runs later in the background so the agent lifecycle is not blocked. |
 | **SessionEnd** | session closes | Re-syncs tasks, marks session completed |
 
 Codex shell hooks are registered for `Bash`, `exec_command`, `shell_command`, and `unified_exec` tool names so release-boundary protection works across current Codex shell paths. OpenCode uses a global local plugin to normalize `chat.message`, `tool.execute.before`, `tool.execute.after`, `todo.updated`, `session.idle`, and compaction events into the same Eagle Mem hook payloads.
@@ -128,7 +128,7 @@ Run `eagle-mem compaction` anytime to check readiness.
 
 Eagle Mem prevents Claude from repeating past mistakes:
 
-- **Decision surfacing** — when you edit a file that has past decisions recorded (from `<eagle-summary>` blocks), PreToolUse reminds Claude not to revert without asking
+- **Decision surfacing** — when you edit a file that has past decisions recorded (from captured session summaries), PreToolUse reminds Claude not to revert without asking
 - **Guardrails** — file-level rules (manual or curator-discovered) that fire before every Edit/Write
 - **Feature verification** — tracks features with smoke tests and dependencies; current git diffs create fingerprinted pending verification records, and release-boundary commands such as `git push`, `gh pr create`, and package publish are blocked until the current fingerprint is verified or waived
 - **Gotcha surfacing** — past surprises and gotchas are surfaced when editing related files

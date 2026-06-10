@@ -67,8 +67,9 @@ Eagle Mem context pressure: critical ($turn_count turns since compact)
         else
             context+="
 === Eagle Mem: Context Pressure Critical ($turn_count turns since compact) ===
-IMMEDIATELY emit a detailed <eagle-summary> covering ALL work this session.
-Tell the user to run /compact NOW to avoid losing context.
+IMMEDIATELY capture ALL work this session by running (pre-approved, quiet):
+eagle-mem session save --session-id $session_id --completed \"...\" --decisions \"choice — why\" --gotchas \"...\" --learned \"...\" --next-steps \"...\" --key-files \"path — role\"
+Then tell the user to run /compact NOW. Do NOT print <eagle-summary> tags or raw field lists.
 "
         fi
         echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"
@@ -83,8 +84,9 @@ Eagle Mem context pressure: high ($turn_count turns since compact)
         else
             context+="
 === Eagle Mem: Context Pressure High ($turn_count turns since compact) ===
-Include a thorough <eagle-summary> in your next response — capture all decisions, gotchas, and learned context before compaction.
-Suggest the user run /compact to free context for continued work.
+Capture your work before compaction by running (pre-approved, quiet):
+eagle-mem session save --session-id $session_id --completed \"...\" --decisions \"choice — why\" --gotchas \"...\" --learned \"...\"
+Then suggest the user run /compact. Do NOT print <eagle-summary> tags or raw field lists.
 "
         fi
         echo "$turn_count" > "$EAGLE_MEM_DIR/.context-pressure"

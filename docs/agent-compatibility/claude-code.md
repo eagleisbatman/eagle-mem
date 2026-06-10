@@ -1,6 +1,6 @@
 # Claude Code Compatibility
 
-Last verified: 2026-06-02
+Last verified: 2026-06-10
 
 ## Official Sources
 
@@ -20,6 +20,14 @@ Last verified: 2026-06-02
 - `PostCompact` runs after compaction and receives `trigger` plus `compact_summary`.
 - `SessionEnd` runs when a session terminates.
 - The custom statusline is configured with `statusLine` in Claude settings; its command receives JSON on stdin and the first stdout line becomes the visible statusline text.
+
+## Session Capture Behavior
+
+- Eagle Mem no longer instructs Claude to print a raw `<eagle-summary>` block. `SessionStart` injects guidance to capture the session by running `eagle-mem session save --session-id <session_id> ...` (a quiet shell call), then to end the turn with human prose plus one branded line: `Eagle Mem | Session captured — N decisions, M gotchas`.
+- The `session_id` injected into the instruction is the same id Claude passes to every hook, so the CLI capture merges into the live session row rather than creating a standalone `manual-*` row.
+- The installer adds `permissions.allow: ["Bash(eagle-mem session save:*)"]` to Claude settings so the capture runs without a permission prompt. The instruction must use that exact command prefix (no leading path, no `cd &&`) for the permission to match.
+- Agent-authored captures are authoritative (`capture_source = agent`). The `Stop` hook still parses any `<eagle-summary>` block for backward compatibility, but when an agent row already exists its heuristics only fill empty fields and background enrichment is skipped — neither can clobber agent data.
+- `UserPromptSubmit` context-pressure nudges (≥20 / ≥30 turns) also point at `eagle-mem session save`, not the raw block.
 
 ## Eagle Mem Files Depending On This
 

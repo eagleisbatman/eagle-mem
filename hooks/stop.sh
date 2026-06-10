@@ -396,10 +396,30 @@ if [ -n "$regression_notes" ]; then
 fi
 
 # ─── Write to database ─────────────────────────────────────
+#
+# Capture-source precedence:
+#   - A parsed <eagle-summary> block this turn is agent-authored → write 'agent'.
+#   - An existing 'agent' row (CLI `eagle-mem session save` or an earlier block)
+#     is authoritative → fill empty gaps only, never overwrite with heuristics.
+#   - Otherwise this is a heuristic capture → normal 'hook' write.
+# agent_authored also gates background enrichment so it can't clobber later.
+
+existing_source=$(eagle_summary_capture_source "$session_id" 2>/dev/null || true)
+agent_authored=0
+[ -n "$summary_block" ] && agent_authored=1
+[ "$existing_source" = "agent" ] && agent_authored=1
 
 if [ -n "$request" ] || [ -n "$completed" ] || [ -n "$learned" ]; then
-    if eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent"; then
-        eagle_log "INFO" "Stop: summary saved for session=$session_id"
+    write_rc=0
+    if [ -n "$summary_block" ]; then
+        eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent" "agent" || write_rc=$?
+    elif [ "$existing_source" = "agent" ]; then
+        eagle_insert_summary_fill_only "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent" "hook" || write_rc=$?
+    else
+        eagle_insert_summary "$session_id" "$project" "$request" "$investigated" "$learned" "$completed" "$next_steps" "$files_read" "$files_modified" "$notes" "$decisions" "$gotchas" "$key_files" "$agent" "hook" || write_rc=$?
+    fi
+    if [ "$write_rc" -eq 0 ]; then
+        eagle_log "INFO" "Stop: summary saved for session=$session_id (prior_source=${existing_source:-none}, block=$([ -n "$summary_block" ] && echo yes || echo no))"
         eagle_insert_event "$project" "$session_id" "$agent" "memory_created" "" "Stop" "ok" "$(jq -nc --arg source "summary" '{source:$source}')" >/dev/null 2>&1 || true
     else
         eagle_log "ERROR" "Stop: summary insert FAILED for session=$session_id — check DB constraints"
@@ -413,7 +433,7 @@ eagle_hook_observability_set_detail "$(jq -nc \
     '{request_chars:($request | length), completed_chars:($completed | length), files_read:$files_read, files_modified:$files_modified}')"
 eagle_hook_observability_complete 0
 
-if [ "$defer_enrichment" -eq 1 ] && [ "${EAGLE_MEM_STOP_BACKGROUND_ENRICH:-1}" = "1" ] && [ -n "$text_content" ]; then
+if [ "$defer_enrichment" -eq 1 ] && [ "${EAGLE_MEM_STOP_BACKGROUND_ENRICH:-1}" = "1" ] && [ -n "$text_content" ] && [ "$agent_authored" -eq 0 ]; then
     mkdir -p "$EAGLE_MEM_DIR/tmp" 2>/dev/null || true
     enrich_job=$(mktemp "$EAGLE_MEM_DIR/tmp/summary-enrich.XXXXXX.json" 2>/dev/null)
     if [ -n "$enrich_job" ]; then

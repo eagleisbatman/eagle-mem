@@ -1893,16 +1893,19 @@ The person reading this transcript should experience natural, thoughtful, human 
 
 The rich structured data still gets saved (so future sessions get excellent context and the anti-regression system keeps working), but it happens without making the transcript feel like you are reading a debug dump.
 
-**Recommended capture approaches (in order of preference):**
-- Best: Use `eagle-mem session save --summary "..."` or the equivalent capture skill/tool. The CLI writes the structured record cleanly; you only show the nice prose to the user.
-- Strong alternative: Put any machine block inside a collapsed `<details>` element so it is available for debugging but invisible by default.
-- Only as last resort: Emit the raw block at all — and only when the user has explicitly asked for technical output.
+**How to capture (clean, no raw blocks):**
+- When you wrap up substantive work, run this once via the shell — it is pre-approved and prints only a short confirmation. Fill the flags you have; omit the rest:
+  `eagle-mem session save --session-id <id> --request "..." --completed "..." --learned "..." --decisions "choice — why; choice — why" --gotchas "..." --next-steps "..." --key-files "path — role" --files-modified "a.ts,b.ts" --affected-features "..." --verified-features "..." --regression-risks "..."`
+  Your session id is injected by SessionStart; use it verbatim so the capture merges into the live session.
+- Then end with a short, human recap in prose, followed by one line: `**Eagle Mem** | Session captured — N decisions, M gotchas`.
+- NEVER print `<eagle-summary>` tags, XML, or raw field lists (`request:`/`completed:`/...) in the visible reply.
+- If you never run the CLI, the Stop hook still captures a summary automatically as a lower-fidelity fallback — so capture is never lost, it is just richer when you run the command.
 
 **Why this rule exists:** Every single session ends with a summary. If it looks technical, the entire conversation history slowly becomes unpleasant to read. The memory layer should make the experience of working with agents *more* human, not less.
 
 **How to apply:**
 - Write the visible recap in clear, narrative prose first.
-- Persist the structured details via tool or collapsed element — never as raw tags in the main reply.
+- Persist the structured details via the `session save` command — never as raw tags in the main reply.
 - Keep durable task descriptions truthful and up to date; they often carry more value across compactions than any one summary.
 - When Eagle Mem context appears, attribute it naturally.
 - Protect secrets. Update the durable record if you change direction.
@@ -1916,8 +1919,11 @@ eagle_patch_claude_md() {
     mkdir -p "$HOME/.claude"
 
     if [ -f "$claude_md" ] && grep -qF "$marker" "$claude_md" 2>/dev/null; then
-        # Check if section has outdated pipe-separated format
-        if grep -qF 'request: \[what user asked\] | completed:' "$claude_md" 2>/dev/null; then
+        # Rewrite when the section uses an outdated capture doctrine:
+        #   - the old pipe-separated <eagle-summary> template, or
+        #   - the superseded "collapsed <details>" recommendation (pre-CLI-first).
+        if grep -qF 'request: \[what user asked\] | completed:' "$claude_md" 2>/dev/null \
+            || grep -qF 'collapsed `<details>` element' "$claude_md" 2>/dev/null; then
             # Replace the outdated section: remove old, append new
             local tmp_md
             tmp_md=$(mktemp)
@@ -1965,6 +1971,7 @@ Eagle Mem hooks are active for Codex in this project. SessionStart and UserPromp
 - For broad multi-agent work, YOU run `eagle-mem orchestrate`; do not ask the user to run these commands
 - Codex does not currently expose a persistent custom statusline like Claude Code; if the user asks for Eagle Mem status, run `eagle-mem statusline`
 - For important decisions, preferences, gotchas, or durable project facts, include them briefly in normal prose. Eagle Mem will extract them from the transcript.
+- To persist a richer structured capture without printing anything raw, run once at wrap-up: `eagle-mem session save --agent codex --completed "..." --decisions "choice — why" --gotchas "..." --files-modified "a.ts,b.ts"` (fill what applies)
 - Do not revert Eagle Mem-surfaced decisions without asking the user
 - If Eagle Mem reports pending feature verification, verify or waive it before push/PR/publish
 - Never put raw secrets in summaries

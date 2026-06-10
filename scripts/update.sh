@@ -100,6 +100,9 @@ if [ "$claude_found" = true ] && [ -f "$SETTINGS" ] && command -v jq &>/dev/null
     eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
     eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
 
+    # Allow agent-issued session capture to run without a permission prompt
+    eagle_patch_permission_allow "$SETTINGS" "Bash(eagle-mem session save:*)"
+
     eagle_ok "Hooks registered"
 fi
 

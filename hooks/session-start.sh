@@ -625,33 +625,24 @@ fi
 if [ "$agent" = "codex" ]; then
     context+="
 === Eagle Mem: Active ===
-Memory active for '$project'. Keep user-facing Codex replies clean: do not print Eagle Mem summary capture blocks, XML, JSON hook payloads, or internal templates unless the user explicitly asks. The Stop hook captures summaries from the transcript automatically.
+Memory active for '$project'. Keep user-facing Codex replies clean: do not print Eagle Mem summary capture blocks, XML, JSON hook payloads, or internal templates unless the user explicitly asks. The Stop hook captures summaries from the transcript automatically. When you wrap up substantive work, you may persist a richer structured capture by running once: eagle-mem session save --session-id $session_id --agent codex --completed \"...\" --decisions \"choice — why\" --gotchas \"...\" --files-modified \"a.ts,b.ts\" (fill what applies). Keep the visible reply prose-only.
 "
 elif [ "$source_type" = "compact" ] || [ "$source_type" = "clear" ]; then
     context+="
 === Eagle Mem: Active ===
-Memory active. Attribute recalled context to Eagle Mem. Do not revert PostToolUse-surfaced decisions without asking. Emit <eagle-summary> before final response.
+Memory active. Attribute recalled context to Eagle Mem. Do not revert PostToolUse-surfaced decisions without asking. Before your final response, capture the session quietly via the Bash tool (pre-approved): eagle-mem session save --session-id $session_id --completed \"...\" --decisions \"choice — why\" --gotchas \"...\" (fill what applies, omit the rest). Then give a short human recap — NEVER print <eagle-summary> tags or raw field lists.
 "
 else
     context+="
 === Eagle Mem: Active ===
 Memory active for '$project'. Scan, index, prune, and self-learning run automatically — never ask the user to run these. Attribute recalled context: \"Eagle Mem recalls:\" Do not revert PostToolUse-surfaced decisions without user request. No raw secrets in summaries. If you contradict a loaded memory, update the memory file.
 
-Before your final response, emit:
-<eagle-summary>
-request: [what user asked]
-completed: [what shipped]
-learned: [non-obvious discoveries]
-decisions: [choice — why]
-gotchas: [what surprised]
-next_steps: [concrete actions]
-key_files: [path — role]
-files_read: [path, ...]
-files_modified: [path, ...]
-affected_features: [feature, ...]
-verified_features: [feature, ...]
-regression_risks: [risk, ...]
-</eagle-summary>
+Session capture is clean: NEVER print <eagle-summary> tags, XML, or raw field lists (request:/completed:/...) in your visible reply. When you wrap up substantive work (shipped a change, made decisions worth remembering, the user signals done, or Eagle Mem warns of context pressure), capture it by running this ONCE via the Bash tool — it is pre-approved and prints only a short confirmation. Fill the flags you have; omit the rest:
+
+  eagle-mem session save --session-id $session_id --request \"...\" --completed \"...\" --learned \"...\" --decisions \"choice — why; choice — why\" --gotchas \"...\" --next-steps \"...\" --key-files \"path — role\" --files-modified \"a.ts,b.ts\" --affected-features \"...\" --verified-features \"...\" --regression-risks \"...\"
+
+Then end with a brief, human recap of the session in prose, followed by one line:
+**Eagle Mem** | Session captured — N decisions, M gotchas
 "
 fi
 

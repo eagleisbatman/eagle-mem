@@ -20,9 +20,10 @@ eagle_insert_summary() {
     local gotchas; gotchas=$(eagle_sql_escape "${12:-}")
     local key_files; key_files=$(eagle_sql_escape "${13:-}")
     local agent; agent=$(eagle_sql_escape "${14:-$(eagle_agent_source)}")
+    local capture_source; capture_source=$(eagle_sql_escape "${15:-}")
 
     eagle_db_pipe <<SQL
-INSERT INTO summaries (session_id, project, agent, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files)
+INSERT INTO summaries (session_id, project, agent, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files, capture_source)
 VALUES (
     '$session_id',
     '$project',
@@ -37,7 +38,8 @@ VALUES (
     '$notes',
     '$decisions',
     '$gotchas',
-    '$key_files'
+    '$key_files',
+    '$capture_source'
 )
 ON CONFLICT(session_id) DO UPDATE SET
     project        = excluded.project,
@@ -52,8 +54,73 @@ ON CONFLICT(session_id) DO UPDATE SET
     notes          = COALESCE(NULLIF(excluded.notes, ''), summaries.notes),
     decisions      = COALESCE(NULLIF(excluded.decisions, ''), summaries.decisions),
     gotchas        = COALESCE(NULLIF(excluded.gotchas, ''), summaries.gotchas),
-    key_files      = COALESCE(NULLIF(excluded.key_files, ''), summaries.key_files);
+    key_files      = COALESCE(NULLIF(excluded.key_files, ''), summaries.key_files),
+    capture_source = CASE
+                        WHEN summaries.capture_source = 'agent' THEN 'agent'
+                        ELSE COALESCE(NULLIF(excluded.capture_source, ''), summaries.capture_source)
+                     END;
 SQL
+}
+
+# Fill-only upsert: OLD value wins, only blank columns get filled. Atomic —
+# no read-modify-write race. Use when a richer agent-authored row already
+# exists and a later writer (Stop heuristics, background enrichment) should
+# only top up missing fields, never overwrite. capture_source stays 'agent'.
+eagle_insert_summary_fill_only() {
+    local session_id; session_id=$(eagle_sql_escape "$1")
+    local project; project=$(eagle_sql_escape "$2")
+    local request; request=$(eagle_sql_escape "$3")
+    local investigated; investigated=$(eagle_sql_escape "$4")
+    local learned; learned=$(eagle_sql_escape "$5")
+    local completed; completed=$(eagle_sql_escape "$6")
+    local next_steps; next_steps=$(eagle_sql_escape "$7")
+    local files_read; files_read=$(eagle_sql_escape "$8")
+    local files_modified; files_modified=$(eagle_sql_escape "$9")
+    local notes; notes=$(eagle_sql_escape "${10:-}")
+    local decisions; decisions=$(eagle_sql_escape "${11:-}")
+    local gotchas; gotchas=$(eagle_sql_escape "${12:-}")
+    local key_files; key_files=$(eagle_sql_escape "${13:-}")
+    local agent; agent=$(eagle_sql_escape "${14:-$(eagle_agent_source)}")
+    local capture_source; capture_source=$(eagle_sql_escape "${15:-}")
+
+    eagle_db_pipe <<SQL
+INSERT INTO summaries (session_id, project, agent, request, investigated, learned, completed, next_steps, files_read, files_modified, notes, decisions, gotchas, key_files, capture_source)
+VALUES (
+    '$session_id',
+    '$project',
+    '$agent',
+    '$request',
+    '$investigated',
+    '$learned',
+    '$completed',
+    '$next_steps',
+    '$files_read',
+    '$files_modified',
+    '$notes',
+    '$decisions',
+    '$gotchas',
+    '$key_files',
+    '$capture_source'
+)
+ON CONFLICT(session_id) DO UPDATE SET
+    request        = COALESCE(NULLIF(summaries.request, ''), NULLIF(excluded.request, ''), ''),
+    investigated   = COALESCE(NULLIF(summaries.investigated, ''), NULLIF(excluded.investigated, ''), ''),
+    learned        = COALESCE(NULLIF(summaries.learned, ''), NULLIF(excluded.learned, ''), ''),
+    completed      = COALESCE(NULLIF(summaries.completed, ''), NULLIF(excluded.completed, ''), ''),
+    next_steps     = COALESCE(NULLIF(summaries.next_steps, ''), NULLIF(excluded.next_steps, ''), ''),
+    files_read     = COALESCE(NULLIF(summaries.files_read, '[]'), NULLIF(excluded.files_read, '[]'), '[]'),
+    files_modified = COALESCE(NULLIF(summaries.files_modified, '[]'), NULLIF(excluded.files_modified, '[]'), '[]'),
+    notes          = COALESCE(NULLIF(summaries.notes, ''), NULLIF(excluded.notes, ''), ''),
+    decisions      = COALESCE(NULLIF(summaries.decisions, ''), NULLIF(excluded.decisions, ''), ''),
+    gotchas        = COALESCE(NULLIF(summaries.gotchas, ''), NULLIF(excluded.gotchas, ''), ''),
+    key_files      = COALESCE(NULLIF(summaries.key_files, ''), NULLIF(excluded.key_files, ''), '');
+SQL
+}
+
+# How a session's summary was captured: 'agent' | 'hook' | 'enrich' | ''
+eagle_summary_capture_source() {
+    local session_id; session_id=$(eagle_sql_escape "$1")
+    eagle_db "SELECT capture_source FROM summaries WHERE session_id = '$session_id' LIMIT 1;"
 }
 
 eagle_get_recent_summaries() {

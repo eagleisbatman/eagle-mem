@@ -31,6 +31,35 @@ eagle_clean_hook_entries() {
         "$settings" > "$tmp" && mv "$tmp" "$settings"
 }
 
+# Add a permissions.allow rule to Claude settings.json so agent-issued capture
+# commands (e.g. `eagle-mem session save`) run without a permission prompt.
+# Idempotent and order-preserving: appends only when the rule is absent, and
+# leaves existing permissions.deny/ask and allow entries untouched.
+eagle_patch_permission_allow() {
+    local settings="$1"
+    local rule="$2"
+    [ -f "$settings" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+
+    if jq -e --arg r "$rule" '(.permissions.allow // []) | index($r) != null' "$settings" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    eagle_backup_file "$settings"
+    local tmp
+    tmp=$(mktemp)
+    if jq --arg r "$rule" '
+            .permissions = (.permissions // {})
+            | .permissions.allow = ((.permissions.allow // []) + [$r])
+        ' "$settings" > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$settings"
+    else
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+    return 0
+}
+
 eagle_patch_hook() {
     local settings="$1"
     local event="$2"
