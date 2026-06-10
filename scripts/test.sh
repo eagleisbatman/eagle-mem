@@ -25,7 +25,11 @@ run_check() {
         eagle_ok "$name"
     else
         eagle_fail "$name"
-        ((errors++))
+        # Assignment form (not ((errors++))) so a failing check does not abort
+        # the whole runner under `set -e`: ((errors++)) returns exit 1 when the
+        # pre-increment value is 0, killing the suite at the first failure and
+        # skipping the failure-count summary below.
+        errors=$((errors + 1))
     fi
 }
 
@@ -75,6 +79,7 @@ run_check "Redaction Coverage (provider input, recall events, enrich job, autono
 run_check "Data Integrity Hardening (migrate idempotency, SQL escaping, summary precedence)" "bash \"$SCRIPTS_DIR/../tests/test_data_integrity_hardening.sh\""
 run_check "Mod-Tracker Concurrency (lock TTL, no lost append, observation dedup race)" "bash \"$SCRIPTS_DIR/../tests/test_mod_tracker_concurrency.sh\""
 run_check "Reliability Retention (scan in-flight vs freshness, eagle_events prune)" "bash \"$SCRIPTS_DIR/../tests/test_reliability_retention.sh\""
+run_check "Test Runner No-Abort (failing check does not kill the suite under set -e)" "bash \"$SCRIPTS_DIR/../tests/test_test_runner_no_abort.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then
