@@ -5,6 +5,7 @@ and tasks, enforce release-boundary guardrails, and survive context compaction.
 """
 
 import os
+import re
 import sys
 import json
 import asyncio
@@ -15,6 +16,34 @@ from typing import Any, Dict, List, Optional
 # Setup dedicated logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eagle_mem.antigravity")
+
+# Trusted install roots, resolved relative to THIS hook file (never os.getcwd()),
+# so an opened/untrusted workspace cannot shadow the real eagle-mem binaries or
+# hook scripts by dropping bin/eagle-mem or hooks/*.sh into the working dir.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_EAGLE_HOME = os.path.join(os.path.expanduser("~"), ".eagle-mem")
+
+
+def _resolve_eagle_mem_bin() -> Optional[str]:
+    """Resolve the eagle-mem binary from trusted install roots only."""
+    for path in (
+        os.path.join(_EAGLE_HOME, "bin", "eagle-mem"),
+        os.path.join(_REPO_ROOT, "bin", "eagle-mem"),
+    ):
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _resolve_hook_script(script_name: str) -> Optional[str]:
+    """Resolve an Eagle Mem hook script from trusted install roots only."""
+    for path in (
+        os.path.join(_EAGLE_HOME, "hooks", script_name),
+        os.path.join(_REPO_ROOT, "hooks", script_name),
+    ):
+        if os.path.exists(path):
+            return path
+    return None
 
 # --- Import and Mock Fallback for google-antigravity SDK ---
 try:
@@ -66,26 +95,27 @@ except ImportError:
 
 # --- Asynchronous Subprocess Helpers ---
 
-async def run_cmd_async(cmd: List[str]) -> str:
-    """Runs a shell command asynchronously and returns stdout."""
-    # Prioritize workspace-local bin/eagle-mem if running from workspace or if it exists in cwd or relative to this script
+async def run_cmd_async(cmd: List[str], stdin_data: Optional[str] = None) -> str:
+    """Runs a shell command asynchronously and returns stdout.
+
+    Resolves the eagle-mem binary from the install dir (next to this hook file),
+    never from os.getcwd(), so an opened workspace cannot shadow the real binary.
+    Optional stdin_data is piped in so sensitive values stay out of `ps`.
+    """
     if cmd and cmd[0] == "eagle-mem":
-        local_paths = [
-            os.path.join(os.getcwd(), "bin", "eagle-mem"),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "eagle-mem")
-        ]
-        for path in local_paths:
-            if os.path.exists(path):
-                cmd = [path] + cmd[1:]
-                break
+        resolved = _resolve_eagle_mem_bin()
+        if resolved:
+            cmd = [resolved] + cmd[1:]
 
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
+            stdin=asyncio.subprocess.PIPE if stdin_data is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
+        stdin_bytes = stdin_data.encode('utf-8') if stdin_data is not None else None
+        stdout, stderr = await proc.communicate(input=stdin_bytes)
         if proc.returncode == 0:
             return stdout.decode('utf-8', errors='ignore')
         else:
@@ -102,14 +132,11 @@ async def run_cmd_async(cmd: List[str]) -> str:
 
 async def run_hook_async(script_name: str, input_data: Dict[str, Any]) -> str:
     """Runs an Eagle Mem bash hook script asynchronously, piping JSON via stdin."""
-    # Resolve the physical path of the hook script
-    # First check ~/.eagle-mem/hooks/, then fall back to workspace hooks/
-    home_dir = os.path.expanduser("~")
-    hook_path = os.path.join(home_dir, ".eagle-mem", "hooks", script_name)
-    if not os.path.exists(hook_path):
-        hook_path = os.path.join(os.getcwd(), "hooks", script_name)
-        
-    if not os.path.exists(hook_path):
+    # Resolve the hook script from trusted install roots only (~/.eagle-mem/hooks
+    # then the repo's hooks/). Never os.getcwd() — an opened workspace could
+    # otherwise shadow the real hook with a malicious script.
+    hook_path = _resolve_hook_script(script_name)
+    if not hook_path:
         logger.error(f"Eagle Mem hook script not found: {script_name}")
         return ""
 
@@ -134,12 +161,19 @@ async def run_hook_async(script_name: str, input_data: Dict[str, Any]) -> str:
 
 # --- Utility Helpers ---
 
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
 def get_session_id() -> str:
     """Retrieves or generates a persistent session ID for the current context."""
-    # Use environment variables if present (matches Claude/Codex)
+    # Use environment variables if present (matches Claude/Codex). Validate the
+    # value: the session ID flows into file paths inside the bash hooks, so an
+    # unvalidated env var could enable path traversal. Reject anything that is
+    # not a UUID/hex-style token and fall back to a generated ID.
     session_id = os.environ.get("EAGLE_SESSION_ID") or os.environ.get("SESSION_ID")
-    if not session_id:
-        # Generate a unique hex session ID
+    if not session_id or not _SESSION_ID_RE.match(session_id):
+        if session_id:
+            logger.warning("Ignoring malformed session ID from environment; generating a new one")
         import uuid
         session_id = f"agy-{uuid.uuid4().hex[:16]}"
     return session_id
@@ -343,13 +377,14 @@ class EagleMemAntigravityHook:
         # 1. Trigger Stop hook (stop.sh) in background to capture transcript/summary
         asyncio.create_task(run_hook_async("stop.sh", input_data))
         
-        # 2. Concurrently trigger session save CLI in background
+        # 2. Concurrently trigger session save CLI in background. Pass the
+        # summary via stdin (not argv) so it is not visible in `ps`.
         summary = final_response[:200] if final_response else ""
         asyncio.create_task(run_cmd_async([
             "eagle-mem", "session", "save",
-            "--summary", summary,
+            "--summary-stdin",
             "--agent", self.agent_name
-        ]))
+        ], stdin_data=summary))
 
     async def on_compaction(self, data: Any):
         """Fires when context is compacted. Queries active tasks and injects them to survive compaction."""

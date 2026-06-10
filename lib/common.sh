@@ -1378,8 +1378,32 @@ eagle_read_stdin() {
 # Redact secrets from text before storage.
 # Covers: Bearer tokens, API keys, passwords, secrets, tokens,
 # Stripe/AWS/GitHub/Anthropic/OpenAI key patterns, named env vars.
+# Read configured [redaction] extra_patterns (TOML array) into a list of regexes,
+# one per line. Parses `extra_patterns = ["A.*", "B-[0-9]+"]` from config.toml.
+# Lines beginning with '#' (the commented default) are ignored by the config reader.
+eagle_redaction_extra_patterns() {
+    local raw
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        raw=$(eagle_config_get "redaction" "extra_patterns" "" 2>/dev/null)
+    else
+        raw=$(eagle_config_get_light "redaction" "extra_patterns" "" 2>/dev/null)
+    fi
+    [ -n "$raw" ] || return 0
+    # Strip surrounding [ ] brackets, then extract each double/single-quoted
+    # pattern. Using awk avoids splitting on commas that appear inside a regex
+    # character class (e.g. [A-Z,0-9]).
+    printf '%s' "$raw" \
+        | sed -E 's/^[[:space:]]*\[//; s/\][[:space:]]*$//' \
+        | grep -oE '"[^"]*"|'"'"'[^'"'"']*'"'"'' \
+        | sed -E 's/^["'"'"']//; s/["'"'"']$//' \
+        | while IFS= read -r pat; do
+            [ -n "$pat" ] && printf '%s\n' "$pat"
+        done
+}
+
 eagle_redact() {
-    sed -E \
+    local _redacted
+    _redacted=$(sed -E \
         -e 's/(Bearer )[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
         -e 's/(api[_-]?key[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
         -e 's/(password[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/gi' \
@@ -1407,7 +1431,16 @@ eagle_redact() {
         -e 's/(OPENAI_API_KEY[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
         -e 's/(GOOGLE_API_KEY[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
         -e 's/(SLACK_TOKEN[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g' \
-        -e 's/(DATABASE_URL[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g'
+        -e 's/(DATABASE_URL[= :])[^[:space:],;"'"'"']*/\1[REDACTED]/g')
+
+    # Apply user-configured extra patterns (if any) on top of the built-in set.
+    local pat
+    while IFS= read -r pat; do
+        [ -n "$pat" ] || continue
+        _redacted=$(printf '%s' "$_redacted" | sed -E "s/${pat}/[REDACTED]/g" 2>/dev/null) || true
+    done < <(eagle_redaction_extra_patterns)
+
+    printf '%s\n' "$_redacted"
 }
 
 # Collect project files into a destination file.

@@ -149,7 +149,11 @@ eagle_patch_codex_hook() {
 
     local tmp
     tmp=$(mktemp)
-    jq --argjson entry "$entry" ".hooks.${event} = ((.hooks.${event} // []) + [\$entry])" "$hooks_file" > "$tmp" && mv "$tmp" "$hooks_file"
+    # Pass $event as data via --arg and index dynamically so the event name is
+    # never interpolated into the jq program string (injection-safe even if the
+    # caller ever passes an untrusted event name).
+    jq --argjson entry "$entry" --arg event "$event" \
+        '.hooks[$event] = ((.hooks[$event] // []) + [$entry])' "$hooks_file" > "$tmp" && mv "$tmp" "$hooks_file"
     chmod 600 "$hooks_file" 2>/dev/null || true
     [ -n "$description" ] && eagle_ok "$description"
 }

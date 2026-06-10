@@ -104,6 +104,11 @@ save_session() {
                 summary="$2"
                 shift 2
                 ;;
+            --summary-stdin)
+                # Read the summary from stdin so it is not visible in `ps`.
+                summary="$(cat)"
+                shift
+                ;;
             --request)
                 require_value "$1" "${2:-}"
                 request="$2"

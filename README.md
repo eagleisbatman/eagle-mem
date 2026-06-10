@@ -265,6 +265,8 @@ By default Eagle Mem uses the opposite-agent worker model:
 
 Worker models, effort, route, and worktree behavior are configurable in `~/.eagle-mem/config.toml` under `[orchestration]`.
 
+Spawned workers run in a sandbox with an approval/permission gate by default (`worker_autonomy = "safe"`). Because worker prompts are assembled from DB-stored lane descriptions, unattended full filesystem access is opt-in: set `worker_autonomy = "danger"` under `[orchestration]` to run workers with `codex --sandbox danger-full-access` / `claude --permission-mode dontAsk`. Only enable this when you trust the lane descriptions.
+
 ```bash
 eagle-mem orchestrate init "Ship auth cleanup"
 eagle-mem orchestrate lane add api --agent codex --desc "API fixes + tests" --validate "npm test"

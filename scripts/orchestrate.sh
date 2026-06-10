@@ -203,6 +203,20 @@ orchestrate_worker_effort() {
     esac
 }
 
+# Worker autonomy level. Defaults to "safe" so spawned workers cannot run with
+# unattended full-access sandbox/approval settings on prompts assembled from
+# DB-stored lane descriptions (stored-prompt-injection surface). Set
+# [orchestration] worker_autonomy = "danger" to opt back into the previous
+# full-access behavior.
+orchestrate_worker_autonomy() {
+    local mode
+    mode=$(eagle_config_get "orchestration" "worker_autonomy" "safe")
+    case "$mode" in
+        danger|danger-full-access|full) echo "danger" ;;
+        *) echo "safe" ;;
+    esac
+}
+
 orchestrate_require_worker_cli() {
     case "$1" in
         codex)
@@ -775,6 +789,22 @@ orchestrate_worker_run_script() {
     local complete_note="Worker exited 0; log: $log_path"
     local block_note="Worker exited non-zero; log: $log_path"
 
+    # Autonomy gating: full-access unattended execution is opt-in (see
+    # orchestrate_worker_autonomy). The default "safe" mode keeps a sandbox and
+    # approval/permission gate in place because lane prompts come from
+    # DB-stored descriptions (stored-prompt-injection surface).
+    local autonomy codex_sandbox codex_approval claude_permission
+    autonomy=$(orchestrate_worker_autonomy)
+    if [ "$autonomy" = "danger" ]; then
+        codex_sandbox="danger-full-access"
+        codex_approval='approval_policy="never"'
+        claude_permission="dontAsk"
+    else
+        codex_sandbox="workspace-write"
+        codex_approval='approval_policy="on-request"'
+        claude_permission="acceptEdits"
+    fi
+
     {
         echo '#!/usr/bin/env bash'
         echo 'set +e'
@@ -786,12 +816,12 @@ orchestrate_worker_run_script() {
         printf 'export EAGLE_ORCHESTRATION_LANE=%q\n' "$lane_key"
         printf 'export EAGLE_ORCHESTRATION_WORKTREE=%q\n' "$worktree"
         if [ "$worker_agent" = "codex" ]; then
-            printf 'codex exec --cd %q --model %q -c %q -c %q --sandbox danger-full-access --output-last-message %q - < %q\n' \
-                "$worktree" "$worker_model" "$effort_config" 'approval_policy="never"' "$last_message_path" "$prompt_file"
+            printf 'codex exec --cd %q --model %q -c %q -c %q --sandbox %q --output-last-message %q - < %q\n' \
+                "$worktree" "$worker_model" "$effort_config" "$codex_approval" "$codex_sandbox" "$last_message_path" "$prompt_file"
         else
             printf 'prompt=$(cat %q)\n' "$prompt_file"
-            printf 'claude -p --model %q --effort %q --permission-mode dontAsk --output-format text "$prompt"\n' \
-                "$worker_model" "$worker_effort"
+            printf 'claude -p --model %q --effort %q --permission-mode %q --output-format text "$prompt"\n' \
+                "$worker_model" "$worker_effort" "$claude_permission"
         fi
         echo 'rc=$?'
         printf 'printf "%%s\\n" "$rc" > %q\n' "$exit_path"

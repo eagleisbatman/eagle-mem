@@ -15,6 +15,7 @@ Last verified: 2026-06-10
 - `AGENTS.md` is the durable repo-instruction surface for Codex. Closer nested files override earlier guidance because Codex concatenates instruction files from the project root down to the current working directory.
 - Codex hooks are discovered from active config layers through `hooks.json` or inline `[hooks]` tables in `config.toml`.
 - `features.hooks` is the canonical feature key. `features.codex_hooks` is a deprecated alias and should not be the primary setting.
+- Hook entries are registered into `hooks.<Event>` via jq. The event name is passed as `--arg` and indexed dynamically (`.hooks[$event]`), never interpolated into the jq program; the emitted `hooks.json` shape is unchanged. Re-verified during the 2026-06-10 security hardening pass (jq injection hardening, secret redaction before provider calls/persistence); no Codex hook contract changed.
 - `SessionStart`, `PreToolUse`, `PostToolUse`, `PreCompact`, `PostCompact`, `UserPromptSubmit`, `SubagentStop`, and `Stop` run at the documented lifecycle scopes.
 - `SessionStart` matchers use `startup`, `resume`, `clear`, and `compact`.
 - `PreToolUse` and `PostToolUse` match tool names, including `Bash`, `apply_patch`, MCP tool names, and aliases such as `Edit` and `Write` for `apply_patch`.

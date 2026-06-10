@@ -26,13 +26,52 @@ Commands:
 EOF
 }
 
+# Canonicalize an absolute path, resolving symlinks and '..'. Prefers realpath,
+# falls back to python3, then to a best-effort directory canonicalization.
+canonicalize_path() {
+    local p="$1"
+    if command -v realpath >/dev/null 2>&1; then
+        realpath "$p" 2>/dev/null && return 0
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$p" 2>/dev/null && return 0
+    fi
+    local dir base
+    dir=$(dirname "$p")
+    base=$(basename "$p")
+    dir=$(cd -P "$dir" 2>/dev/null && pwd) || return 1
+    printf '%s/%s\n' "$dir" "$base"
+}
+
+# Verify that $1 (a canonical path) is contained within $2 (a canonical dir).
+path_within() {
+    local path="$1" root="$2"
+    case "$path" in
+        "$root"/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 resolve_log_path() {
     local ref="${1:-}"
     local runs_root="${EAGLE_RUNS_DIR%/}" rel_ref
+    local canon_root resolved canon_resolved
+    canon_root=$(canonicalize_path "$runs_root" 2>/dev/null) || canon_root="$runs_root"
+
+    emit_if_contained() {
+        local candidate="$1"
+        [ -L "$candidate" ] && return 1
+        [ -f "$candidate" ] || return 1
+        local canon
+        canon=$(canonicalize_path "$candidate" 2>/dev/null) || return 1
+        path_within "$canon" "$canon_root" || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    }
+
     if [ -z "$ref" ]; then
         ls -t "$runs_root"/*.log 2>/dev/null | while IFS= read -r candidate; do
-            [ -L "$candidate" ] && continue
-            [ -f "$candidate" ] && printf '%s\n' "$candidate" && break
+            emit_if_contained "$candidate" && break
         done
         return 0
     fi
@@ -43,21 +82,14 @@ resolve_log_path() {
             rel_ref="${ref#"$runs_root"/}"
             [ "$rel_ref" != "$ref" ] || return 1
             case "$rel_ref" in ""|*/*) return 1 ;; esac
-            [ -L "$runs_root/$rel_ref" ] && return 1
-            [ -f "$runs_root/$rel_ref" ] && printf '%s\n' "$runs_root/$rel_ref" && return 0
+            emit_if_contained "$runs_root/$rel_ref" && return 0
             return 1
             ;;
         */*) return 1 ;;
     esac
 
-    if [ ! -L "$runs_root/$ref" ] && [ -f "$runs_root/$ref" ]; then
-        printf '%s\n' "$runs_root/$ref"
-        return 0
-    fi
-    if [ ! -L "$runs_root/$ref.log" ] && [ -f "$runs_root/$ref.log" ]; then
-        printf '%s\n' "$runs_root/$ref.log"
-        return 0
-    fi
+    emit_if_contained "$runs_root/$ref" && return 0
+    emit_if_contained "$runs_root/$ref.log" && return 0
     return 1
 }
 

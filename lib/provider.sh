@@ -173,6 +173,12 @@ claude_model = ""
 route = "opposite"
 auto_worktree = "true"
 worktree_root = ""
+# worker_autonomy: "safe" (default) runs spawned workers with a sandbox and an
+# approval/permission gate. "danger" runs them with full filesystem access and
+# no approvals (codex --sandbox danger-full-access, claude --permission-mode
+# dontAsk). Only enable "danger" when you trust the lane descriptions, since
+# worker prompts are assembled from DB-stored lane text.
+worker_autonomy = "safe"
 codex_worker_model = "gpt-5.5"
 codex_worker_effort = "xhigh"
 claude_worker_model = "claude-opus-4-7"
@@ -561,6 +567,8 @@ _eagle_call_claude_cli() {
 
     local _had_errexit=0
     case "$-" in *e*) _had_errexit=1; set +e ;; esac
+    # Pass the prompt via stdin (not argv) so secrets in the prompt are not
+    # visible in `ps`, matching the Codex provider path above.
     if [ -n "$model" ]; then
         EAGLE_MEM_DISABLE_HOOKS=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 claude -p \
             --no-session-persistence \
@@ -569,7 +577,7 @@ _eagle_call_claude_cli() {
             --tools "" \
             --output-format text \
             --model "$model" \
-            "$(cat "$prompt_file")" > "$out_file" 2>> "$EAGLE_MEM_LOG"
+            < "$prompt_file" > "$out_file" 2>> "$EAGLE_MEM_LOG"
         rc=$?
     else
         EAGLE_MEM_DISABLE_HOOKS=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 claude -p \
@@ -578,7 +586,7 @@ _eagle_call_claude_cli() {
             --permission-mode dontAsk \
             --tools "" \
             --output-format text \
-            "$(cat "$prompt_file")" > "$out_file" 2>> "$EAGLE_MEM_LOG"
+            < "$prompt_file" > "$out_file" 2>> "$EAGLE_MEM_LOG"
         rc=$?
     fi
     [ "$_had_errexit" -eq 1 ] && set -e

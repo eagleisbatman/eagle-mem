@@ -33,7 +33,10 @@ if [ "$provider" = "none" ]; then
     exit 0
 fi
 
-excerpt=$(printf '%s' "$text_content" | tail -c 3000)
+# Redact secrets BEFORE the transcript tail is sent to an LLM provider. The job
+# file is already redacted by Stop, but redact here too in case this script is
+# invoked directly or against a legacy job file.
+excerpt=$(printf '%s' "$text_content" | tail -c 3000 | eagle_redact)
 
 enrich_prompt="Extract facts from this AI coding session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
 

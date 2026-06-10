@@ -40,7 +40,7 @@ eagle_insert_recall_event() {
     local project; project=$(eagle_sql_escape "${2:-}")
     local cwd; cwd=$(eagle_sql_escape "${3:-}")
     local agent; agent=$(eagle_sql_escape "${4:-$(eagle_agent_source)}")
-    local prompt_snippet; prompt_snippet=$(eagle_sql_escape "$(eagle_trim_text "${5:-}" 240)")
+    local prompt_snippet; prompt_snippet=$(eagle_sql_escape "$(eagle_trim_text "${5:-}" 240 | eagle_redact)")
     local fts_query; fts_query=$(eagle_sql_escape "${6:-}")
     local summary_matches; summary_matches=$(eagle_sql_int "${7:-0}")
     local memory_matches; memory_matches=$(eagle_sql_int "${8:-0}")

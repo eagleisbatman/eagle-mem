@@ -167,8 +167,10 @@ case "$tool_name" in
         fi
         ;;
     Bash|exec_command|shell_command|unified_exec)
-        cmd=$(eagle_tool_command_from_json "$input" | cut -c1-200)
-        cmd=$(echo "$cmd" | eagle_redact)
+        # Redact BEFORE truncating: a secret split across the 200-char boundary
+        # could otherwise survive because the redaction prefix patterns no longer
+        # see the full token.
+        cmd=$(eagle_tool_command_from_json "$input" | eagle_redact | cut -c1-200)
         tool_summary="${tool_name}: $cmd"
 
         tool_output=$(echo "$input" | jq -r '.tool_response.stdout // empty' 2>/dev/null)

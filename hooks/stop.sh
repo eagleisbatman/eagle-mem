@@ -240,7 +240,9 @@ if [ "$needs_enrichment" -eq 1 ]; then
         defer_enrichment=1
         eagle_log "INFO" "Stop: LLM enrichment skipped on fast hook path; provider=$provider"
     elif [ "$provider" != "none" ] && [ -n "$text_content" ]; then
-        excerpt=$(echo "$text_content" | tail -c 3000)
+        # Redact secrets BEFORE the transcript tail is sent to an LLM provider
+        # (the fallback chain includes remote Anthropic/OpenAI APIs).
+        excerpt=$(echo "$text_content" | tail -c 3000 | eagle_redact)
 
         enrich_prompt="Extract facts from this AI coding session. Only include items with clear evidence in the session text. Do NOT invent or repeat example content.
 
@@ -437,11 +439,14 @@ if [ "$defer_enrichment" -eq 1 ] && [ "${EAGLE_MEM_STOP_BACKGROUND_ENRICH:-1}" =
     mkdir -p "$EAGLE_MEM_DIR/tmp" 2>/dev/null || true
     enrich_job=$(mktemp "$EAGLE_MEM_DIR/tmp/summary-enrich.XXXXXX.json" 2>/dev/null)
     if [ -n "$enrich_job" ]; then
+        # Redact secrets BEFORE persisting the transcript to the job file. The
+        # background enricher sends this text to an LLM provider (possibly remote).
+        enrich_text=$(printf '%s' "$text_content" | eagle_redact)
         jq -cn \
             --arg session_id "$session_id" \
             --arg project "$project" \
             --arg agent "$agent" \
-            --arg text "$text_content" \
+            --arg text "$enrich_text" \
             '{session_id:$session_id, project:$project, agent:$agent, text:$text}' > "$enrich_job"
 
         enrich_script="$SCRIPT_DIR/../scripts/enrich-summary.sh"
