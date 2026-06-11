@@ -4,6 +4,22 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.14.0 Governance Parity & Curator Provenance
+
+Two trust-surface features that close the remaining governance gaps from the v4.13.0 review.
+
+- **Release-gate parity at the git layer (`eagle-mem gate`).** The feature-verification gate was enforced only in `PreToolUse`, so a bare-shell `git push` or a Grok session (no hook lifecycle) bypassed governance entirely. New `eagle-mem gate`:
+  - `gate check` runs the same reconcile-and-block logic as the hook for the current repo (exit 1 when verifications are pending). It **fails open** (exit 0) when Eagle Mem is disabled, has no database, or the directory isn't a recognized project — a git hook must never wedge unrelated pushes.
+  - `gate install [--repo PATH] [--force]` installs an **opt-in, repo-local** `pre-push` hook that calls `gate check`, and **refuses to clobber** a pre-existing non-Eagle-Mem hook. `gate uninstall` removes only the managed hook.
+  - Bypass a single push with `git push --no-verify` or `EAGLE_MEM_DISABLE_HOOKS=1 git push`.
+  - Opt-in by design (Eagle Mem installs agent hooks globally but does not silently add git hooks to every repo). The cross-agent enforcement scope is documented in `docs/agent-compatibility/README.md`.
+- **Provenance + trust gate for curator-generated command rules.** Command rules steer `PreToolUse` output handling (`truncate` appends `| head -N`; `summary` adds a hint). They could be authored by the LLM curator with only format-level validation. Migration 045 adds `command_rules.source` (`manual` | `curator`); the curator tags its rules `curator`; and `eagle_get_command_rule` honors `token_guard.trust_learned_rules` (default **true**, preserving auto-learning). Set it `false` to apply only human-authored rules, so model output cannot silently shape command handling. (Guardrails already carried provenance; the actual command rewrite path is code-derived, not LLM-derived — so the gap was scoped to command rules.)
+- **Performance proposals evaluated, intentionally not implemented.** The deferred Phase 4 micro-optimizations were assessed and found net-negative: a PostToolUse zero-state short-circuit adds a query to the common populated case to save queries only in rare empty projects; UserPromptSubmit query consolidation entangles three differently-ranked FTS queries to save ~1 process spawn; a provider output cache has a near-zero hit rate because enrichment prompts embed unique per-session transcript excerpts. The meaningful token-economy win (the SessionStart injection ceiling) shipped in v4.13.0.
+
+New coverage: `tests/test_release_gate_prepush.sh`, `tests/test_command_rule_provenance.sh`.
+
+---
+
 ## v4.13.1 Test-Suite & Packaging Hygiene
 
 Follow-up cleanup that clears the bounded items left after the v4.13.0 review. No runtime behavior change for normal sessions.
