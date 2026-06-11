@@ -100,3 +100,40 @@ eagle_patch_hook() {
     [ -n "$description" ] && eagle_ok "$description"
     return 0
 }
+
+# Register (idempotently) the full Claude Code hook set into a settings.json.
+# Single source of truth for the event→matcher→script mapping so install.sh and
+# update.sh can never drift (the historical bug class). Requires $EAGLE_MEM_DIR.
+#   $1 = settings.json path
+#   $2 = "verbose" to print a "✓ <Event> hook" line per registration (installer);
+#        omitted/anything else = quiet (updater prints its own summary line).
+eagle_register_claude_hooks() {
+    local settings="$1"
+    local V=""
+    [ "${2:-}" = "verbose" ] && V=1
+
+    # Clean old registrations before re-registering (handles matcher changes across versions).
+    eagle_clean_hook_entries "$settings" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
+    eagle_clean_hook_entries "$settings" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
+    eagle_clean_hook_entries "$settings" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+
+    # ${V:+label} expands to the label only in verbose mode; otherwise to "",
+    # which makes eagle_patch_hook silent (it only prints when given a description).
+    eagle_patch_hook "$settings" "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh" "${V:+SessionStart hook}"
+    eagle_patch_hook "$settings" "Stop" "" "bash \"$EAGLE_MEM_DIR/hooks/stop.sh\"" "${V:+Stop hook}"
+    eagle_patch_hook "$settings" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" "${V:+PostToolUse hook}"
+    eagle_patch_hook "$settings" "TaskCreated" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" "${V:+TaskCreated hook}"
+    eagle_patch_hook "$settings" "TaskCompleted" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" "${V:+TaskCompleted hook}"
+    eagle_patch_hook "$settings" "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh" "${V:+SessionEnd hook}"
+    eagle_patch_hook "$settings" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" "${V:+UserPromptSubmit hook}"
+    eagle_patch_hook "$settings" "PreToolUse" "Bash|Read|Edit|Write" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" "${V:+PreToolUse hook}"
+
+    # Allow agent-issued session capture to run without a permission prompt.
+    if eagle_patch_permission_allow "$settings" "Bash(eagle-mem session save:*)"; then
+        [ -n "$V" ] && eagle_ok "Capture permission ${DIM}(eagle-mem session save)${RESET}"
+    fi
+    # Explicit success: the trailing conditional above evaluates false in quiet
+    # mode (V empty), which would otherwise make this function return 1 and abort
+    # a `set -e` caller (update.sh) right after a fully successful registration.
+    return 0
+}

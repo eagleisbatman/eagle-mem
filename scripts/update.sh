@@ -86,23 +86,9 @@ fi
 # ─── Re-register hooks (idempotent) ───────────────────────
 
 if [ "$claude_found" = true ] && [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
-    # Clean old registrations before re-registering (handles matcher changes across versions)
-    eagle_clean_hook_entries "$SETTINGS" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
-    eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
-
-    eagle_patch_hook "$SETTINGS" "SessionStart" "" "$EAGLE_MEM_DIR/hooks/session-start.sh"
-    eagle_patch_hook "$SETTINGS" "Stop" "" "bash \"$EAGLE_MEM_DIR/hooks/stop.sh\""
-    eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    eagle_patch_hook "$SETTINGS" "TaskCreated" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    eagle_patch_hook "$SETTINGS" "TaskCompleted" "" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-    eagle_patch_hook "$SETTINGS" "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh"
-    eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh"
-    eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
-
-    # Allow agent-issued session capture to run without a permission prompt
-    eagle_patch_permission_allow "$SETTINGS" "Bash(eagle-mem session save:*)"
-
+    # Single source of truth for the Claude hook set (see lib/hooks.sh); quiet
+    # mode — the updater prints one summary line instead of per-hook lines.
+    eagle_register_claude_hooks "$SETTINGS"
     eagle_ok "Hooks registered"
 fi
 

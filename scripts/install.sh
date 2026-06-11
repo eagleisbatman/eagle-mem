@@ -283,47 +283,9 @@ if [ "$claude_found" = true ]; then
             echo '{}' > "$SETTINGS"
         fi
 
-        eagle_patch_hook "$SETTINGS" "SessionStart" "" \
-            "$EAGLE_MEM_DIR/hooks/session-start.sh" \
-            "SessionStart hook"
-
-        # Clean old registrations before re-registering (handles matcher changes across versions)
-        eagle_clean_hook_entries "$SETTINGS" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
-        eagle_clean_hook_entries "$SETTINGS" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
-        eagle_clean_hook_entries "$SETTINGS" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
-
-        eagle_patch_hook "$SETTINGS" "Stop" "" \
-            "bash \"$EAGLE_MEM_DIR/hooks/stop.sh\"" \
-            "Stop hook"
-
-        eagle_patch_hook "$SETTINGS" "PostToolUse" "Read|Write|Edit|Bash|TaskUpdate" \
-            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-            "PostToolUse hook"
-
-        eagle_patch_hook "$SETTINGS" "TaskCreated" "" \
-            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-            "TaskCreated hook"
-
-        eagle_patch_hook "$SETTINGS" "TaskCompleted" "" \
-            "$EAGLE_MEM_DIR/hooks/post-tool-use.sh" \
-            "TaskCompleted hook"
-
-        eagle_patch_hook "$SETTINGS" "SessionEnd" "" \
-            "$EAGLE_MEM_DIR/hooks/session-end.sh" \
-            "SessionEnd hook"
-
-        eagle_patch_hook "$SETTINGS" "UserPromptSubmit" "" \
-            "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" \
-            "UserPromptSubmit hook"
-
-        eagle_patch_hook "$SETTINGS" "PreToolUse" "Bash|Read|Edit|Write" \
-            "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" \
-            "PreToolUse hook"
-
-        # Allow agent-issued session capture to run without a permission prompt
-        if eagle_patch_permission_allow "$SETTINGS" "Bash(eagle-mem session save:*)"; then
-            eagle_ok "Capture permission ${DIM}(eagle-mem session save)${RESET}"
-        fi
+        # Single source of truth for the Claude hook set (see lib/hooks.sh);
+        # verbose mode prints a line per registration.
+        eagle_register_claude_hooks "$SETTINGS" verbose
     fi
 else
     eagle_info "Claude hooks skipped ${DIM}(Claude Code not detected)${RESET}"
