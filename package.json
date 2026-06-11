@@ -1,6 +1,6 @@
 {
   "name": "eagle-mem",
-  "version": "4.12.1",
+  "version": "4.13.0",
   "description": "Shared memory, release guardrails, RTK token protection, and worker lanes for Claude Code, Codex, OpenCode, Grok, and Google Antigravity",
   "bin": {
     "eagle-mem": "bin/eagle-mem"

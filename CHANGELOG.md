@@ -4,6 +4,35 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.13.0 Full-Spectrum Security & Reliability Hardening
+
+A six-lens fix-in-place review of the whole codebase (security, data integrity, reliability, token economy, code quality, architecture). 32 files hardened, 6 new regression suites, full smoke suite green. No behavioral surface for normal sessions changed — recall and capture are byte-for-byte the same; what changed is the failure, concurrency, and trust behavior underneath.
+
+**Security**
+- **Unattended workers no longer default to full access (highest severity).** Orchestration workers previously spawned `--sandbox danger-full-access` / `--permission-mode dontAsk` on prompts assembled from DB-stored lane text — a stored-prompt-injection path to unattended arbitrary execution. New `[orchestration] worker_autonomy` defaults to **safe** (`workspace-write` / `on-request` / `acceptEdits`); `danger` is now an explicit opt-in.
+- **LLM inputs are redacted, not just outputs.** Transcript excerpts sent to providers (including remote APIs via fallback) and persisted to the enrich job file are now run through `eagle_redact` before send/persist; `recall_events.prompt_snippet` is redacted before insert; the Bash command summary is redacted *before* truncation so a boundary-split secret can't leak.
+- **Antigravity binary-hijack fix.** The Python hook resolves `bin/eagle-mem` and hook scripts from its install dir instead of `os.getcwd()`, and validates `SESSION_ID`.
+- Prompts passed to provider CLIs now go over stdin (not `ps`-visible argv); `logs show|tail` canonicalizes paths (realpath) before the runs-root containment check; the Codex hook passes event names via jq `--arg`; the dead `[redaction] extra_patterns` knob is now wired into `eagle_redact`.
+
+**Data integrity & database**
+- **Fail-open `SQLITE_BUSY` reads fixed.** Standalone `sqlite3` reads (statusline, tasks, updater, project-identity lookups) now set `busy_timeout` so a momentary lock waits instead of being misread as "no data."
+- **Mod-tracker data-loss & lock-wedge fixed.** Stale-lock TTL reclaim, atomic mv-based pending drain (a concurrent append is never lost), and the edit-history append is now locked. Verified by a 40-parallel-writer regression test.
+- Summary `project` is sticky on conflict for agent-authored rows (hook-path project drift can no longer rekey them); added `eagle_db_strict` (`.bail on`) for fail-fast callers; observation dedup runs in `BEGIN IMMEDIATE`.
+
+**Reliability / self-healing**
+- **Auto-scan no longer self-blocks for 24h on failure.** A short-lived *in-flight* marker now debounces concurrent spawns, while the durable *freshness* marker is set only on genuine success — a crashed or output-less scan retries instead of being suppressed for a day.
+- **`eagle_events` retention.** The hook-observability table (≈99k unbounded rows in practice) is now pruned by age (30 days) at SessionEnd. `pending_feature_verifications` is deliberately left un-pruned (expiring it would let an unverified change ship).
+
+**Token economy**
+- **SessionStart injection ceiling.** A generous global budget (`context_budget.sessionstart_chars`, default 24000 chars / ~6K tokens) drops whole low-priority sections from the bottom when the recall body is pathologically large, always keeping overview/recent/memories + capture instructions and never splitting a section. Normal-sized recall is emitted unchanged.
+
+**Code quality**
+- **Test runner no longer aborts at the first failure.** `((errors++))` returns exit 1 when the count is 0, so under `set -euo pipefail` the first failing check killed the suite before it could report the count; switched to `errors=$((errors + 1))`.
+
+Full findings report (every item marked fixed-with-its-test or proposed) lives at `docs/reviews/2026-06-10-full-spectrum-hardening.md`, including the propose-only architecture backlog (`common.sh` decomposition, orchestrate lifecycle, curator→guardrail provenance, Grok/bare-shell gate parity).
+
+---
+
 ## v4.12.1 Deploy-Path Fixes for v4.12.0
 
 Two install/update-path bugs that defeated or destabilized the v4.12.0 rollout:

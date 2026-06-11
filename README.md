@@ -13,6 +13,8 @@ Eagle Mem turns AI coding sessions into compounding project knowledge. It gives 
 
 **v4.10.5 and onward focuses on Graph Memory, Dream Cycle Curation, OpenCode, Grok, Google Antigravity support, and Compaction Survival:** OpenCode users get a global local plugin plus linked skills, Grok users get first-class skill linking and `eagle-mem grok-bootstrap`, and Antigravity users get native Python SDK hook integration via `google_antigravity_hook.py`. Claude Code, Codex, OpenCode, and Antigravity receive the deepest automatic lifecycle support through hooks or plugins; Grok currently uses the shared CLI and skill workflow.
 
+**v4.13.0 is a full-spectrum security & reliability hardening:** orchestration workers no longer default to full filesystem access, all LLM inputs (not just outputs) are redacted before they leave the machine, fail-open `SQLITE_BUSY` reads now wait for the lock, the mod-tracker is concurrency-safe, failed background scans retry instead of self-blocking for a day, and SessionStart injection has a token-economy ceiling. Normal recall and capture are unchanged. See [`CHANGELOG.md`](CHANGELOG.md) and the [findings report](docs/reviews/2026-06-10-full-spectrum-hardening.md).
+
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
 [About](https://eagleisbatman.github.io/eagle-mem/about.html)
