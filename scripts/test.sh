@@ -91,6 +91,9 @@ run_check "Data Integrity Hardening (migrate idempotency, SQL escaping, summary 
 run_check "Mod-Tracker Concurrency (lock TTL, no lost append, observation dedup race)" "bash \"$SCRIPTS_DIR/../tests/test_mod_tracker_concurrency.sh\""
 run_check "Reliability Retention (scan in-flight vs freshness, eagle_events prune)" "bash \"$SCRIPTS_DIR/../tests/test_reliability_retention.sh\""
 run_check "Test Runner No-Abort (failing check does not kill the suite under set -e)" "bash \"$SCRIPTS_DIR/../tests/test_test_runner_no_abort.sh\""
+# Python lane: the native Antigravity hook (mocked). Subshell-wrapped so a
+# missing python3 yields a clean skip (exit 2) instead of aborting the suite.
+run_check "Antigravity Hook (native Python SDK lifecycle, mocked)" "( command -v python3 >/dev/null 2>&1 || exit 2; python3 \"$SCRIPTS_DIR/../tests/test_antigravity_hook.py\" )"
 
 echo ""
 if [ "$errors" -eq 0 ]; then
