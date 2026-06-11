@@ -4,6 +4,20 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.13.1 Test-Suite & Packaging Hygiene
+
+Follow-up cleanup that clears the bounded items left after the v4.13.0 review. No runtime behavior change for normal sessions.
+
+- **`eagle-mem test` is now green from a published install.** Two suites failed when run from an installed package rather than a source checkout:
+  - *Compaction Survival Matrix* created its fixture repo inside `$ROOT_DIR`; from a published install that path is under `node_modules/`, which the code scanner excludes — so the fixture indexed 0 files and the post-compact "Relevant Code" recall never appeared. The fixture now lives in a neutral system temp dir and is indexed explicitly (no longer relying on a racy background auto-index).
+  - *Rust Migration Plan* guards `MIGRATION.md`, a maintainer roadmap intentionally not shipped in the npm package. It now **skips cleanly** when the doc is absent and runs strictly from a source checkout.
+  - The test runner learned an honest **"skipped"** state (a dev-only contract test with absent preconditions is neither a pass nor a failure).
+- **Antigravity Python hook test is now in the suite.** `tests/test_antigravity_hook.py` (mocked, stdlib-only) ran only by hand before; it's now a guarded python lane that skips cleanly if `python3` is unavailable.
+- **One source of truth for Claude hook registration.** `install.sh` and `update.sh` each held their own copy of the event→matcher→script mapping (the historical drift class). Extracted `eagle_register_claude_hooks` into `lib/hooks.sh`; both call it (installer verbose, updater quiet). Behavior preserved exactly.
+- **Dead-function sweep — analyzed, nothing removed.** A full cross-surface call-graph (`.sh`/`.py`/`.js`/skills/`bin`, 280 functions) found zero unreferenced functions and no computed-name dispatch; the "no shell caller" candidates are all reached via tests, skills, adapters, or the public CLI. Removing any would be regression risk with no benefit.
+
+---
+
 ## v4.13.0 Full-Spectrum Security & Reliability Hardening
 
 A six-lens fix-in-place review of the whole codebase (security, data integrity, reliability, token economy, code quality, architecture). 32 files hardened, 6 new regression suites, full smoke suite green. No behavioral surface for normal sessions changed — recall and capture are byte-for-byte the same; what changed is the failure, concurrency, and trust behavior underneath.
