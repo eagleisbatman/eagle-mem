@@ -89,8 +89,8 @@ handoff      | captured back into the same project memory
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.12.1</strong>
-            <span>Clean, branded session capture across every agent, plus agent compatibility docs, OpenCode integration, and governance trust surfaces.</span>
+            <strong>v4.13.0</strong>
+            <span>Full-spectrum security &amp; reliability hardening: safe-by-default workers, redacted LLM inputs, concurrency-safe writes, and self-healing background jobs — recall and capture unchanged.</span>
           </div>
         </div>
       </section>
@@ -149,7 +149,7 @@ handoff      | captured back into the same project memory
 eagle-mem install</code></pre>
           </div>
 <div class="terminal-shot"><span class="cyan">What users see now</span>
-	Eagle Mem v4.12.1
+	Eagle Mem v4.13.0
 Shared memory, clean session capture, guardrails, lanes, and durable handoffs
 
 Core
@@ -301,14 +301,16 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.12 makes session capture clean across every agent.</h2>
+            <h2>v4.13.0 hardens the whole substrate — without changing what you see.</h2>
           </div>
           <p>
-            Sessions now end with a short human recap and one branded line — no raw
-            <code>&lt;eagle-summary&gt;</code> blocks — while the richer structured summary is
-            captured through the CLI and can never be clobbered by heuristics or enrichment.
-            The governance surface carries over: agent compatibility docs, OpenCode integration,
-            compaction survival checks, orchestration events, repair/replay tools, and trust surfaces.
+            A six-lens, fix-in-place review (security, data integrity, reliability, token economy,
+            code quality, architecture) across 32 files, backed by six new regression suites.
+            Orchestration workers no longer default to full filesystem access, every LLM input is
+            redacted before it leaves the machine, fail-open <code>SQLITE_BUSY</code> reads now wait
+            for the lock, the modification tracker is concurrency-safe, and failed background scans
+            retry instead of self-blocking for a day. Normal recall and session capture are
+            byte-for-byte unchanged — only the failure, concurrency, and trust behavior underneath.
           </p>
         </div>
 
@@ -341,7 +343,7 @@ Coordination
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.12.1</span>
+      <span>Eagle Mem v4.13.0</span>
       <span>Local-first memory and release safety for Claude Code, Codex, Grok, and Antigravity workflows.</span>
     </footer>
   </body>
