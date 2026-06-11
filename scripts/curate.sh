@@ -316,12 +316,15 @@ If no rules needed, output: NONE"
                             ml_val="${max_lines:-NULL}"
                             [ "$ml_val" != "NULL" ] && ml_val=$(eagle_sql_int "$ml_val")
 
-                            eagle_db "INSERT INTO command_rules (project, pattern, strategy, max_lines, reason)
-                                VALUES ('$p_esc', '$pattern_esc', '$strategy', $ml_val, '$reason_esc')
+                            # Tag provenance: these rules are LLM-derived. They can be
+                            # excluded from enforcement via token_guard.trust_learned_rules=false.
+                            eagle_db "INSERT INTO command_rules (project, pattern, strategy, max_lines, reason, source)
+                                VALUES ('$p_esc', '$pattern_esc', '$strategy', $ml_val, '$reason_esc', 'curator')
                                 ON CONFLICT(project, pattern) DO UPDATE SET
                                     strategy = excluded.strategy,
                                     max_lines = excluded.max_lines,
                                     reason = excluded.reason,
+                                    source = 'curator',
                                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');"
                             eagle_log "INFO" "Curator: added command rule: $pattern → $strategy"
                         fi

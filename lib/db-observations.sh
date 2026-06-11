@@ -90,9 +90,26 @@ eagle_get_command_rule() {
     local project; project=$(eagle_sql_escape "$1")
     local base_cmd; base_cmd=$(eagle_sql_escape "$2")
     local full_cmd; full_cmd=$(eagle_sql_escape "${3:-$2}")
+
+    # Provenance gate: command_rules are human-authored ('manual') or generated
+    # by the LLM curator ('curator'). When token_guard.trust_learned_rules is
+    # false, only human-authored rules may steer command handling — model-derived
+    # rules are excluded so LLM output cannot silently shape execution. Default
+    # true preserves the auto-learning behavior. COALESCE guards rows written
+    # before migration 045 (treated as 'manual').
+    local trust
+    if declare -F eagle_config_get >/dev/null 2>&1; then
+        trust=$(eagle_config_get "token_guard" "trust_learned_rules" "true")
+    else
+        trust=$(eagle_config_get_light "token_guard" "trust_learned_rules" "true")
+    fi
+    local source_filter=""
+    [ "$trust" = "false" ] && source_filter="AND COALESCE(source, 'manual') = 'manual'"
+
     eagle_db "SELECT strategy, max_lines, reason
         FROM command_rules
         WHERE enabled = 1
+        $source_filter
         AND (project = '$project' OR project = '')
         AND ('$base_cmd' = pattern OR '$full_cmd' = pattern OR '$full_cmd' LIKE pattern || ' %')
         ORDER BY CASE WHEN project != '' THEN 0 ELSE 1 END,

@@ -95,6 +95,7 @@ run_check "Test Runner No-Abort (failing check does not kill the suite under set
 # missing python3 yields a clean skip (exit 2) instead of aborting the suite.
 run_check "Antigravity Hook (native Python SDK lifecycle, mocked)" "( command -v python3 >/dev/null 2>&1 || exit 2; python3 \"$SCRIPTS_DIR/../tests/test_antigravity_hook.py\" )"
 run_check "Release Gate Parity (eagle-mem gate: blocks pending, fails open, pre-push install)" "bash \"$SCRIPTS_DIR/../tests/test_release_gate_prepush.sh\""
+run_check "Command Rule Provenance (curator rules tagged + trust_learned_rules gate)" "bash \"$SCRIPTS_DIR/../tests/test_command_rule_provenance.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then
