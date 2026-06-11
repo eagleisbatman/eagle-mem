@@ -18,7 +18,14 @@ require_contains() {
     fi
 }
 
-[ -f "$PLAN" ] || fail "missing MIGRATION.md"
+# MIGRATION.md is a maintainer-only roadmap and is intentionally NOT shipped in
+# the npm package (`files` allowlist), so this contract test has nothing to
+# guard when the suite runs from a published install via `eagle-mem test`.
+# Skip cleanly (exit 2) in that case; run strictly from a source checkout.
+if [ ! -f "$PLAN" ]; then
+    echo "skip: MIGRATION.md not present (dev-only contract test)" >&2
+    exit 2
+fi
 
 require_contains "~/.eagle-mem/memory\\.db" "the existing user database path"
 require_contains "compatibility wrapper" "the Bash compatibility wrapper"

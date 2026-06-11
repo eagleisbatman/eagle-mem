@@ -16,13 +16,24 @@ eagle_banner
 eagle_header "Smoke Tests"
 
 errors=0
+skipped=0
 
 run_check() {
     local name="$1"
     local cmd="$2"
     echo -e "  ${BOLD}→${RESET} $name"
-    if eval "$cmd" >/dev/null 2>&1; then
+    local rc=0
+    eval "$cmd" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then
         eagle_ok "$name"
+    elif [ "$rc" -eq 2 ]; then
+        # Exit code 2 = the check skipped itself because its preconditions are
+        # absent in this environment — e.g. a dev-only contract test running
+        # from a published install, where the maintainer doc it guards is not
+        # shipped in the npm package. A skip is neither a pass nor a failure, so
+        # it must not increment the error count or fail the suite.
+        eagle_info "skipped: $name (preconditions not present here)"
+        skipped=$((skipped + 1))
     else
         eagle_fail "$name"
         # Assignment form (not ((errors++))) so a failing check does not abort
@@ -83,7 +94,11 @@ run_check "Test Runner No-Abort (failing check does not kill the suite under set
 
 echo ""
 if [ "$errors" -eq 0 ]; then
-    eagle_ok "All smoke tests passed"
+    if [ "$skipped" -gt 0 ]; then
+        eagle_ok "All smoke tests passed ($skipped skipped — preconditions not present here)"
+    else
+        eagle_ok "All smoke tests passed"
+    fi
     
     # Auto-verify the 7 core features in the database
     for feat in "compaction-survival" "feature-verification" "grok-cli-integration" "agent-orchestration" "Cross Agent Memory" "Installer And Updater" "Code Scan And Index"; do

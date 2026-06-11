@@ -7,7 +7,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EAGLE_BIN="$ROOT_DIR/bin/eagle-mem"
 
-tmp_dir=$(mktemp -d "$ROOT_DIR/.tmp-compaction-survival.XXXXXX")
+# Use a neutral system temp dir, NOT one inside $ROOT_DIR. From a published
+# install $ROOT_DIR lives under node_modules/, and the code scanner excludes
+# node_modules — so a fixture repo created here would index 0 files and the
+# post-compact "Relevant Code" recall would never appear (the suite is run from
+# the installed package via `eagle-mem test`).
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/eagle-compaction-survival.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT
 
 export HOME="$tmp_dir/home"
@@ -189,6 +194,13 @@ assert_json "$compaction_json" '
     and .metrics.active_features >= 1
     and .metrics.semantic_graph_nodes >= 5
 ' "compaction --json did not report durable survival metrics"
+
+# Index the fixture code deterministically so the post-compact recall can
+# surface "Relevant Code". This previously relied on a background auto-index
+# that only won the race from a warm source checkout, so the assertion failed
+# when the suite ran from a published install via `eagle-mem test`. The
+# `index` command is synchronous, so chunks exist by the time the hook runs.
+( cd "$repo" && "$EAGLE_BIN" index >/dev/null 2>&1 )
 
 eagle_upsert_session "$post_session" "$project" "$repo" "test-model" "test" "codex" >/dev/null
 hook_input=$(jq -nc \
