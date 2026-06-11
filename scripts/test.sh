@@ -94,6 +94,7 @@ run_check "Test Runner No-Abort (failing check does not kill the suite under set
 # Python lane: the native Antigravity hook (mocked). Subshell-wrapped so a
 # missing python3 yields a clean skip (exit 2) instead of aborting the suite.
 run_check "Antigravity Hook (native Python SDK lifecycle, mocked)" "( command -v python3 >/dev/null 2>&1 || exit 2; python3 \"$SCRIPTS_DIR/../tests/test_antigravity_hook.py\" )"
+run_check "Release Gate Parity (eagle-mem gate: blocks pending, fails open, pre-push install)" "bash \"$SCRIPTS_DIR/../tests/test_release_gate_prepush.sh\""
 
 echo ""
 if [ "$errors" -eq 0 ]; then

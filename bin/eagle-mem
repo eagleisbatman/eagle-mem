@@ -31,6 +31,7 @@ case "$command" in
     updates)    bash "$SCRIPTS_DIR/updates.sh" "$@" ;;
     statusline) "$SCRIPTS_DIR/statusline-em.sh" "$@" ;;
     guard)      bash "$SCRIPTS_DIR/guard.sh" "$@" ;;
+    gate)       bash "$SCRIPTS_DIR/gate.sh" "$@" ;;
     overview)   bash "$SCRIPTS_DIR/overview.sh" "$@" ;;
     graph)      bash "$SCRIPTS_DIR/memories.sh" graph "$@" ;;
     session|sessions)
