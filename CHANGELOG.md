@@ -4,6 +4,19 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.15.0 PreCompact Synchronous Capture
+
+A new lifecycle hook that captures a rich session summary **before** Claude Code compacts the context window — closing the auto-compaction gap.
+
+- **Why.** Eagle Mem already survived compaction via per-turn `Stop` capture + `SessionStart(source=compact)` rehydration. But the *rich* (LLM-enriched) summary is produced by a `nohup` background job (`scripts/enrich-summary.sh`) the `Stop` hook fires, so on auto-compaction it can land *after* the window collapses rather than before. `PreCompact` was listed as relied-upon in the compatibility doc but had no implementation.
+- **What.** New `hooks/pre-compact.sh` runs on the `PreCompact` event (both `manual` and `auto` matchers, since PreCompact's matcher *is* the trigger). It resolves the project, **skips** when an agent-authored `eagle-mem session save` already exists (that capture is richer and already survives), extracts the recent assistant transcript text, and runs `scripts/enrich-summary.sh` **synchronously** so the enriched summary is persisted before compaction. PreCompact fires rarely, so it can afford the LLM call the fast `Stop` path defers for speed.
+- **Safety.** It is side-effect-only per the hooks contract (it *can* block via exit 2 but **never does** — it always `exit 0`), never overwrites an agent row (`enrich-summary.sh` is fill-only over `capture_source = agent`), redacts before sending transcript text to a provider, and degrades to a no-op when no provider is configured (the `Stop` heuristic summary already covers that case). No change to `Stop`, `enrich-summary.sh`, or any stdin/stdout/exit contract.
+- **Registration.** `lib/hooks.sh:eagle_register_claude_hooks` (the single source of truth `install.sh` and `update.sh` both call) cleans then registers `PreCompact` for `manual` and `auto`. `eagle-mem update` adds it to existing installs automatically.
+
+New coverage: `tests/test_precompact_capture.sh` (synchronous enrichment via a stubbed provider, agent-summary no-clobber, no-provider graceful path, never-blocks, both matchers) and `tests/fixtures/agent-hooks/claude-pre-compact.json`. Compatibility evidence: `docs/agent-compatibility/claude-code.md`.
+
+---
+
 ## v4.14.1 busy_timeout Echo Fix
 
 A latent data-corruption and statusline-display bug, introduced when `busy_timeout` protection was added to three hot SQLite paths (the 2026-06-10 data-integrity hardening). No new feature; pure correctness.

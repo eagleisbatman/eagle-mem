@@ -1,0 +1,7 @@
+{
+  "session_id": "claude-precompact-fixture-session",
+  "transcript_path": "/tmp/eagle-mem-precompact-fixture.jsonl",
+  "cwd": "/tmp/eagle-mem-precompact-fixture",
+  "hook_event_name": "PreCompact",
+  "trigger": "auto"
+}

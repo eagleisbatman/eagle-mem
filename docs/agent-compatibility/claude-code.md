@@ -1,6 +1,6 @@
 # Claude Code Compatibility
 
-Last verified: 2026-06-10
+Last verified: 2026-06-13
 
 ## Official Sources
 
@@ -28,6 +28,7 @@ Last verified: 2026-06-10
 - The installer adds `permissions.allow: ["Bash(eagle-mem session save:*)"]` to Claude settings so the capture runs without a permission prompt. The instruction must use that exact command prefix (no leading path, no `cd &&`) for the permission to match.
 - Agent-authored captures are authoritative (`capture_source = agent`). The `Stop` hook still parses any `<eagle-summary>` block for backward compatibility, but when an agent row already exists its heuristics only fill empty fields and background enrichment is skipped — neither can clobber agent data.
 - `UserPromptSubmit` context-pressure nudges (≥20 / ≥30 turns) also point at `eagle-mem session save`, not the raw block.
+- `PreCompact` (matchers `manual` and `auto`) runs `hooks/pre-compact.sh`, which captures a rich summary **synchronously before** the window collapses. Routine `Stop` defers LLM enrichment to a `nohup` background job (`scripts/enrich-summary.sh`) for speed; PreCompact fires rarely, so it runs that same enricher inline, guaranteeing the rich summary is persisted before compaction rather than racing it. It never blocks compaction (always exits 0) and never overwrites an agent-authored `eagle-mem session save` (it skips when `capture_source = agent`). The compacted window is then rehydrated by `SessionStart(source=compact)`.
 - On install/update the managed `## Eagle Mem — Persistent Memory` section in `~/.claude/CLAUDE.md` is rewritten to this CLI-first doctrine whenever it predates it. Detection keys on the absence of the current section's `session save --session-id` sentinel (v4.12.1 fixed a `grep -F` escaping bug that left the section — and therefore the clean-capture behavior — un-updated). Covered by `tests/test_claude_md_capture_doctrine.sh`.
 
 ## Eagle Mem Files Depending On This
@@ -41,6 +42,7 @@ Last verified: 2026-06-10
 - `hooks/user-prompt-submit.sh`
 - `hooks/pre-tool-use.sh`
 - `hooks/post-tool-use.sh`
+- `hooks/pre-compact.sh`
 - `hooks/stop.sh`
 - `hooks/session-end.sh`
 
@@ -48,9 +50,11 @@ Last verified: 2026-06-10
 
 - `tests/fixtures/agent-hooks/claude-user-prompt-submit.json`
 - `tests/fixtures/agent-hooks/claude-statusline.json`
+- `tests/fixtures/agent-hooks/claude-pre-compact.json`
 - `tests/test_agent_compatibility_docs_gate.sh`
 - `tests/test_recall_observability.sh`
 - `tests/test_compaction_survival_matrix.sh`
+- `tests/test_precompact_capture.sh`
 - `tests/test_trust_surfaces.sh`
 
 ## Reverification Notes
@@ -92,4 +96,13 @@ Corrects a regression introduced by the 2026-06-10 data-integrity note above. Se
 - `lib/common.sh`: `eagle_get_session_project_light` (was returning `10000` as the project, mis-filing sessions under a phantom `10000` project key) and `eagle_project_has_table_row` (whose `= "1"` test always failed on the echoed value, so ancestor-project repair always saw "no row") use the same `-cmd ".timeout"` form.
 
 Covered by `tests/test_busy_timeout_echo.sh` (reproduces the failure: the buggy form returns `10000`/always-false; also a structural guard against re-introducing the inline value-PRAGMA-before-SELECT shape).
+
+### Evidence: PreCompact synchronous capture (2026-06-13)
+
+`PreCompact` was previously listed under "Behavior Relied On" but had no implementation — Eagle Mem relied solely on per-turn `Stop` capture plus `SessionStart(source=compact)` rehydration. That covers compaction survival, but the rich (LLM-enriched) summary is produced by a `nohup` background job (`scripts/enrich-summary.sh`) the `Stop` hook fires, so for auto-compaction it can land *after* the window collapses rather than before. Verified against the hooks reference (https://code.claude.com/docs/en/hooks): `PreCompact` receives `session_id`, `transcript_path`, `cwd`, `hook_event_name`, `trigger` (`manual`|`auto`); its matcher is the trigger; it can block (exit 2) but cannot inject `additionalContext` into the compacted window. So the new hook is side-effect-only and uses the boundary purely to persist a rich summary first.
+
+- `hooks/pre-compact.sh` (new): on `PreCompact` it resolves the project, skips when an agent-authored summary already exists (`capture_source = agent`), extracts the recent assistant transcript text, and runs `scripts/enrich-summary.sh` **synchronously** so the enriched summary is written before compaction. It always `exit 0` (never blocks compaction) and emits a `compaction_capture` event. No change to `Stop`, `enrich-summary.sh`, or any stdin/stdout/exit contract.
+- `lib/hooks.sh`: `eagle_register_claude_hooks` cleans then registers `PreCompact` for both the `manual` and `auto` matchers (the trigger-as-matcher contract), so auto-compaction is covered. `install.sh` and `update.sh` both call this single registration site.
+
+Covered by `tests/test_precompact_capture.sh` (synchronous enrichment via a stubbed provider, agent-summary no-clobber, no-provider graceful path, never-blocks, and both matchers registered) and `tests/fixtures/agent-hooks/claude-pre-compact.json`.
 

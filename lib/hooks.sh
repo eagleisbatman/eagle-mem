@@ -116,6 +116,7 @@ eagle_register_claude_hooks() {
     eagle_clean_hook_entries "$settings" "Stop" "$EAGLE_MEM_DIR/hooks/stop.sh"
     eagle_clean_hook_entries "$settings" "PostToolUse" "$EAGLE_MEM_DIR/hooks/post-tool-use.sh"
     eagle_clean_hook_entries "$settings" "PreToolUse" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh"
+    eagle_clean_hook_entries "$settings" "PreCompact" "$EAGLE_MEM_DIR/hooks/pre-compact.sh"
 
     # ${V:+label} expands to the label only in verbose mode; otherwise to "",
     # which makes eagle_patch_hook silent (it only prints when given a description).
@@ -127,6 +128,11 @@ eagle_register_claude_hooks() {
     eagle_patch_hook "$settings" "SessionEnd" "" "$EAGLE_MEM_DIR/hooks/session-end.sh" "${V:+SessionEnd hook}"
     eagle_patch_hook "$settings" "UserPromptSubmit" "" "$EAGLE_MEM_DIR/hooks/user-prompt-submit.sh" "${V:+UserPromptSubmit hook}"
     eagle_patch_hook "$settings" "PreToolUse" "Bash|Read|Edit|Write" "$EAGLE_MEM_DIR/hooks/pre-tool-use.sh" "${V:+PreToolUse hook}"
+    # PreCompact's matcher is the trigger itself ("manual" | "auto"); register both
+    # so auto-compaction — the gap users actually hit — also captures before the
+    # window collapses. The hook reads `trigger` from stdin for telemetry.
+    eagle_patch_hook "$settings" "PreCompact" "manual" "$EAGLE_MEM_DIR/hooks/pre-compact.sh" "${V:+PreCompact hook (manual)}"
+    eagle_patch_hook "$settings" "PreCompact" "auto" "$EAGLE_MEM_DIR/hooks/pre-compact.sh" "${V:+PreCompact hook (auto)}"
 
     # Allow agent-issued session capture to run without a permission prompt.
     if eagle_patch_permission_allow "$settings" "Bash(eagle-mem session save:*)"; then

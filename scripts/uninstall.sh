@@ -40,7 +40,7 @@ fi
 
 if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
     settings_backup=$(eagle_backup_user_file "$SETTINGS" 2>/dev/null || true)
-    for event in SessionStart Stop PostToolUse PreToolUse SessionEnd UserPromptSubmit; do
+    for event in SessionStart Stop PostToolUse PreToolUse PreCompact SessionEnd UserPromptSubmit TaskCreated TaskCompleted; do
         if jq -e ".hooks.${event}" "$SETTINGS" &>/dev/null; then
             tmp=$(mktemp)
             jq ".hooks.${event} = [.hooks.${event}[]? | select(any(.hooks[]?; .command | contains(\"eagle-mem\")) | not)]" "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
