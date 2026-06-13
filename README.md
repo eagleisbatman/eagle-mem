@@ -15,6 +15,8 @@ Eagle Mem turns AI coding sessions into compounding project knowledge. It gives 
 
 **v4.13.0 is a full-spectrum security & reliability hardening:** orchestration workers no longer default to full filesystem access, all LLM inputs (not just outputs) are redacted before they leave the machine, fail-open `SQLITE_BUSY` reads now wait for the lock, the mod-tracker is concurrency-safe, failed background scans retry instead of self-blocking for a day, and SessionStart injection has a token-economy ceiling. Normal recall and capture are unchanged. See [`CHANGELOG.md`](CHANGELOG.md) and the [findings report](docs/reviews/2026-06-10-full-spectrum-hardening.md).
 
+**v4.15.0 adds PreCompact Synchronous Capture:** a new lifecycle hook captures a rich, LLM-enriched session summary *before* Claude Code compacts the context window (manual or auto), closing the gap where the background enricher could otherwise finish after the window collapsed. It is side-effect-only — it never blocks compaction and never overwrites an agent-authored `eagle-mem session save`. Recent releases also added release-gate parity at the git layer (`eagle-mem gate` plus an opt-in `pre-push` hook) and provenance with a trust gate for curator-generated command rules (v4.14.0), plus a `busy_timeout` echo fix that closed a session→project mis-filing vector (v4.14.1). See [`CHANGELOG.md`](CHANGELOG.md).
+
 **Website:** [Product](https://eagleisbatman.github.io/eagle-mem/) |
 [Architecture](https://eagleisbatman.github.io/eagle-mem/architecture.html) |
 [About](https://eagleisbatman.github.io/eagle-mem/about.html)
