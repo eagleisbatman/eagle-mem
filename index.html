@@ -89,8 +89,8 @@ handoff      | captured back into the same project memory
             <span>Hooks, SQLite, FTS5, jq, and bash. No hosted service required.</span>
           </div>
           <div class="proof">
-            <strong>v4.14.0</strong>
-            <span>Governance parity at the git layer (<code>eagle-mem gate</code>) so bare-shell and Grok pushes can't bypass the release gate, plus provenance for curator-generated command rules — on the v4.13 security &amp; reliability hardening.</span>
+            <strong>v4.15.0</strong>
+            <span>Synchronous PreCompact capture writes a rich session summary before Claude Code collapses the context window (manual or auto), so the enriched recap is never lost to compaction — on the v4.14 governance parity and v4.13 security &amp; reliability hardening.</span>
           </div>
         </div>
       </section>
@@ -149,7 +149,7 @@ handoff      | captured back into the same project memory
 eagle-mem install</code></pre>
           </div>
 <div class="terminal-shot"><span class="cyan">What users see now</span>
-	Eagle Mem v4.14.0
+	Eagle Mem v4.15.0
 Shared memory, clean session capture, guardrails, lanes, and durable handoffs
 
 Core
@@ -301,18 +301,18 @@ Coordination
         <div class="section-head">
           <div>
             <div class="section-kicker">What changed</div>
-            <h2>v4.14.0 makes governance impossible to skip — and traceable.</h2>
+            <h2>v4.15.0 captures a rich summary before every compaction.</h2>
           </div>
           <p>
-            The release gate used to live only in the agent hook, so a bare-shell <code>git push</code>
-            or a Grok session could slip past it. <code>eagle-mem gate install</code> adds an opt-in,
-            repo-local <code>pre-push</code> hook that runs the same feature-verification check for
-            everyone, fails open when Eagle Mem isn't set up, and never clobbers a hook you already
-            have. Command rules the curator learns are now tagged with their provenance, so model-
-            derived rules can be excluded from enforcement with a single config switch. This builds on
-            the v4.13 full-spectrum security &amp; reliability hardening — safe-by-default workers,
-            redacted LLM inputs, concurrency-safe writes, and self-healing background jobs — with
-            normal recall and capture unchanged.
+            Eagle Mem already survived compaction through per-turn capture and reload, but the
+            <em>enriched</em> summary was produced by a background job that, on auto-compaction,
+            could finish after the context window had already collapsed. The new
+            <code>PreCompact</code> hook runs that enrichment <em>synchronously</em>, before
+            compaction — for both manual and auto triggers. It is side-effect-only: it never blocks
+            compaction and never overwrites an agent-authored <code>eagle-mem session save</code>,
+            which is already richer and already survives. This builds on v4.14.0 governance parity
+            (<code>eagle-mem gate</code>, curator rule provenance) and the v4.13 full-spectrum
+            security &amp; reliability hardening — with normal recall and capture unchanged.
           </p>
         </div>
 
@@ -345,7 +345,7 @@ Coordination
     </main>
 
     <footer class="footer">
-      <span>Eagle Mem v4.14.0</span>
+      <span>Eagle Mem v4.15.0</span>
       <span>Local-first memory and release safety for Claude Code, Codex, Grok, and Antigravity workflows.</span>
     </footer>
   </body>
