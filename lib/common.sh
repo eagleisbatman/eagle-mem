@@ -456,9 +456,12 @@ eagle_get_session_project_light() {
 
     local sid_sql project
     sid_sql=$(eagle_sql_escape "$session_id")
-    # busy_timeout so a momentary SQLITE_BUSY waits for the lock instead of
-    # exiting non-zero and being misread as "session has no project" (fail-open).
-    project=$("$sqlite_bin" "$EAGLE_MEM_DB" "PRAGMA busy_timeout=10000; SELECT project FROM sessions WHERE id = '$sid_sql' AND project != '' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    # busy_timeout (via the silent `-cmd ".timeout"` dot-command, NOT an inline
+    # `PRAGMA busy_timeout=N;`) so a momentary SQLITE_BUSY waits for the lock
+    # instead of exiting non-zero and being misread as "session has no project"
+    # (fail-open). An inline value-setting PRAGMA echoes its value ("10000") as
+    # the first output row, which `awk 'NF{...}'` would then return as the project.
+    project=$("$sqlite_bin" -cmd ".timeout 10000" "$EAGLE_MEM_DB" "SELECT project FROM sessions WHERE id = '$sid_sql' AND project != '' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
     [ -n "$project" ] || return 1
     printf '%s\n' "$project"
 }
@@ -481,9 +484,12 @@ eagle_project_has_table_row() {
 
     local project_sql found
     project_sql=$(eagle_sql_escape "$project")
-    # busy_timeout so a momentary SQLITE_BUSY waits for the lock instead of
-    # exiting non-zero and being misread as "row doesn't exist" (fail-open).
-    found=$("$sqlite_bin" "$EAGLE_MEM_DB" "PRAGMA busy_timeout=10000; SELECT 1 FROM $table WHERE project = '$project_sql' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
+    # busy_timeout (via the silent `-cmd ".timeout"` dot-command, NOT an inline
+    # `PRAGMA busy_timeout=N;`) so a momentary SQLITE_BUSY waits for the lock
+    # instead of exiting non-zero and being misread as "row doesn't exist"
+    # (fail-open). An inline value-setting PRAGMA echoes its value ("10000") as
+    # the first output row, which would then fail the `= "1"` test below.
+    found=$("$sqlite_bin" -cmd ".timeout 10000" "$EAGLE_MEM_DB" "SELECT 1 FROM $table WHERE project = '$project_sql' LIMIT 1;" 2>/dev/null | awk 'NF { print; exit }')
     [ "$found" = "1" ]
 }
 

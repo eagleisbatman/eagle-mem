@@ -84,3 +84,12 @@ Phase 4 token-economy hardening added a generous global size ceiling on the reca
 
 Covered by `tests/test_context_budget.sh`.
 
+### Evidence: busy_timeout echo fix (2026-06-13)
+
+Corrects a regression introduced by the 2026-06-10 data-integrity note above. Setting the SQLite busy timeout with an inline value-form `PRAGMA busy_timeout=10000;` run in the *same* `sqlite3` invocation as a `SELECT` echoes the timeout value (`10000`) as the first output row. Any caller that reads the first row then misreads `10000` as data. The earlier note's claim that "statusline output rendering [is] unchanged" was therefore wrong — the statusline showed `Sessions: 10000`, `Memories: 0`. The fix sets the timeout via the silent `-cmd ".timeout 10000"` dot-command (no echoed row); no Claude Code contract changes (hook events, statusline stdin schema, and stdout/exit semantics are all unchanged). Specifically:
+
+- `scripts/statusline-em.sh`: the stats query drops the inline `PRAGMA busy_timeout=10000;` prefix and passes `-cmd ".timeout 10000"` to `sqlite3` instead, so `IFS='|' read` parses the real `sessions|memories|last` row rather than the echoed `10000`.
+- `lib/common.sh`: `eagle_get_session_project_light` (was returning `10000` as the project, mis-filing sessions under a phantom `10000` project key) and `eagle_project_has_table_row` (whose `= "1"` test always failed on the echoed value, so ancestor-project repair always saw "no row") use the same `-cmd ".timeout"` form.
+
+Covered by `tests/test_busy_timeout_echo.sh` (reproduces the failure: the buggy form returns `10000`/always-false; also a structural guard against re-introducing the inline value-PRAGMA-before-SELECT shape).
+
