@@ -4,6 +4,15 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.15.1 Documentation & npm Listing Refresh
+
+Docs-only patch. No runtime code change — no edits to hooks, `lib`, `db`, `scripts`, or any stdin/stdout/exit contract.
+
+- **Why.** npmjs.com renders the package README from the **published tarball**, not from GitHub. The v4.15.0 tarball still carried a README whose narrative ended at v4.13.0, so the npm listing was stale even though GitHub was current.
+- **What.** README narrative now covers v4.15.0 (PreCompact synchronous capture) and the v4.14.x governance/fix releases, and the GitHub Pages homepage was bumped to v4.15.0 (hero badge, terminal shot, "What changed" section, footer). This patch republishes so the npm listing reflects the current narrative.
+
+---
+
 ## v4.15.0 PreCompact Synchronous Capture
 
 A new lifecycle hook that captures a rich session summary **before** Claude Code compacts the context window — closing the auto-compaction gap.
