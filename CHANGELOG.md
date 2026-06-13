@@ -4,6 +4,22 @@ All notable changes to the **Eagle Mem** project are documented here.
 
 ---
 
+## v4.14.1 busy_timeout Echo Fix
+
+A latent data-corruption and statusline-display bug, introduced when `busy_timeout` protection was added to three hot SQLite paths (the 2026-06-10 data-integrity hardening). No new feature; pure correctness.
+
+- **Root cause.** Setting the busy timeout with an inline value-form `PRAGMA busy_timeout=10000;` run in the *same* `sqlite3` invocation as a `SELECT` makes SQLite echo the timeout value (`10000`) as the **first output row**. Any caller that reads the first line then mis-reads `10000` as query data.
+- **Impact (all three fixed).**
+  - `scripts/statusline-em.sh`: the HUD parsed the echoed `10000` as the session count, rendering `Sessions: 10000`, `Memories: 0`, `Last: never`.
+  - `lib/common.sh` `eagle_get_session_project_light`: returned `10000` as the project, **mis-filing sessions under a phantom `10000` project key** (the data-corruption vector).
+  - `lib/common.sh` `eagle_project_has_table_row`: the echoed value failed the `= "1"` test, so it **always reported "no row"**, breaking ancestor-project repair.
+- **Fix.** All three set the timeout via the silent `-cmd ".timeout 10000"` dot-command, which emits no row. No SQL behavior, hook contract, statusline schema, or output format changes — only the timeout-set mechanism. `db/migrate.sh` (uses `tail -n1`) and the `.output`-bracketed setups in `lib/db-core.sh` were already echo-safe and are unchanged.
+- **No data migration needed for most installs.** The corruption only accrues while running unpatched code, and only affects session→project tags. The release ships the durable source fix so `eagle-mem update` can no longer reintroduce the bug.
+
+New coverage: `tests/test_busy_timeout_echo.sh` (reproduces the failure — buggy form returns `10000`/always-false — plus a structural guard against re-introducing the inline value-PRAGMA-before-SELECT shape). Compatibility evidence: `docs/agent-compatibility/claude-code.md`.
+
+---
+
 ## v4.14.0 Governance Parity & Curator Provenance
 
 Two trust-surface features that close the remaining governance gaps from the v4.13.0 review.
